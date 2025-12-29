@@ -23,7 +23,7 @@ class PanaceaApp(ctk.CTk):
         
         # Set Icon at Runtime
         try:
-            self.iconbitmap(resource_path("panacea_icon.ico"))
+            self.iconbitmap(resource_path("assets/panacea_icon.ico"))
         except Exception:
             pass # Fallback to default if fails for some reason
         

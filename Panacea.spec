@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('C:\\Users\\Falker\\Desktop\\Code\\Panacea\\panacea_icon.ico', '.')]
+datas = [('assets', 'assets')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('customtkinter')
@@ -42,5 +42,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\Falker\\Desktop\\Code\\Panacea\\panacea_icon.ico'],
+    icon=['assets\\panacea_icon.ico'],
 )

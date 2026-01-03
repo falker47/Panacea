@@ -2,10 +2,6 @@
 
 Panacea is a lightweight, safe, and modern Windows desktop utility designed to perform essential system maintenance operations. It is built with Python and CustomTkinter, featuring a sleek dark-mode interface.
 
-<div align="center">
-  <img src="panacea_icon.png" alt="Panacea Icon" width="128"/>
-</div>
-
 ## 🎯 Features
 
 ### 1. Dashboard & Monitoring

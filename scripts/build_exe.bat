@@ -9,7 +9,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo Building Panacea EXE...
-pyinstaller --noconsole --onefile --name "panacea" --icon="assets\panacea_icon.ico" --add-data "assets;assets" --clean --collect-all customtkinter main.py --distpath "dist" --workpath "build" --specpath .
+pyinstaller --noconsole --onefile --name "Panacea" --icon="assets\panacea_icon.ico" --add-data "assets;assets" --clean --collect-all customtkinter main.py --distpath "dist" --workpath "build" --specpath .
 echo.
 echo Build complete. Check the 'dist' folder for Panacea.exe
 pause

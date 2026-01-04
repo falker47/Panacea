@@ -18,7 +18,7 @@ class PanaceaApp(ctk.CTk):
     def __init__(self, root_is_deprecated_use_self):
         super().__init__()
         
-        self.title("Panacea System Optimizer - Ultimate")
+        self.title("Panacea System Optimizer")
         self.geometry("950x600")
         
         # Set Icon at Runtime
@@ -46,12 +46,14 @@ class PanaceaApp(ctk.CTk):
         self.frame_disk = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_tools = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_apps = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.frame_resurrect = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         
         self._setup_dashboard_frame()
         self._setup_cleaning_frame()
         self._setup_disk_frame()
         self._setup_tools_frame()
         self._setup_apps_frame()
+        self._setup_resurrect_frame()
         
         self.select_frame("Dashboard")
         self.update_dashboard()
@@ -59,7 +61,7 @@ class PanaceaApp(ctk.CTk):
     def _setup_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(6, weight=1)
+        self.sidebar_frame.grid_rowconfigure(7, weight=1)
         
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=" PANACEA", font=ctk.CTkFont(size=24, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
@@ -103,6 +105,32 @@ class PanaceaApp(ctk.CTk):
                                                  command=lambda: self.select_frame("Apps"))
         self.sidebar_button_apps.grid(row=5, column=0, padx=20, pady=btn_pady)
 
+        # Resurrection Button (God Mode) - Premium Style
+        # Ghost button style: Transparent with Gold Border, fills on hover
+        col_gold = "#FFD700" 
+        self.sidebar_button_god = ctk.CTkButton(self.sidebar_frame, text="RESURRECT", height=35, anchor="w", 
+                                                fg_color="transparent", 
+                                                border_width=2,
+                                                border_color=col_gold,
+                                                text_color=col_gold,
+                                                hover_color=col_gold,
+                                                font=ctk.CTkFont(weight="bold"),
+                                                command=lambda: self.select_frame("Resurrect"))
+        self.sidebar_button_god.grid(row=6, column=0, padx=20, pady=btn_pady)
+
+        # Fix hover text color AND border color AND background color
+        # Normal: Transparent BG, Gold Border, Gold Text
+        # Hover: Gold BG, Black Border, Black Text
+        
+        def on_enter(e):
+            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold)
+            
+        def on_leave(e):
+            self.sidebar_button_god.configure(text_color=col_gold, border_color=col_gold, fg_color="transparent")
+
+        self.sidebar_button_god.bind("<Enter>", on_enter)
+        self.sidebar_button_god.bind("<Leave>", on_leave)
+
         # Saved for Cleaning Frame to match
         self.col_clean_tuple = col_clean
         # Saved for Disk Frame to match
@@ -113,7 +141,7 @@ class PanaceaApp(ctk.CTk):
         footer_text = f"© {year} Maurizio Falconi - falker47"
         self.footer_label = ctk.CTkLabel(self.sidebar_frame, text=footer_text, 
                                          font=ctk.CTkFont(size=10), text_color="gray", cursor="hand2")
-        self.footer_label.grid(row=7, column=0, padx=10, pady=(10, 20), sticky="s")
+        self.footer_label.grid(row=8, column=0, padx=10, pady=(10, 20), sticky="s")
         self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/Nexus-portfolio/"))
 
     def select_frame(self, name):
@@ -122,12 +150,14 @@ class PanaceaApp(ctk.CTk):
         self.frame_disk.grid_forget()
         self.frame_tools.grid_forget()
         self.frame_apps.grid_forget()
+        self.frame_resurrect.grid_forget()
         
         if name == "Dashboard": self.frame_dashboard.grid(row=0, column=1, sticky="nsew")
         elif name == "Cleaning": self.frame_cleaning.grid(row=0, column=1, sticky="nsew")
         elif name == "Disk": self.frame_disk.grid(row=0, column=1, sticky="nsew")
         elif name == "Tools": self.frame_tools.grid(row=0, column=1, sticky="nsew")
         elif name == "Apps": self.frame_apps.grid(row=0, column=1, sticky="nsew")
+        elif name == "Resurrect": self.frame_resurrect.grid(row=0, column=1, sticky="nsew")
 
     def _setup_dashboard_frame(self):
         self.frame_dashboard.grid_columnconfigure((0, 1), weight=1)
@@ -402,3 +432,119 @@ class PanaceaApp(ctk.CTk):
             subprocess.run(f'powercfg /batteryreport /output "{path}"', shell=True, check=True)
             os.startfile(path)
         except Exception as e: messagebox.showerror("Error", str(e))
+
+    def _setup_resurrect_frame(self):
+        self.frame_resurrect.grid_columnconfigure(0, weight=1)
+        self.frame_resurrect.grid_rowconfigure(2, weight=1)
+        
+        # Hero Section
+        hero = ctk.CTkFrame(self.frame_resurrect, fg_color="transparent")
+        hero.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        
+        title = ctk.CTkLabel(hero, text="SYSTEM RESURRECTION", font=ctk.CTkFont(size=32, weight="bold"), text_color="#FFD700")
+        title.pack(anchor="center")
+        subtitle = ctk.CTkLabel(hero, text="One-Click Optimization & Restoration Suite", font=ctk.CTkFont(size=14), text_color="gray")
+        subtitle.pack(anchor="center")
+
+        # Action Area
+        self.action_frame = ctk.CTkFrame(self.frame_resurrect, fg_color=("gray90", "gray13"))
+        self.action_frame.grid(row=1, column=0, padx=40, pady=10, sticky="ew")
+        
+        self.progress_bar = ctk.CTkProgressBar(self.action_frame, orientation="horizontal", height=15)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(fill="x", padx=20, pady=(20, 10))
+        
+        self.lbl_status = ctk.CTkLabel(self.action_frame, text="Ready to Start", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_status.pack(pady=(5, 0))
+        
+        self.lbl_warning = ctk.CTkLabel(self.action_frame, text="(Process takes time. Run only when idle.)", font=ctk.CTkFont(size=11), text_color="gray70")
+        self.lbl_warning.pack(pady=(0, 5))
+
+        self.btn_resurrect_start = ctk.CTkButton(self.action_frame, text="INITIATE PROTOCOL", font=ctk.CTkFont(size=16, weight="bold"),
+                                                 fg_color="#FFD700", hover_color="#B8860B", text_color="black",
+                                                 height=40,
+                                                 command=self.run_god_mode)
+        self.btn_resurrect_start.pack(pady=20)
+        
+        # Log Area (Terminal Style)
+        log_frame = ctk.CTkFrame(self.frame_resurrect, corner_radius=10, fg_color="black")
+        log_frame.grid(row=2, column=0, padx=20, pady=20, sticky="nsew")
+        
+        ctk.CTkLabel(log_frame, text="> EXECUTION LOG", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").pack(anchor="w", padx=10, pady=5)
+        
+        self.god_log = ctk.CTkTextbox(log_frame, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.god_log.pack(fill="both", expand=True, padx=5, pady=5)
+        self.god_log.insert("0.0", "Waiting for user command...\n")
+        self.god_log.configure(state="disabled")
+
+    def log_god_msg(self, msg):
+        self.god_log.configure(state="normal")
+        self.god_log.insert(tk.END, msg + "\n")
+        self.god_log.see(tk.END)
+        self.god_log.configure(state="disabled")
+
+    def run_god_mode(self):
+        if not messagebox.askyesno("Confirm Resurrection", "Initiate System Resurrection Protocol?\n\nThis process is intensive and may take time.\nEnsure all work is saved."):
+            return
+
+        self.btn_resurrect_start.configure(state="disabled", text="PROTOCOL RUNNING...")
+        self.lbl_status.configure(text="Initializing...", text_color="#FFD700")
+        self.progress_bar.set(0)
+        self.god_log.configure(state="normal"); self.god_log.delete("0.0", tk.END); self.god_log.configure(state="disabled")
+        
+        def sequence():
+            steps = 6 # 5 phases + complete
+            current_step = 0
+            
+            def update_progress(step_i, status_text):
+                self.progress_bar.set(step_i / steps)
+                self.lbl_status.configure(text=status_text)
+            
+            try:
+                # PHASE 1
+                current_step += 1; update_progress(current_step, "Phase 1/5: System Cleanup")
+                self.log_god_msg("\n[PHASE 1] SYSTEM CLEANUP INITIATED...")
+                count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=self.log_god_msg)
+                self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB")
+                success, msg = self.cleanup_mgr.empty_recycle_bin()
+                self.log_god_msg(f"Recycle Bin: {msg}")
+
+                # PHASE 2
+                current_step += 1; update_progress(current_step, "Phase 2/5: Network Reset")
+                self.log_god_msg("\n[PHASE 2] NETWORK RESET INITIATED...")
+                self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", self.log_god_msg)
+                self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", self.log_god_msg)
+
+                # PHASE 3
+                current_step += 1; update_progress(current_step, "Phase 3/5: Disk Optimization")
+                self.log_god_msg("\n[PHASE 3] DISK OPTIMIZATION (C:) INITIATED...")
+                self.disk_opt.analyze_optimize_drive("C:", progress_callback=self.log_god_msg)
+
+                # PHASE 4
+                current_step += 1; update_progress(current_step, "Phase 4/5: System Health Check")
+                self.log_god_msg("\n[PHASE 4] DISM HEALTH CHECK INITIATED...")
+                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", self.log_god_msg)
+                
+                # PHASE 5
+                current_step += 1; update_progress(current_step, "Phase 5/5: Integrity Scan (SFC)")
+                self.log_god_msg("\n[PHASE 5] SFC INTEGRITY SCAN INITIATED (Please Wait)...")
+                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", self.log_god_msg)
+
+                current_step += 1; update_progress(current_step, "Protocol Complete")
+                self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===")
+                self.log_god_msg("\n[!] CRITICAL ADVICE:")
+                self.log_god_msg("1. Go to 'Apps' tab -> Uninstall unused programs.")
+                self.log_god_msg("2. Go to 'Apps' tab -> Disable unnecessary startup items.")
+                
+                messagebox.showinfo("Success", "Resurrection Protocol Finished Successfully.\n\nA system restart is highly recommended.")
+
+            except Exception as e:
+                self.log_god_msg(f"\n[!] ERROR: {str(e)}")
+                self.lbl_status.configure(text="Protocol Failed", text_color="red")
+                messagebox.showerror("Error", f"Sequence failed: {e}")
+            
+            finally:
+                self.btn_resurrect_start.configure(state="normal", text="INITIATE PROTOCOL")
+                self.lbl_status.configure(text="Ready", text_color="gray")
+
+        threading.Thread(target=sequence, daemon=True).start()

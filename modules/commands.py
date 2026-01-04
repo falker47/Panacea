@@ -14,3 +14,38 @@ class CommandRunner:
             self.logger.log(f"Executed command: {description} ({command_str})")
         except Exception as e:
             self.logger.log(f"Failed to execute {description}: {e}", "ERROR")
+
+    def run_command_stream(self, command_str, description, progress_callback):
+        """Runs a command and streams stdout to the callback."""
+        self.logger.log(f"Stream command started: {description}")
+        try:
+            # Creation flags to hide window
+            creation_flags = 0x08000000
+            process = subprocess.Popen(
+                command_str,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=True,
+                creationflags=creation_flags,
+                text=True
+            )
+            
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                if line:
+                    progress_callback(line.strip())
+            
+            return_code = process.wait()
+            if return_code == 0:
+                self.logger.log(f"Stream command finished: {description}")
+                return True
+            else:
+                self.logger.log(f"Stream command finished with error code {return_code}: {description}", "WARNING")
+                return False
+                
+        except Exception as e:
+            self.logger.log(f"Failed to stream {description}: {e}", "ERROR")
+            progress_callback(f"Error executing {description}: {e}")
+            return False

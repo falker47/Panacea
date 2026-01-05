@@ -98,7 +98,7 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=" PANACEA", font=ctk.CTkFont(size=24, weight="bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=" Panacea", font=ctk.CTkFont(family="Google Sans", size=34, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
         
         btn_pady = 8
@@ -206,7 +206,7 @@ class PanaceaApp(ctk.CTk):
         # --- Card 1: System Specs ---
         self.card_sys = ctk.CTkFrame(self.frame_dashboard)
         self.card_sys.grid(row=1, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
+        ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
         self.dash_os.pack()
 
@@ -242,7 +242,7 @@ class PanaceaApp(ctk.CTk):
         # --- Card 3: CPU Graph ---
         self.card_cpu = ctk.CTkFrame(self.frame_dashboard)
         self.card_cpu.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
+        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
         self.cpu_graph.pack(pady=5)
         self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text="CPU: ...", text_color="gray", wraplength=280)
@@ -257,7 +257,9 @@ class PanaceaApp(ctk.CTk):
         self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
         self.ram_graph.pack(pady=5)
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
-        self.dash_ram_val.pack(pady=5)
+        self.dash_ram_val.pack()
+        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text="", text_color="gray", font=ctk.CTkFont(size=11))
+        self.dash_ram_info.pack()
         self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_ram_perc.pack(pady=5)
 
@@ -523,18 +525,22 @@ class PanaceaApp(ctk.CTk):
     def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug):
         if self.dash_os.cget("text").startswith("OS: Win ..."):
             self.dash_os.configure(text=os_info)
-            self.dash_cpu_name.configure(text=f"CPU: {cpu_name}")
+            self.dash_cpu_name.configure(text=cpu_name)
+            # Get RAM info once
+            ram_info = self.monitor.get_ram_info()
+            if ram_info:
+                self.dash_ram_info.configure(text=ram_info)
         
         self.dash_uptime_val.configure(text=f"Time since restart: {uptime}")
         
         # Update CPU Graph
         self.cpu_graph.add_value(cpu_usage)
-        self.dash_cpu_val.configure(text=f"{int(cpu_usage)}%")
+        self.dash_cpu_val.configure(text=f"{round(cpu_usage, 1)}%")
         
         # Update RAM Graph
         self.ram_graph.add_value(p_ram)
         self.dash_ram_val.configure(text=f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB")
-        self.dash_ram_perc.configure(text=f"{p_ram}%")
+        self.dash_ram_perc.configure(text=f"{round(p_ram, 1)}%")
 
         # Disk
         def get_color(perc):

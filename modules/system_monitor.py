@@ -32,11 +32,41 @@ class SystemMonitor:
             
             total_gb = stat.ullTotalPhys / (1024**3)
             avail_gb = stat.ullAvailPhys / (1024**3)
-            percent = stat.dwMemoryLoad
+            # Calculate percent as float for decimal display
+            percent = ((total_gb - avail_gb) / total_gb) * 100 if total_gb > 0 else 0
             
-            return round(total_gb, 1), round(avail_gb, 1), percent
+            return round(total_gb, 1), round(avail_gb, 1), round(percent, 1)
         except:
             return 0, 0, 0
+
+    def get_ram_info(self):
+        """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)'"""
+        try:
+            import subprocess
+            # Query WMI for memory modules - use comma without space
+            cmd = 'wmic memorychip get Speed,SMBIOSMemoryType'
+            output = subprocess.check_output(cmd, shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode()
+            lines = [l.strip() for l in output.split('\n') if l.strip()]
+            
+            # Skip header line
+            data_lines = [l for l in lines if not l.startswith('SMBIOS') and not l.startswith('Speed')]
+            if not data_lines:
+                return ""
+            
+            module_count = len(data_lines)
+            
+            # Parse first module - format is "Speed  SMBIOSMemoryType" like "3200  26"
+            parts = data_lines[0].split()
+            speed = parts[0] if parts else "?"
+            smbios_type = int(parts[-1]) if len(parts) > 0 else 0
+            
+            # SMBIOSMemoryType: 20=DDR, 21=DDR2, 24=DDR3, 26=DDR4, 34=DDR5
+            type_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
+            ddr_type = type_map.get(smbios_type, "DDR")
+            
+            return f"{ddr_type} @ {speed} MHz ({module_count} Moduli)"
+        except Exception as e:
+            return ""
 
     def get_disk_usage(self):
         """Returns (total_gb, free_gb, percent_used) for C:"""
@@ -64,9 +94,9 @@ class SystemMonitor:
             import os
             cores = os.cpu_count() or 0
             
-            # Format: "AMD Ryzen 7 5800X (8 Cores @ 3.8 GHz)"
+            # Format: "AMD Ryzen 7 5800X\n(8 Cores @ 3.8 GHz)"
             ghz = round(mhz / 1000, 1)
-            return f"{cpu_name.strip()} ({cores} Cores @ {ghz} GHz)"
+            return f"{cpu_name.strip()}\n({cores} Cores @ {ghz} GHz)"
         except:
             # Fallback
             return platform.processor()

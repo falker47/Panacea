@@ -9,7 +9,9 @@ from modules.disk import DiskOptimizer
 from modules.commands import CommandRunner
 from modules.logger import Logger
 from modules.system_monitor import SystemMonitor
+from modules.restore import RestoreManager
 from modules.utils import resource_path
+from PIL import Image
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -32,6 +34,10 @@ class PanaceaApp(ctk.CTk):
         self.disk_opt = DiskOptimizer()
         self.cmd_runner = CommandRunner()
         self.monitor = SystemMonitor()
+        self.restore_mgr = RestoreManager()
+
+        # Load Icons
+        self._load_icons()
 
         # Grid Layout
         self.grid_columnconfigure(1, weight=1)
@@ -48,6 +54,8 @@ class PanaceaApp(ctk.CTk):
         self.frame_apps = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_resurrect = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         
+        self.graphs = {} # Store graph references
+
         self._setup_dashboard_frame()
         self._setup_cleaning_frame()
         self._setup_disk_frame()
@@ -57,6 +65,18 @@ class PanaceaApp(ctk.CTk):
         
         self.select_frame("Dashboard")
         self.update_dashboard()
+
+    def _load_icons(self):
+        self.icons = {}
+        icon_names = ["dashboard", "clean", "disk", "tools", "apps", "resurrect"]
+        for name in icon_names:
+            try:
+                # Assuming icons are 24x24 for sidebar
+                img = Image.open(resource_path(f"assets/icons/{name}.png"))
+                self.icons[name] = ctk.CTkImage(light_image=img, dark_image=img, size=(24, 24))
+            except Exception as e:
+                print(f"Failed to load icon {name}: {e}")
+                self.icons[name] = None
 
     def _setup_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=0)
@@ -69,44 +89,43 @@ class PanaceaApp(ctk.CTk):
         btn_pady = 8
         
         # Color Palette (Base, Hover)
-        # Dashboard: Standard Blue
         col_dash = ("#1F6AA5", "#144870")
-        # Cleaning: Indigo/Dark Azure as requested
-        col_clean = ("#3949AB", "#283593") 
-        # Disk: Green
-        col_disk = ("#2da16f", "#1f7a52")
-        # Tools: Orange (reused below)
-        self.col_tools = ("#d65729", "#9e3f1d") # Saved for _setup_tools_frame
-        # Apps: Purple (reused below)
-        self.col_apps = ("#7b2cbf", "#521c85") # Saved for _setup_apps_frame
+        self.col_clean_tuple = ("#3949AB", "#283593") 
+        self.col_disk_tuple = ("#2da16f", "#1f7a52")
+        self.col_tools = ("#d65729", "#9e3f1d")
+        self.col_apps = ("#7b2cbf", "#521c85")
         
         self.sidebar_button_dashboard = ctk.CTkButton(self.sidebar_frame, text="Dashboard", height=35, anchor="w", 
                                                       fg_color=col_dash[0], hover_color=col_dash[1],
+                                                      image=self.icons.get("dashboard"), compound="left",
                                                       command=lambda: self.select_frame("Dashboard"))
         self.sidebar_button_dashboard.grid(row=1, column=0, padx=20, pady=btn_pady)
         
         self.sidebar_button_clean = ctk.CTkButton(self.sidebar_frame, text="Cleaning", height=35, anchor="w", 
-                                                  fg_color=col_clean[0], hover_color=col_clean[1],
+                                                  fg_color=self.col_clean_tuple[0], hover_color=self.col_clean_tuple[1],
+                                                  image=self.icons.get("clean"), compound="left",
                                                   command=lambda: self.select_frame("Cleaning"))
         self.sidebar_button_clean.grid(row=2, column=0, padx=20, pady=btn_pady)
         
         self.sidebar_button_disk = ctk.CTkButton(self.sidebar_frame, text="Disk Opt", height=35, anchor="w", 
-                                                 fg_color=col_disk[0], hover_color=col_disk[1],
+                                                 fg_color=self.col_disk_tuple[0], hover_color=self.col_disk_tuple[1],
+                                                 image=self.icons.get("disk"), compound="left",
                                                  command=lambda: self.select_frame("Disk"))
         self.sidebar_button_disk.grid(row=3, column=0, padx=20, pady=btn_pady)
         
         self.sidebar_button_tools = ctk.CTkButton(self.sidebar_frame, text="Tools", height=35, anchor="w", 
                                                   fg_color=self.col_tools[0], hover_color=self.col_tools[1],
+                                                  image=self.icons.get("tools"), compound="left",
                                                   command=lambda: self.select_frame("Tools"))
         self.sidebar_button_tools.grid(row=4, column=0, padx=20, pady=btn_pady)
 
         self.sidebar_button_apps = ctk.CTkButton(self.sidebar_frame, text="Apps", height=35, anchor="w", 
                                                  fg_color=self.col_apps[0], hover_color=self.col_apps[1],
+                                                 image=self.icons.get("apps"), compound="left",
                                                  command=lambda: self.select_frame("Apps"))
         self.sidebar_button_apps.grid(row=5, column=0, padx=20, pady=btn_pady)
 
-        # Resurrection Button (God Mode) - Premium Style
-        # Ghost button style: Transparent with Gold Border, fills on hover
+        # Resurrection Button (God Mode)
         col_gold = "#FFD700" 
         self.sidebar_button_god = ctk.CTkButton(self.sidebar_frame, text="RESURRECT", height=35, anchor="w", 
                                                 fg_color="transparent", 
@@ -114,27 +133,19 @@ class PanaceaApp(ctk.CTk):
                                                 border_color=col_gold,
                                                 text_color=col_gold,
                                                 hover_color=col_gold,
+                                                image=self.icons.get("resurrect"), compound="left",
                                                 font=ctk.CTkFont(weight="bold"),
                                                 command=lambda: self.select_frame("Resurrect"))
         self.sidebar_button_god.grid(row=6, column=0, padx=20, pady=btn_pady)
-
-        # Fix hover text color AND border color AND background color
-        # Normal: Transparent BG, Gold Border, Gold Text
-        # Hover: Gold BG, Black Border, Black Text
         
+        # Color config for Resurrect Button
         def on_enter(e):
-            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold)
-            
+            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold)  
         def on_leave(e):
             self.sidebar_button_god.configure(text_color=col_gold, border_color=col_gold, fg_color="transparent")
 
         self.sidebar_button_god.bind("<Enter>", on_enter)
         self.sidebar_button_god.bind("<Leave>", on_leave)
-
-        # Saved for Cleaning Frame to match
-        self.col_clean_tuple = col_clean
-        # Saved for Disk Frame to match
-        self.col_disk_tuple = col_disk
 
         # Footer
         year = datetime.now().year
@@ -171,46 +182,36 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
         self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
         self.dash_os.pack()
-        # Removed truncation, allowing text to wrap if needed or just be long
         self.dash_cpu_name = ctk.CTkLabel(self.card_sys, text="CPU: ...", text_color="gray", wraplength=200)
         self.dash_cpu_name.pack(pady=5)
         self.dash_uptime_val = ctk.CTkLabel(self.card_sys, text="0d 0h 0m", font=ctk.CTkFont(size=18, weight="bold"), text_color="#3B8ED0")
         self.dash_uptime_val.pack(pady=5)
         ctk.CTkLabel(self.card_sys, text="(Time since restart)", font=ctk.CTkFont(size=10), text_color="gray").pack()
 
-        # --- Card 2: CPU & Battery ---
+        # --- Card 2: CPU Graph ---
         self.card_cpu = ctk.CTkFrame(self.frame_dashboard)
         self.card_cpu.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
-        
-        ctk.CTkLabel(self.card_cpu, text="CPU Usage", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 0))
-        self.dash_cpu_bar = ctk.CTkProgressBar(self.card_cpu, width=200, height=12)
-        self.dash_cpu_bar.pack(pady=10)
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%")
-        self.dash_cpu_val.pack()
+        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
+        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
+        self.cpu_graph.pack(pady=5)
+        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=18, weight="bold"))
+        self.dash_cpu_val.pack(pady=5)
 
-        ctk.CTkLabel(self.card_cpu, text="Battery Status", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 0))
-        self.dash_bat_bar = ctk.CTkProgressBar(self.card_cpu, width=200, height=12)
-        self.dash_bat_bar.pack(pady=10)
-        self.dash_bat_val = ctk.CTkLabel(self.card_cpu, text="Unknown")
-        self.dash_bat_val.pack(pady=(0, 10))
-
-        # --- Card 3: RAM Usage ---
+        # --- Card 3: RAM Graph ---
         self.card_ram = ctk.CTkFrame(self.frame_dashboard)
         self.card_ram.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        
-        ctk.CTkLabel(self.card_ram, text="Memory (RAM)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.dash_ram_bar = ctk.CTkProgressBar(self.card_ram, width=200, height=15)
-        self.dash_ram_bar.pack(pady=10)
+        ctk.CTkLabel(self.card_ram, text="Memory (RAM) History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+        self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
+        self.ram_graph.pack(pady=5)
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
-        self.dash_ram_val.pack(pady=5)
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
+        self.dash_ram_val.pack()
+        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%")
         self.dash_ram_perc.pack(pady=5)
 
-        # --- Card 4: Disk Usage ---
+        # --- Card 4: RAM/Disk Details (Replaced progress bar with details) ---
         self.card_disk = ctk.CTkFrame(self.frame_dashboard)
         self.card_disk.grid(row=2, column=1, padx=(10, 20), pady=10, sticky="nsew")
-        
-        ctk.CTkLabel(self.card_disk, text="Local Disk (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+        ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, width=200, height=15)
         self.dash_disk_bar.pack(pady=10)
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
@@ -284,8 +285,9 @@ class PanaceaApp(ctk.CTk):
         
         grp3 = ctk.CTkFrame(container)
         grp3.pack(fill="x", pady=10)
-        ctk.CTkLabel(grp3, text="Power", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(grp3, text="Power & Backup", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
         ctk.CTkButton(grp3, text="Generate Battery Report", fg_color=t_base, hover_color=t_hover, command=self.run_battery_report).pack(fill="x", padx=10, pady=5)
+        ctk.CTkButton(grp3, text="Create Restore Point (Now)", fg_color=t_base, hover_color=t_hover, command=self.run_create_restore).pack(fill="x", padx=10, pady=5)
 
     def _add_tool_btn(self, parent, text, desc, cmd, name, col, hover_col):
         f = ctk.CTkFrame(parent, fg_color="transparent")
@@ -327,32 +329,24 @@ class PanaceaApp(ctk.CTk):
     def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug):
         if self.dash_os.cget("text").startswith("OS: Win ..."):
             self.dash_os.configure(text=os_info)
-            # No truncation
             self.dash_cpu_name.configure(text=f"CPU: {cpu_name}")
         
         self.dash_uptime_val.configure(text=uptime)
         
+        # Update CPU Graph
+        self.cpu_graph.add_value(cpu_usage)
+        self.dash_cpu_val.configure(text=f"{int(cpu_usage)}%")
+        
+        # Update RAM Graph
+        self.ram_graph.add_value(p_ram)
+        self.dash_ram_val.configure(text=f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB")
+        self.dash_ram_perc.configure(text=f"{p_ram}%")
+
+        # Disk
         def get_color(perc):
             if perc < 60: return "#4CAF50"
             if perc < 85: return "#FFC107"
             return "#F44336"
-            
-        self.dash_cpu_bar.set(cpu_usage / 100)
-        self.dash_cpu_bar.configure(progress_color=get_color(cpu_usage))
-        self.dash_cpu_val.configure(text=f"{int(cpu_usage)}%")
-
-        self.dash_bat_bar.set(bat_perc / 100)
-        bat_col = "#4CAF50"
-        if bat_perc < 20: bat_col = "#F44336"
-        elif bat_perc < 40: bat_col = "#FFC107"
-        self.dash_bat_bar.configure(progress_color=bat_col)
-        self.dash_bat_val.configure(text=f"{bat_perc}% ({bat_plug})")
-
-        self.dash_ram_bar.set(p_ram / 100)
-        self.dash_ram_bar.configure(progress_color=get_color(p_ram))
-        self.dash_ram_val.configure(text=f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB")
-        self.dash_ram_perc.configure(text=f"{p_ram}%")
-
         self.dash_disk_bar.set(p_disk / 100)
         self.dash_disk_bar.configure(progress_color=get_color(p_disk))
         self.dash_disk_val.configure(text=f"{f_disk} GB Free / {t_disk} GB")
@@ -433,6 +427,14 @@ class PanaceaApp(ctk.CTk):
             os.startfile(path)
         except Exception as e: messagebox.showerror("Error", str(e))
 
+    def run_create_restore(self):
+        if messagebox.askyesno("Create Restore Point", "Create a Windows System Restore Point?\n(Requires Admin privileges)\nThis may take a minute."):
+            def task():
+                success, msg = self.restore_mgr.create_restore_point("Panacea Manual Point")
+                if success: messagebox.showinfo("Success", msg)
+                else: messagebox.showerror("Error", msg)
+            threading.Thread(target=task, daemon=True).start()
+
     def _setup_resurrect_frame(self):
         self.frame_resurrect.grid_columnconfigure(0, weight=1)
         self.frame_resurrect.grid_rowconfigure(2, weight=1)
@@ -476,10 +478,18 @@ class PanaceaApp(ctk.CTk):
         self.god_log.pack(fill="both", expand=True, padx=5, pady=5)
         self.god_log.insert("0.0", "Waiting for user command...\n")
         self.god_log.configure(state="disabled")
+        
+        # Tag configuration for coloring
+        self.god_log.tag_config("info", foreground="#00FF00") # Green
+        self.god_log.tag_config("warn", foreground="#FFD700") # Gold
+        self.god_log.tag_config("err", foreground="#F44336")  # Red
+        self.god_log.tag_config("head", foreground="#00BFFF") # Blue
 
-    def log_god_msg(self, msg):
+    def log_god_msg(self, msg, level="info"):
         self.god_log.configure(state="normal")
-        self.god_log.insert(tk.END, msg + "\n")
+        # Check for keywords to auto-assign basic levels if untagged, or simple pass
+        tag = level
+        self.god_log.insert(tk.END, msg + "\n", tag)
         self.god_log.see(tk.END)
         self.god_log.configure(state="disabled")
 
@@ -493,7 +503,7 @@ class PanaceaApp(ctk.CTk):
         self.god_log.configure(state="normal"); self.god_log.delete("0.0", tk.END); self.god_log.configure(state="disabled")
         
         def sequence():
-            steps = 6 # 5 phases + complete
+            steps = 7 # 6 phases + complete
             current_step = 0
             
             def update_progress(step_i, status_text):
@@ -501,45 +511,52 @@ class PanaceaApp(ctk.CTk):
                 self.lbl_status.configure(text=status_text)
             
             try:
+                # PHASE 0: RESTORE POINT
+                current_step += 1; update_progress(current_step, "Phase 1/6: Creating Restore Point (Safety)")
+                self.log_god_msg("\n[PHASE 1] SAFETY BACKUP INITIATED...", "head")
+                success, msg = self.restore_mgr.create_restore_point("Panacea GodMode Auto-Restore")
+                if success: self.log_god_msg(f"Restore Point: {msg}", "info")
+                else: self.log_god_msg(f"Restore Point Warning: {msg}", "warn")
+                
                 # PHASE 1
-                current_step += 1; update_progress(current_step, "Phase 1/5: System Cleanup")
-                self.log_god_msg("\n[PHASE 1] SYSTEM CLEANUP INITIATED...")
-                count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=self.log_god_msg)
-                self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB")
+                current_step += 1; update_progress(current_step, "Phase 2/6: System Cleanup")
+                self.log_god_msg("\n[PHASE 2] SYSTEM CLEANUP INITIATED...", "head")
+                count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=lambda m: self.log_god_msg(m, "info"))
+                self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB", "info")
                 success, msg = self.cleanup_mgr.empty_recycle_bin()
-                self.log_god_msg(f"Recycle Bin: {msg}")
+                self.log_god_msg(f"Recycle Bin: {msg}", "info")
 
                 # PHASE 2
-                current_step += 1; update_progress(current_step, "Phase 2/5: Network Reset")
-                self.log_god_msg("\n[PHASE 2] NETWORK RESET INITIATED...")
-                self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", self.log_god_msg)
-                self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", self.log_god_msg)
+                current_step += 1; update_progress(current_step, "Phase 3/6: Network Reset")
+                self.log_god_msg("\n[PHASE 3] NETWORK RESET INITIATED...", "head")
+                self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", lambda m: self.log_god_msg(m, "info"))
+                self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", lambda m: self.log_god_msg(m, "info"))
 
                 # PHASE 3
-                current_step += 1; update_progress(current_step, "Phase 3/5: Disk Optimization")
-                self.log_god_msg("\n[PHASE 3] DISK OPTIMIZATION (C:) INITIATED...")
-                self.disk_opt.analyze_optimize_drive("C:", progress_callback=self.log_god_msg)
+                current_step += 1; update_progress(current_step, "Phase 4/6: Disk Optimization")
+                self.log_god_msg("\n[PHASE 4] DISK OPTIMIZATION (C:) INITIATED...", "head")
+                self.disk_opt.analyze_optimize_drive("C:", progress_callback=lambda m: self.log_god_msg(m, "info"))
 
                 # PHASE 4
-                current_step += 1; update_progress(current_step, "Phase 4/5: System Health Check")
-                self.log_god_msg("\n[PHASE 4] DISM HEALTH CHECK INITIATED...")
-                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", self.log_god_msg)
+                current_step += 1; update_progress(current_step, "Phase 5/6: System Health Check")
+                self.log_god_msg("\n[PHASE 5] DISM HEALTH CHECK INITIATED...", "head")
+                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", lambda m: self.log_god_msg(m, "info"))
                 
                 # PHASE 5
-                current_step += 1; update_progress(current_step, "Phase 5/5: Integrity Scan (SFC)")
-                self.log_god_msg("\n[PHASE 5] SFC INTEGRITY SCAN INITIATED (Please Wait)...")
-                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", self.log_god_msg)
+                current_step += 1; update_progress(current_step, "Phase 6/6: Integrity Scan (SFC)")
+                self.log_god_msg("\n[PHASE 6] SFC INTEGRITY SCAN INITIATED (Please Wait)...", "head")
+                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"))
 
                 current_step += 1; update_progress(current_step, "Protocol Complete")
-                self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===")
-                self.log_god_msg("\n[!] CRITICAL ADVICE:")
-                self.log_god_msg("1. Go to 'Apps' tab -> Uninstall unused programs.")
-                self.log_god_msg("2. Go to 'Apps' tab -> Disable unnecessary startup items.")
+                self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
+                self.log_god_msg("\n[!] CRITICAL ADVICE:", "warn")
+                self.log_god_msg("1. Go to 'Apps' tab -> Uninstall unused programs.", "info")
+                self.log_god_msg("2. Go to 'Apps' tab -> Disable unnecessary startup items.", "info")
                 
                 messagebox.showinfo("Success", "Resurrection Protocol Finished Successfully.\n\nA system restart is highly recommended.")
 
             except Exception as e:
-                self.log_god_msg(f"\n[!] ERROR: {str(e)}")
+                self.log_god_msg(f"\n[!] ERROR: {str(e)}", "err")
                 self.lbl_status.configure(text="Protocol Failed", text_color="red")
                 messagebox.showerror("Error", f"Sequence failed: {e}")
             
@@ -548,3 +565,35 @@ class PanaceaApp(ctk.CTk):
                 self.lbl_status.configure(text="Ready", text_color="gray")
 
         threading.Thread(target=sequence, daemon=True).start()
+class LiveGraph(ctk.CTkFrame):
+    def __init__(self, master, width=200, height=80, line_color="#00EE00", **kwargs):
+        super().__init__(master, **kwargs)
+        self.canvas = ctk.CTkCanvas(self, width=width, height=height, bg="#1a1a1a", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.width = width
+        self.height = height
+        self.line_color = line_color
+        self.points = [0] * (width // 5) # one point every 5 pixels
+        
+    def add_value(self, value):
+        # value 0-100
+        self.points.pop(0)
+        self.points.append(value)
+        self.draw()
+        
+    def draw(self):
+        self.canvas.delete("all")
+        w = self.width
+        h = self.height
+        step = w / (len(self.points) - 1)
+        
+        coords = []
+        for i, val in enumerate(self.points):
+            x = i * step
+            # val is % so 100 is top (0 y), 0 is bottom (h y)
+            # Actually 100% should be at y=0, 0% at y=h
+            y = h - (val / 100 * h)
+            coords.extend([x, y])
+            
+        if len(coords) >= 4:
+            self.canvas.create_line(coords, fill=self.line_color, width=2, smooth=True)

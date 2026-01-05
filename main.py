@@ -29,10 +29,39 @@ def main():
     
     logger.log("Running with admin privileges.")
     
-    # CustomTkinter apps don't need a root Tk() passed in usually if they inherit from CTk
-    # But our code was `app = PanaceaApp(root)`. 
-    # The new code is `class PanaceaApp(ctk.CTk):` so we instantiate it directly.
+    # --- Splash Screen ---
+    import tkinter as tk
+    from PIL import Image, ImageTk
+    from modules.utils import resource_path
     
+    splash = tk.Tk()
+    splash.overrideredirect(True)  # No title bar
+    splash.attributes("-topmost", True)
+    
+    # Load splash image
+    try:
+        img = Image.open(resource_path("assets/panacea.webp"))
+        # Resize if needed (maintain aspect ratio, max 600px wide)
+        img.thumbnail((600, 400), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        
+        # Center the splash on screen
+        w, h = img.size
+        x = (splash.winfo_screenwidth() - w) // 2
+        y = (splash.winfo_screenheight() - h) // 2
+        splash.geometry(f"{w}x{h}+{x}+{y}")
+        
+        label = tk.Label(splash, image=photo, bd=0)
+        label.pack()
+        
+        splash.update()
+        splash.after(1000, splash.destroy)  # Show for 1 second
+        splash.mainloop()
+    except Exception as e:
+        logger.log(f"Splash screen failed: {e}", "WARNING")
+        splash.destroy()
+    
+    # --- Main App ---
     app = PanaceaApp(None)
     app.mainloop()
 

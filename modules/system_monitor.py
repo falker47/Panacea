@@ -50,11 +50,26 @@ class SystemMonitor:
             return 0, 0, 0
 
     def get_cpu_info(self):
-        """Returns CPU name"""
+        """Returns CPU name with cores and frequency"""
         try:
-            return platform.processor()
+            import winreg
+            # Get CPU name from registry (more readable than platform.processor())
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                  r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+            cpu_name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+            mhz, _ = winreg.QueryValueEx(key, "~MHz")
+            winreg.CloseKey(key)
+            
+            # Get core count
+            import os
+            cores = os.cpu_count() or 0
+            
+            # Format: "AMD Ryzen 7 5800X (8 Cores @ 3.8 GHz)"
+            ghz = round(mhz / 1000, 1)
+            return f"{cpu_name.strip()} ({cores} Cores @ {ghz} GHz)"
         except:
-            return "Unknown CPU"
+            # Fallback
+            return platform.processor()
             
     def get_os_info(self):
         try:

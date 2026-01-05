@@ -10,6 +10,7 @@ from modules.commands import CommandRunner
 from modules.logger import Logger
 from modules.system_monitor import SystemMonitor
 from modules.restore import RestoreManager
+from modules.performance import PerformanceManager
 from modules.utils import resource_path
 from PIL import Image
 import subprocess
@@ -36,6 +37,7 @@ class PanaceaApp(ctk.CTk):
         self.cmd_runner = CommandRunner()
         self.monitor = SystemMonitor()
         self.restore_mgr = RestoreManager()
+        self.perf_mgr = PerformanceManager()
 
         # Load Icons
         self._load_icons()
@@ -53,6 +55,7 @@ class PanaceaApp(ctk.CTk):
         self.frame_disk = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_tools = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_apps = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.frame_turbo = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_resurrect = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         
         self.graphs = {} # Store graph references
@@ -62,6 +65,7 @@ class PanaceaApp(ctk.CTk):
         self._setup_disk_frame()
         self._setup_tools_frame()
         self._setup_apps_frame()
+        self._setup_turbo_frame()
         self._setup_resurrect_frame()
         
         self.select_frame("Dashboard")
@@ -72,7 +76,7 @@ class PanaceaApp(ctk.CTk):
 
     def _load_icons(self):
         self.icons = {}
-        icon_names = ["dashboard", "clean", "disk", "tools", "apps", "resurrect"]
+        icon_names = ["dashboard", "clean", "disk", "tools", "apps", "turbo", "resurrect"]
         for name in icon_names:
             try:
                 # Assuming icons are 24x24 for sidebar
@@ -81,6 +85,13 @@ class PanaceaApp(ctk.CTk):
             except Exception as e:
                 print(f"Failed to load icon {name}: {e}")
                 self.icons[name] = None
+        
+        # Load resurrect negative icon for hover effect
+        try:
+            img_neg = Image.open(resource_path("assets/panacea_icon_negative.png"))
+            self.icons["resurrect_negative"] = ctk.CTkImage(light_image=img_neg, dark_image=img_neg, size=(24, 24))
+        except:
+            self.icons["resurrect_negative"] = self.icons.get("resurrect")
 
     def _setup_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=0)
@@ -94,7 +105,7 @@ class PanaceaApp(ctk.CTk):
         
         # Color Palette (Base, Hover)
         col_dash = ("#1F6AA5", "#144870")
-        self.col_clean_tuple = ("#3949AB", "#283593") 
+        self.col_clean_tuple = ("#C2185B", "#880E4F")  # Dark Pink 
         self.col_disk_tuple = ("#2da16f", "#1f7a52")
         self.col_tools = ("#d65729", "#9e3f1d")
         self.col_apps = ("#7b2cbf", "#521c85")
@@ -129,6 +140,14 @@ class PanaceaApp(ctk.CTk):
                                                  command=lambda: self.select_frame("Apps"))
         self.sidebar_button_apps.grid(row=5, column=0, padx=20, pady=btn_pady)
 
+        # Turbo Button
+        col_turbo = ("#00BCD4", "#00838F")  # Cyan
+        self.sidebar_button_turbo = ctk.CTkButton(self.sidebar_frame, text="Turbo", height=35, anchor="w", 
+                                                  fg_color=col_turbo[0], hover_color=col_turbo[1],
+                                                  image=self.icons.get("turbo"), compound="left",
+                                                  command=lambda: self.select_frame("Turbo"))
+        self.sidebar_button_turbo.grid(row=6, column=0, padx=20, pady=btn_pady)
+
         # Resurrection Button (God Mode)
         col_gold = "#FFD700" 
         self.sidebar_button_god = ctk.CTkButton(self.sidebar_frame, text="RESURRECT", height=35, anchor="w", 
@@ -140,13 +159,15 @@ class PanaceaApp(ctk.CTk):
                                                 image=self.icons.get("resurrect"), compound="left",
                                                 font=ctk.CTkFont(weight="bold"),
                                                 command=lambda: self.select_frame("Resurrect"))
-        self.sidebar_button_god.grid(row=6, column=0, padx=20, pady=btn_pady)
+        self.sidebar_button_god.grid(row=7, column=0, padx=20, pady=btn_pady)
         
         # Color config for Resurrect Button
         def on_enter(e):
-            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold)  
+            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold,
+                                              image=self.icons.get("resurrect_negative"))
         def on_leave(e):
-            self.sidebar_button_god.configure(text_color=col_gold, border_color=col_gold, fg_color="transparent")
+            self.sidebar_button_god.configure(text_color=col_gold, border_color=col_gold, fg_color="transparent",
+                                              image=self.icons.get("resurrect"))
 
         self.sidebar_button_god.bind("<Enter>", on_enter)
         self.sidebar_button_god.bind("<Leave>", on_leave)
@@ -156,7 +177,7 @@ class PanaceaApp(ctk.CTk):
         footer_text = f"© {year} Maurizio Falconi - falker47"
         self.footer_label = ctk.CTkLabel(self.sidebar_frame, text=footer_text, 
                                          font=ctk.CTkFont(size=10), text_color="gray", cursor="hand2")
-        self.footer_label.grid(row=8, column=0, padx=10, pady=(10, 20), sticky="s")
+        self.footer_label.grid(row=9, column=0, padx=10, pady=(10, 20), sticky="s")
         self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/Nexus-portfolio/"))
 
     def select_frame(self, name):
@@ -165,6 +186,7 @@ class PanaceaApp(ctk.CTk):
         self.frame_disk.grid_forget()
         self.frame_tools.grid_forget()
         self.frame_apps.grid_forget()
+        self.frame_turbo.grid_forget()
         self.frame_resurrect.grid_forget()
         
         if name == "Dashboard": self.frame_dashboard.grid(row=0, column=1, sticky="nsew")
@@ -172,6 +194,7 @@ class PanaceaApp(ctk.CTk):
         elif name == "Disk": self.frame_disk.grid(row=0, column=1, sticky="nsew")
         elif name == "Tools": self.frame_tools.grid(row=0, column=1, sticky="nsew")
         elif name == "Apps": self.frame_apps.grid(row=0, column=1, sticky="nsew")
+        elif name == "Turbo": self.frame_turbo.grid(row=0, column=1, sticky="nsew")
         elif name == "Resurrect": self.frame_resurrect.grid(row=0, column=1, sticky="nsew")
 
     def _setup_dashboard_frame(self):
@@ -186,8 +209,6 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
         self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
         self.dash_os.pack()
-        self.dash_cpu_name = ctk.CTkLabel(self.card_sys, text="CPU: ...", text_color="gray", wraplength=200)
-        self.dash_cpu_name.pack(pady=5)
 
         # Windows Update Status Chip (Moved above uptime)
         self.frame_update_status = ctk.CTkFrame(self.card_sys, fg_color="gray30", corner_radius=15, height=25)
@@ -224,7 +245,9 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
         self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
         self.cpu_graph.pack(pady=5)
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=18, weight="bold"))
+        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text="CPU: ...", text_color="gray", wraplength=280)
+        self.dash_cpu_name.pack()
+        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_cpu_val.pack(pady=5)
 
         # --- Card 4: RAM Graph ---
@@ -234,8 +257,8 @@ class PanaceaApp(ctk.CTk):
         self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
         self.ram_graph.pack(pady=5)
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
-        self.dash_ram_val.pack()
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%")
+        self.dash_ram_val.pack(pady=5)
+        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_ram_perc.pack(pady=5)
 
     def _setup_cleaning_frame(self):
@@ -327,6 +350,129 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(frame, text="Open Control Panel", fg_color=a_base, hover_color=a_hover, command=lambda: self.run_launch("control appwiz.cpl", "Control Panel")).pack(fill="x", padx=20, pady=5)
         ctk.CTkLabel(frame, text="Startup", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=10)
         ctk.CTkButton(frame, text="Manage Startup Apps", fg_color=a_base, hover_color=a_hover, command=lambda: self.run_launch("start ms-settings:startupapps", "Startup")).pack(fill="x", padx=20, pady=5)
+
+    def _setup_turbo_frame(self):
+        self.frame_turbo.grid_columnconfigure(0, weight=1)
+        
+        ctk.CTkLabel(self.frame_turbo, text="Turbo Mode", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
+        ctk.CTkLabel(self.frame_turbo, text="Toggle performance settings. Changes apply immediately.", font=ctk.CTkFont(size=12), text_color="gray").grid(row=1, column=0, padx=20, pady=(0, 10), sticky="w")
+        
+        container = ctk.CTkScrollableFrame(self.frame_turbo)
+        container.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        self.frame_turbo.grid_rowconfigure(2, weight=1)
+        
+        # Store toggle variables
+        self.turbo_vars = {}
+        self.turbo_switches = {}
+        
+        # Master Toggle
+        master_frame = ctk.CTkFrame(container, fg_color="#00BCD4", corner_radius=10)
+        master_frame.pack(fill="x", pady=(0, 15))
+        ctk.CTkLabel(master_frame, text="MASTER TOGGLE", font=ctk.CTkFont(size=14, weight="bold"), text_color="black").pack(side="left", padx=15, pady=10)
+        self.master_switch = ctk.CTkSwitch(master_frame, text="Enable All", text_color="black", 
+                                           command=self._master_toggle_changed)
+        self.master_switch.pack(side="right", padx=15, pady=10)
+        
+        # Individual toggles config: (key, label, description, get_func, set_func_on, set_func_off)
+        toggle_config = [
+            ("power", "High Performance Power Plan", "Switch from Balanced to High Performance", 
+             lambda: self.perf_mgr.get_power_plan() == "high",
+             lambda: self.perf_mgr.set_power_plan(True),
+             lambda: self.perf_mgr.set_power_plan(False)),
+            ("visual", "Disable Visual Effects", "Turn off animations, shadows, transparency",
+             lambda: not self.perf_mgr.get_visual_effects(),
+             lambda: self.perf_mgr.set_visual_effects(False),
+             lambda: self.perf_mgr.set_visual_effects(True)),
+            ("sysmain", "Disable SysMain (Superfetch)", "Stop app pre-loading service",
+             lambda: not self.perf_mgr.get_sysmain_status(),
+             lambda: self.perf_mgr.set_sysmain(False),
+             lambda: self.perf_mgr.set_sysmain(True)),
+            ("wsearch", "Disable Windows Search", "Stop background indexing",
+             lambda: not self.perf_mgr.get_wsearch_status(),
+             lambda: self.perf_mgr.set_wsearch(False),
+             lambda: self.perf_mgr.set_wsearch(True)),
+            ("spooler", "Disable Print Spooler", "Stop print service (if no printer)",
+             lambda: not self.perf_mgr.get_spooler_status(),
+             lambda: self.perf_mgr.set_spooler(False),
+             lambda: self.perf_mgr.set_spooler(True)),
+        ]
+        
+        for key, label, desc, get_fn, on_fn, off_fn in toggle_config:
+            self._create_turbo_toggle(container, key, label, desc, get_fn, on_fn, off_fn)
+        
+        # Initial state load (in background to avoid blocking)
+        threading.Thread(target=self._load_turbo_states, daemon=True).start()
+
+    def _create_turbo_toggle(self, parent, key, label, desc, get_fn, on_fn, off_fn):
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", pady=5)
+        
+        left = ctk.CTkFrame(frame, fg_color="transparent")
+        left.pack(side="left", fill="x", expand=True, padx=10, pady=10)
+        ctk.CTkLabel(left, text=label, font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w")
+        ctk.CTkLabel(left, text=desc, font=ctk.CTkFont(size=11), text_color="gray").pack(anchor="w")
+        
+        var = tk.BooleanVar(value=False)
+        self.turbo_vars[key] = var
+        
+        switch = ctk.CTkSwitch(frame, text="", variable=var, 
+                               command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
+        switch.pack(side="right", padx=15, pady=10)
+        self.turbo_switches[key] = switch
+
+    def _load_turbo_states(self):
+        # Load current state for each toggle
+        for key, var in self.turbo_vars.items():
+            try:
+                if key == "power":
+                    state = self.perf_mgr.get_power_plan() == "high"
+                elif key == "visual":
+                    state = not self.perf_mgr.get_visual_effects()
+                elif key == "sysmain":
+                    state = not self.perf_mgr.get_sysmain_status()
+                elif key == "wsearch":
+                    state = not self.perf_mgr.get_wsearch_status()
+                elif key == "spooler":
+                    state = not self.perf_mgr.get_spooler_status()
+                else:
+                    state = False
+                self.after(0, lambda v=var, s=state: v.set(s))
+            except:
+                pass
+
+    def _turbo_toggle_changed(self, key, on_fn, off_fn):
+        state = self.turbo_vars[key].get()
+        def task():
+            if state:
+                on_fn()
+            else:
+                off_fn()
+        threading.Thread(target=task, daemon=True).start()
+
+    def _master_toggle_changed(self):
+        state = self.master_switch.get()
+        
+        # Update all toggle variables
+        for key, var in self.turbo_vars.items():
+            var.set(state)
+        
+        # Apply all changes in background
+        def apply_all():
+            if state:
+                # Enable all turbo settings
+                self.perf_mgr.set_power_plan(True)
+                self.perf_mgr.set_visual_effects(False)
+                self.perf_mgr.set_sysmain(False)
+                self.perf_mgr.set_wsearch(False)
+                self.perf_mgr.set_spooler(False)
+            else:
+                # Disable all turbo settings (restore defaults)
+                self.perf_mgr.set_power_plan(False)
+                self.perf_mgr.set_visual_effects(True)
+                self.perf_mgr.set_sysmain(True)
+                self.perf_mgr.set_wsearch(True)
+                self.perf_mgr.set_spooler(True)
+        threading.Thread(target=apply_all, daemon=True).start()
 
     def update_dashboard(self):
         threading.Thread(target=self._update_data_thread, daemon=True).start()
@@ -491,6 +637,9 @@ class PanaceaApp(ctk.CTk):
             # Use CREATE_NO_WINDOW to hide CMD flash
             subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
                              creationflags=subprocess.CREATE_NO_WINDOW)
+            # Refresh update status after a delay (give time for updates to install)
+            self.lbl_update_status.configure(text="Updating...")
+            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
         except Exception as e:
             messagebox.showerror("Error", f"Failed to launch updater: {e}")
 
@@ -499,6 +648,9 @@ class PanaceaApp(ctk.CTk):
         try:
             import os
             os.system("start ms-settings:windowsupdate-optionalupdates")
+            # Refresh update status after a delay
+            self.lbl_update_status.configure(text="Checking...")
+            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open settings: {e}")
 

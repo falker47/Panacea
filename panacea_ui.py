@@ -12,6 +12,7 @@ from modules.system_monitor import SystemMonitor
 from modules.restore import RestoreManager
 from modules.utils import resource_path
 from PIL import Image
+import subprocess
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -65,6 +66,9 @@ class PanaceaApp(ctk.CTk):
         
         self.select_frame("Dashboard")
         self.update_dashboard()
+        
+        # Start update check
+        threading.Thread(target=self._check_updates_thread, daemon=True).start()
 
     def _load_icons(self):
         self.icons = {}
@@ -184,33 +188,28 @@ class PanaceaApp(ctk.CTk):
         self.dash_os.pack()
         self.dash_cpu_name = ctk.CTkLabel(self.card_sys, text="CPU: ...", text_color="gray", wraplength=200)
         self.dash_cpu_name.pack(pady=5)
-        self.dash_uptime_val = ctk.CTkLabel(self.card_sys, text="0d 0h 0m", font=ctk.CTkFont(size=18, weight="bold"), text_color="#3B8ED0")
+
+        # Windows Update Status Chip (Moved above uptime)
+        self.frame_update_status = ctk.CTkFrame(self.card_sys, fg_color="gray30", corner_radius=15, height=25)
+        self.frame_update_status.pack(pady=(10, 5))
+        self.lbl_update_status = ctk.CTkLabel(self.frame_update_status, text="Checking Updates...", font=ctk.CTkFont(size=12), text_color="black")
+        self.lbl_update_status.pack(padx=10, pady=2)
+        
+        # Update Buttons (Hidden by default)
+        self.btn_run_update = ctk.CTkButton(self.card_sys, text="Install Required", height=24, width=120, 
+                                            fg_color="#F44336", hover_color="#C62828",
+                                            command=self.run_windows_update)
+        self.btn_view_optional = ctk.CTkButton(self.card_sys, text="View Optional", height=24, width=120, 
+                                               fg_color="#FFC107", hover_color="#FFA000", text_color="black",
+                                               command=self.run_view_optional_updates)
+        
+        self.dash_uptime_val = ctk.CTkLabel(self.card_sys, text="Time since restart: 0d 0h 0m", font=ctk.CTkFont(size=18, weight="bold"), text_color="#3B8ED0")
         self.dash_uptime_val.pack(pady=5)
-        ctk.CTkLabel(self.card_sys, text="(Time since restart)", font=ctk.CTkFont(size=10), text_color="gray").pack()
+        ctk.CTkLabel(self.card_sys, text="(Restart is recommended once a week)", font=ctk.CTkFont(size=10), text_color="gray").pack(pady=(0, 5))
 
-        # --- Card 2: CPU Graph ---
-        self.card_cpu = ctk.CTkFrame(self.frame_dashboard)
-        self.card_cpu.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
-        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
-        self.cpu_graph.pack(pady=5)
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=18, weight="bold"))
-        self.dash_cpu_val.pack(pady=5)
-
-        # --- Card 3: RAM Graph ---
-        self.card_ram = ctk.CTkFrame(self.frame_dashboard)
-        self.card_ram.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_ram, text="Memory (RAM) History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
-        self.ram_graph.pack(pady=5)
-        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
-        self.dash_ram_val.pack()
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%")
-        self.dash_ram_perc.pack(pady=5)
-
-        # --- Card 4: RAM/Disk Details (Replaced progress bar with details) ---
+        # --- Card 2: Disk Usage ---
         self.card_disk = ctk.CTkFrame(self.frame_dashboard)
-        self.card_disk.grid(row=2, column=1, padx=(10, 20), pady=10, sticky="nsew")
+        self.card_disk.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, width=200, height=15)
         self.dash_disk_bar.pack(pady=10)
@@ -218,6 +217,26 @@ class PanaceaApp(ctk.CTk):
         self.dash_disk_val.pack(pady=5)
         self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_disk_perc.pack(pady=5)
+
+        # --- Card 3: CPU Graph ---
+        self.card_cpu = ctk.CTkFrame(self.frame_dashboard)
+        self.card_cpu.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
+        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(15, 5))
+        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
+        self.cpu_graph.pack(pady=5)
+        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=18, weight="bold"))
+        self.dash_cpu_val.pack(pady=5)
+
+        # --- Card 4: RAM Graph ---
+        self.card_ram = ctk.CTkFrame(self.frame_dashboard)
+        self.card_ram.grid(row=2, column=1, padx=(10, 20), pady=10, sticky="nsew")
+        ctk.CTkLabel(self.card_ram, text="Memory (RAM) History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
+        self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
+        self.ram_graph.pack(pady=5)
+        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
+        self.dash_ram_val.pack()
+        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%")
+        self.dash_ram_perc.pack(pady=5)
 
     def _setup_cleaning_frame(self):
         self.frame_cleaning.grid_columnconfigure(0, weight=1)
@@ -325,13 +344,42 @@ class PanaceaApp(ctk.CTk):
         except Exception as e:
             pass
         self.after(3000, self.update_dashboard)
+        
+    def _check_updates_thread(self):
+        try:
+            mandatory, optional, status = self.monitor.get_windows_update_status()
+            self.after(0, lambda: self._update_updates_gui(mandatory, optional, status))
+        except:
+             self.after(0, lambda: self._update_updates_gui(-1, -1, "Check Failed"))
+
+    def _update_updates_gui(self, mandatory, optional, status):
+        self.lbl_update_status.configure(text=status)
+        
+        # Hide both buttons first
+        self.btn_run_update.pack_forget()
+        self.btn_view_optional.pack_forget()
+        
+        if mandatory > 0 or optional > 0:
+            # Amber if only optional, Red if mandatory
+            if mandatory > 0:
+                self.frame_update_status.configure(fg_color="#F44336") # Red
+                self.btn_run_update.pack(pady=(5, 2), before=self.dash_uptime_val)
+            else:
+                self.frame_update_status.configure(fg_color="#FFC107") # Amber
+            
+            if optional > 0:
+                self.btn_view_optional.pack(pady=(2, 5), before=self.dash_uptime_val)
+        elif mandatory == 0 and optional == 0:
+            self.frame_update_status.configure(fg_color="#4CAF50") # Green
+        else:
+            self.frame_update_status.configure(fg_color="gray30") # Gray for error
 
     def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug):
         if self.dash_os.cget("text").startswith("OS: Win ..."):
             self.dash_os.configure(text=os_info)
             self.dash_cpu_name.configure(text=f"CPU: {cpu_name}")
         
-        self.dash_uptime_val.configure(text=uptime)
+        self.dash_uptime_val.configure(text=f"Time since restart: {uptime}")
         
         # Update CPU Graph
         self.cpu_graph.add_value(cpu_usage)
@@ -434,6 +482,25 @@ class PanaceaApp(ctk.CTk):
                 if success: messagebox.showinfo("Success", msg)
                 else: messagebox.showerror("Error", msg)
             threading.Thread(target=task, daemon=True).start()
+
+    def run_windows_update(self):
+        # Open Windows Update Settings and try to trigger scan (hidden CMD)
+        try:
+            import os
+            os.system("start ms-settings:windowsupdate")
+            # Use CREATE_NO_WINDOW to hide CMD flash
+            subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
+                             creationflags=subprocess.CREATE_NO_WINDOW)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to launch updater: {e}")
+
+    def run_view_optional_updates(self):
+        # Open Windows Update optional updates page
+        try:
+            import os
+            os.system("start ms-settings:windowsupdate-optionalupdates")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open settings: {e}")
 
     def _setup_resurrect_frame(self):
         self.frame_resurrect.grid_columnconfigure(0, weight=1)

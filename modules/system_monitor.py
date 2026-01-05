@@ -123,3 +123,46 @@ class SystemMonitor:
             if percent == 255: return (0, "Unknown")
             return (percent, plugged)
         return (0, "Unknown")
+
+    def get_windows_update_status(self):
+        """Returns (mandatory_count, optional_count, status_str)"""
+        try:
+            # PowerShell script to count mandatory vs optional updates
+            # AutoSelectOnWebSites = True means mandatory (security, critical), False means optional (driver, feature)
+            ps_script = """
+$session = New-Object -ComObject Microsoft.Update.Session
+$searcher = $session.CreateUpdateSearcher()
+$result = $searcher.Search('IsInstalled=0')
+$mandatory = 0
+$optional = 0
+foreach ($update in $result.Updates) {
+    if ($update.AutoSelectOnWebSites) { $mandatory++ } else { $optional++ }
+}
+Write-Output "$mandatory,$optional"
+"""
+            cmd = ['powershell', '-Command', ps_script]
+            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45).decode().strip()
+            
+            lines = output.splitlines()
+            if not lines: return 0, 0, "Unknown"
+            
+            parts = lines[-1].split(',')
+            if len(parts) == 2:
+                mandatory = int(parts[0])
+                optional = int(parts[1])
+            else:
+                return -1, -1, "Parse Error"
+            
+            if mandatory == 0 and optional == 0:
+                return 0, 0, "System Up to Date"
+            elif mandatory > 0 and optional > 0:
+                return mandatory, optional, f"{mandatory} Required, {optional} Optional"
+            elif mandatory > 0:
+                return mandatory, 0, f"{mandatory} Required Updates"
+            else:
+                return 0, optional, f"{optional} Optional Updates"
+                
+        except subprocess.TimeoutExpired:
+             return -1, -1, "Check Timed Out"
+        except Exception as e:
+            return -1, -1, "Check Failed"

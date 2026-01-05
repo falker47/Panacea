@@ -79,6 +79,34 @@ class SystemMonitor:
         except:
             return 0, 0, 0
 
+    def get_disk_model(self):
+        """Returns disk model string e.g. 'SSD Samsung MZVLB1T0...'"""
+        try:
+            import subprocess
+            # 1. Get FriendlyName (Model) reliably
+            cmd_model = ['powershell', '-Command', "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty FriendlyName"]
+            try:
+                model_name = subprocess.check_output(cmd_model, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
+            except:
+                return "Unknown Model"
+
+            if not model_name: return "Unknown Model"
+
+            # 2. Try to get MediaType separately (Non-critical)
+            try:
+                cmd_type = ['powershell', '-Command', "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty MediaType"]
+                media_type = subprocess.check_output(cmd_type, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip() # SSD or HDD
+                
+                # If media type is known and not in name, prepend it
+                if media_type in ["SSD", "HDD"] and media_type not in model_name:
+                    return f"{media_type} {model_name}"
+            except:
+                pass # If media type fails, just return model name
+
+            return model_name
+        except:
+            return "Unknown Model"
+
     def get_cpu_info(self):
         """Returns CPU name with cores and frequency"""
         try:

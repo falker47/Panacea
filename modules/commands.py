@@ -26,16 +26,30 @@ class CommandRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 shell=True,
-                creationflags=creation_flags,
-                text=True
+                creationflags=creation_flags
+                # text=True removed to handle bytes manually
             )
             
             while True:
-                line = process.stdout.readline()
-                if not line and process.poll() is not None:
+                line_bytes = process.stdout.readline()
+                if not line_bytes and process.poll() is not None:
                     break
-                if line:
-                    progress_callback(line.strip())
+                if line_bytes:
+                    try:
+                        # Attempt to decode with codepage 850 (common for Italian Windows Shell)
+                        # or fallback to utf-8/mbcs
+                        try:
+                            line = line_bytes.decode('cp850').strip()
+                        except:
+                            line = line_bytes.decode('mbcs', errors='replace').strip()
+                        
+                        # Fix spaced text (NUL bytes often present in some tool outputs)
+                        line = line.replace('\x00', '')
+                        
+                        if line:
+                            progress_callback(line)
+                    except Exception:
+                        pass # Skip unparseable lines
             
             return_code = process.wait()
             if return_code == 0:

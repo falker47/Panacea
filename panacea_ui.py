@@ -98,8 +98,8 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=" Panacea", font=ctk.CTkFont(family="Google Sans", size=34, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Panacea", font=ctk.CTkFont(family="Google Sans", size=30, weight="bold"))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 20))
         
         btn_pady = 8
         
@@ -235,7 +235,9 @@ class PanaceaApp(ctk.CTk):
         self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, width=200, height=15)
         self.dash_disk_bar.pack(pady=10)
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
-        self.dash_disk_val.pack(pady=5)
+        self.dash_disk_val.pack()
+        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
+        self.dash_disk_info.pack()
         self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_disk_perc.pack(pady=5)
 
@@ -276,9 +278,13 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="Open Windows Disk Cleanup", fg_color=c_base, hover_color=c_hover, command=self.run_cleanmgr).pack(fill="x", padx=20, pady=10)
         ctk.CTkLabel(btn_frame, text="Expert Warning: Takes 10+ minutes.", text_color="orange").pack(anchor="w", padx=20, pady=(10,0))
         ctk.CTkButton(btn_frame, text="Run Deep Clean (WinSxS)", fg_color="darkred", hover_color="#800000", command=self.run_deep_clean).pack(fill="x", padx=20, pady=10)
-        self.clean_log = ctk.CTkTextbox(self.frame_cleaning, height=150)
+        self.clean_log = ctk.CTkTextbox(self.frame_cleaning, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
         self.clean_log.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         self.clean_log.configure(state="disabled")
+        # Reuse god mode tags for consistent coloring if needed later
+        self.clean_log.tag_config("info", foreground="#00FF00")
+        self.clean_log.tag_config("warn", foreground="#FFD700")
+        self.clean_log.tag_config("err", foreground="#F44336")
 
     def _setup_disk_frame(self):
         self.frame_disk.grid_columnconfigure(0, weight=1)
@@ -299,9 +305,12 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="Run Optimization (Defrag/Trim)", fg_color=d_base, hover_color=d_hover, command=self.run_optimize_drive).pack(pady=5)
         ctk.CTkButton(btn_frame, text="Open Windows Defrag GUI", fg_color=d_base, hover_color=d_hover, command=self.run_dfrgui).pack(pady=5)
         
-        self.disk_log = ctk.CTkTextbox(self.frame_disk, height=150)
+        self.disk_log = ctk.CTkTextbox(self.frame_disk, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
         self.disk_log.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
         self.disk_log.configure(state="disabled")
+        self.disk_log.tag_config("info", foreground="#00FF00")
+        self.disk_log.tag_config("warn", foreground="#FFD700")
+        self.disk_log.tag_config("err", foreground="#F44336")
         
         self.refresh_drives()
 
@@ -333,11 +342,29 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(grp3, text="Generate Battery Report", fg_color=t_base, hover_color=t_hover, command=self.run_battery_report).pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(grp3, text="Create Restore Point (Now)", fg_color=t_base, hover_color=t_hover, command=self.run_create_restore).pack(fill="x", padx=10, pady=5)
 
+        # Tools Execution Log
+        ctk.CTkLabel(self.frame_tools, text="Execution Log", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").grid(row=2, column=0, padx=20, pady=(5, 0), sticky="w")
+        
+        self.tools_log = ctk.CTkTextbox(self.frame_tools, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.tools_log.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+        self.tools_log.configure(state="disabled")
+        self.tools_log.tag_config("info", foreground="#00FF00")
+        self.tools_log.tag_config("warn", foreground="#FFD700")
+        self.tools_log.tag_config("err", foreground="#F44336")
+        
+        self.frame_tools.grid_rowconfigure(3, weight=1)
+
     def _add_tool_btn(self, parent, text, desc, cmd, name, col, hover_col):
         f = ctk.CTkFrame(parent, fg_color="transparent")
         f.pack(fill="x", padx=10, pady=2)
         ctk.CTkLabel(f, text=desc, width=200, anchor="w").pack(side="left")
         ctk.CTkButton(f, text=text, fg_color=col, hover_color=hover_col, command=lambda: self.run_cmd(cmd, name)).pack(side="right", fill="x", expand=True)
+
+    def log_tools_msg(self, msg):
+        self.tools_log.configure(state="normal")
+        self.tools_log.insert(tk.END, msg + "\n")
+        self.tools_log.see(tk.END)
+        self.tools_log.configure(state="disabled")
 
     def _setup_apps_frame(self):
         self.frame_apps.grid_columnconfigure(0, weight=1)
@@ -530,6 +557,10 @@ class PanaceaApp(ctk.CTk):
             ram_info = self.monitor.get_ram_info()
             if ram_info:
                 self.dash_ram_info.configure(text=ram_info)
+            # Get Disk info once
+            disk_model = self.monitor.get_disk_model()
+            if disk_model:
+                self.dash_disk_info.configure(text=disk_model)
         
         self.dash_uptime_val.configure(text=f"Time since restart: {uptime}")
         
@@ -612,7 +643,17 @@ class PanaceaApp(ctk.CTk):
     def run_dfrgui(self): self.disk_opt.open_optimize_gui()
 
     def run_cmd(self, cmd, desc):
-        if messagebox.askyesno("Confirm", f"Run {desc}?"): self.cmd_runner.run_command(cmd, desc)
+        """Runs command streaming to tools log instead of external window"""
+        # Ensure user confirms first
+        if not messagebox.askyesno("Confirm", f"Run {desc}?"): return
+            
+        def task():
+            self.log_tools_msg(f"\n> RUNNING: {desc}...")
+            # Use run_command_stream and pass our logger
+            self.cmd_runner.run_command_stream(cmd, desc, self.log_tools_msg)
+            self.log_tools_msg(f"> FINISHED: {desc}")
+        
+        threading.Thread(target=task, daemon=True).start()
 
     def run_launch(self, cmd, desc):
         import subprocess
@@ -711,8 +752,33 @@ class PanaceaApp(ctk.CTk):
         self.god_log.tag_config("head", foreground="#00BFFF") # Blue
 
     def log_god_msg(self, msg, level="info"):
+        import re
         self.god_log.configure(state="normal")
-        # Check for keywords to auto-assign basic levels if untagged, or simple pass
+        
+        # 1. Fix spaced characters (e.g. "T e s t o" -> "Testo")
+        # Ensure it doesn't break normal spacing. Look for single chars separated by spaces.
+        # Simple heuristic: remove nulls first (already done in commands.py)
+        # If it still looks spaced, simple replace (optional, but command.py fix should handle strictly nulls)
+        
+        # 2. Filter out progress percentages (e.g. "Verification 26% complete", "eseguito al 26%")
+        # Regex matches number% or similar patterns
+        if re.search(r'\d{1,3}%', msg) or "eseguito al" in msg.lower():
+            # Update the status label instead of analyzing log spam
+            try:
+                # Extract percentage if possible
+                match = re.search(r'(\d{1,3})%', msg)
+                if match:
+                    perc = int(match.group(1))
+                    # Mapping phase 6 (SFC) to progress bar section (approx 0.8 to 1.0)
+                    # This is tricky without context, so maybe just show text on label
+                    self.lbl_status.configure(text=f"Processing... {perc}%")
+            except:
+                pass
+            
+            # Don't log this line to the text box
+            self.god_log.configure(state="disabled")
+            return
+
         tag = level
         self.god_log.insert(tk.END, msg + "\n", tag)
         self.god_log.see(tk.END)

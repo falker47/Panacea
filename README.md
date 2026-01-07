@@ -1,59 +1,84 @@
 # Panacea: Windows System Optimizer
 
-Panacea is a lightweight, safe, and modern Windows desktop utility designed to perform essential system maintenance operations. It is built with Python and CustomTkinter, featuring a sleek dark-mode interface.
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-## 🎯 Features
+**Panacea** is a modern, lightweight, and safe Windows system utility designed to streamline maintenance and boost performance. Built with **Python** and **CustomTkinter**, it features a sleek dark-mode interface and powerful optimization tools.
 
-### 1. Dashboard & Monitoring
-- **Live Monitoring**: Real-time stats for CPU, RAM, Disk, and Battery.
-- **System Specs**: Displays basic OS and Hardware information.
+## 🚀 Key Features
 
-### 2. System Cleaning
-- **Clean Temporary Files**: Recursively deletes files in `%TEMP%` and `C:\Windows\Temp`. Safely skips locked files.
-- **Empty Recycle Bin**: Quickly clears the recycle bin.
-- **Deep Clean**: Can trigger DISM Component Store cleanup.
-- **Log Tab**: All cleaning actions log their output directly in the UI.
+### 📊 Dashboard & Monitoring
 
-### 3. Disk Optimization
-- **Drive Detection**: Detects and lists available drives (C:, D:, etc.).
-- **Smart Optimization**:
-    - Uses Windows built-in `defrag /O` command which automatically performs the correct action based on drive type (Defragment for HDD, TRIM for SSD).
-    - **Integrated Log**: Optimization progress is streamed directly to an in-app log tab, so no external command windows pop up.
-    - Can launch the full Windows "Defragment and Optimize Drives" GUI.
+- **Real-time Stats**: Monitor CPU, RAM, Disk usage, and Battery health live.
+- **System Specs**: Instant view of your OS version and hardware details.
 
-### 4. Advanced Tools
-- **System Integrity**: Easy access to `sfc /scannow` and various `DISM` health checks to repair Windows image corruption.
-- **Network Reset**: Tools to `flushdns` and `reset winsock` to fix network connectivity issues.
-- **App Management**: Quick links to uninstall programs or manage startup apps.
+### ⚡ Turbo Mode (Gaming Profile)
+
+- **Performance Boost**: One-click optimization to prioritize performance over battery life.
+- **Power Plans**: Automatically switches to "High Performance" power plan.
+- **Visual Effects**: Disables unnecessary window animations for snappier response.
+- **Service Management**: Temporarily toggles background services like `SysMain` (Superfetch), `Windows Search`, and `Print Spooler` to free up resources.
+
+### 🧹 System Cleaning
+
+- **Junk Removal**: Safely deletes temporary files from `%TEMP%` and `C:\Windows\Temp`.
+- **Deep Clean**: Triggers DISM Component Store cleanup to reclaim disk space.
+- **Recycle Bin**: One-click empty.
+- **Live Logs**: View cleaning progress in real-time within the app.
+
+### 💾 Disk Optimization
+
+- **Smart Defrag/TRIM**: Detects drive type (SSD vs HDD) and runs the appropriate Windows optimization command (`defrag /O`).
+- **Seamless Integration**: Runs in the background with progress streaming to the UI.
+
+### 🛠️ Advanced Tools
+
+- **System Repair**: Quick access to `sfc /scannow` and `DISM` health checks.
+- **Network Fixes**: Reset DNS (`flushdns`) and Winsock to resolve connection issues.
+- **App Manager**: Shortcuts to uninstall programs and manage startup items.
+- **System Restore**: Create restore points before making changes.
 
 ## 🔐 Permissions & Safety
-- **Administrator Required**: The application checks for Admin privileges on startup and attempts to restart itself as Administrator if needed. This is required for accessing system temp folders and running maintenance commands.
-- **Safety First**: Panacea only runs native Windows commands and deletes files in designated temporary locations. It does not touch the Registry manually or install drivers.
 
-## 🚀 How to Build & Run
+- **Admin Privileges**: Panacea automatically requests Administrator rights on startup to perform deep cleaning and system optimizations.
+- **Safe Operations**: Utilizes native Windows commands (DISM, Defrag, PowerCfg) and avoids risky registry hacks.
+
+## 📦 How to Build & Run
 
 ### Method 1: Build from Source (Recommended)
-Use the included build script to compile the application locally. This is the best way to share the app with friends to avoid antivirus false positives associated with unknown executables.
 
-1.  Extract the source code zip.
-2.  Double-click **`BuildExe.bat`**.
-3.  Wait for the script to install dependencies and compile the executable.
-4.  Run the generated `Panacea.exe` from the `dist` folder.
+Building locally is the safest way to run the app.
 
-### Method 2: Run with Python 
-If you are a developer:
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/falker47/panacea.git
+    cd panacea
+    ```
+2.  **Run the Build Script**:
+    Double-click `scripts\build_exe.bat` or run it from the terminal.
+    ```cmd
+    scripts\build_exe.bat
+    ```
+3.  **Launch**:
+    Find `Panacea.exe` in the `dist` folder.
 
-1.  Install Python 3.x.
-2.  Install dependencies:
+### Method 2: Run with Python
+
+For developers who want to modify the code.
+
+1.  **Install Python 3.10+**.
+2.  **Install Dependencies**:
     ```bash
     pip install -r requirements.txt
     ```
-3.  Run the application:
+3.  **Run**:
     ```bash
     python main.py
     ```
 
 ## 🧩 Requirements
-- Windows 10 or 11
-- Python 3.x (for building or direct execution)
-- Dependencies: `customtkinter`, `packaging`, `pillow`, `pyinstaller`
+
+- **OS**: Windows 10 or 11
+- **Python**: 3.10+ (for source execution)
+- **Libraries**: `customtkinter`, `pillow`, `pyinstaller`, `packaging`

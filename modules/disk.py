@@ -9,9 +9,9 @@ class DiskOptimizer:
 
     def get_drives(self):
         drives = []
-        bitmask = os.popen('wmic logicaldisk get caption').read()
+        # Use os.path.exists which is faster and more reliable than wmic
         for letter in string.ascii_uppercase:
-            if f"{letter}:" in bitmask:
+            if os.path.exists(f"{letter}:\\"):
                 drives.append(f"{letter}:")
         return drives
 
@@ -67,27 +67,52 @@ class DiskOptimizer:
             # CREATE_NO_WINDOW = 0x08000000 to hide console window
             creation_flags = 0x08000000
             
+            # Force UTF-8 encoding for the subprocess
+            wrapped_cmd = f'cmd /c "chcp 65001 >NUL & {cmd}"'
+            
             process = subprocess.Popen(
-                cmd,
+                wrapped_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                shell=False, # shell=False is safer and enough since we passed the full executable command or simple args
-                # Actually for 'defrag' we might need shell=True or full path if not in path, but usually it is.
-                # Let's use shell=True but with hidden window to be safe with path resolution, 
-                # OR better: use list args shell=False. 'defrag' is in System32.
-                # We will stick to shell=True for compatibility with system commands but hide window.
-                creationflags=creation_flags,
-                text=True
+                shell=False,
+                creationflags=creation_flags
+                # text=True removed to handle bytes manually
             )
             
             # Real-time output capturing
             if progress_callback:
                 while True:
-                    line = process.stdout.readline()
-                    if not line and process.poll() is not None:
+                    line_bytes = process.stdout.readline()
+                    if not line_bytes and process.poll() is not None:
                         break
-                    if line:
-                        progress_callback(line.strip())
+                    if line_bytes:
+                         # 1. Try UTF-8 first
+                         # 2. Try CP1252 (Common for CHKDSK/Defrag in IT locale)
+                         # 3. Try CP850
+                        line = None
+                        for enc in ['utf-8', 'cp1252', 'cp850']:
+                            try:
+                                line = line_bytes.decode(enc).strip()
+                                break
+                            except: continue
+                        if line is None: line = line_bytes.decode('utf-8', errors='replace').strip()
+
+                        if line:
+                            # Basic filtering for defrag clutter
+                            if "Volume information" in line or \
+                               "Volume size" in line or "Dimensioni volume" in line or \
+                               "Free space" in line or "Spazio disponibile" in line or \
+                               "Total space" in line or "Spazio totale" in line or \
+                               "Post Defragmentation" in line or "Report frammentazione" in line or \
+                               "Invoking" in line or "Chiamata di" in line or \
+                               "Volume information" in line or "Informazioni sul volume" in line or \
+                               "Re-optimize" in line or "Riottimizza" in line or \
+                               "Analysis:" in line or "Analisi:" in line or \
+                               "Note:" in line or "Nota:" in line or \
+                               line.startswith("        ") or line == "":
+                               continue
+                            
+                            progress_callback(line)
             
             # Wait for completion
             return_code = process.wait()

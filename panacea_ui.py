@@ -23,7 +23,7 @@ class PanaceaApp(ctk.CTk):
         super().__init__()
         
         self.title("Panacea System Optimizer")
-        self.geometry("950x600")
+        self.geometry("950x550")
         
         # Set Icon at Runtime
         try:
@@ -288,25 +288,34 @@ class PanaceaApp(ctk.CTk):
 
     def _setup_disk_frame(self):
         self.frame_disk.grid_columnconfigure(0, weight=1)
-        self.frame_disk.grid_rowconfigure(3, weight=1)
+        # Only row 4 (log) expands
+        self.frame_disk.grid_rowconfigure(4, weight=1)
         
-        ctk.CTkLabel(self.frame_disk, text="Disk Optimization", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
-        self.drives_frame = ctk.CTkScrollableFrame(self.frame_disk, label_text="Available Drives", height=60)
-        self.drives_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+        ctk.CTkLabel(self.frame_disk, text="Disk Optimization", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(10, 5), sticky="w")
+        
+        # Compact drive selection using regular Frame (not scrollable) with horizontal layout
+        drive_row = ctk.CTkFrame(self.frame_disk, fg_color="transparent")
+        drive_row.grid(row=1, column=0, padx=20, pady=5, sticky="w")
+        
+        ctk.CTkLabel(drive_row, text="Select Drive:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 10))
+        
         self.selected_drive = tk.StringVar()
-        btn_frame = ctk.CTkFrame(self.frame_disk)
-        btn_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        self.drive_menu = ctk.CTkOptionMenu(drive_row, variable=self.selected_drive, values=["Loading..."], width=120)
+        self.drive_menu.pack(side="left", padx=(0, 10))
         
         d_base, d_hover = self.col_disk_tuple
+        ctk.CTkButton(drive_row, text="Refresh", fg_color=d_base, hover_color=d_hover, width=80, command=self.refresh_drives).pack(side="left")
         
-        ctk.CTkButton(btn_frame, text="Refresh Drives", fg_color=d_base, hover_color=d_hover, command=self.refresh_drives).pack(pady=5)
-        # ctk.CTkButton(btn_frame, text="Optimize Selected", fg_color=d_base, hover_color=d_hover, command=self.run_optimize_drive).pack(pady=5)
-        # Using a separate method invocation logic
-        ctk.CTkButton(btn_frame, text="Run Optimization (Defrag/Trim)", fg_color=d_base, hover_color=d_hover, command=self.run_optimize_drive).pack(pady=5)
-        ctk.CTkButton(btn_frame, text="Open Windows Defrag GUI", fg_color=d_base, hover_color=d_hover, command=self.run_dfrgui).pack(pady=5)
+        # Action buttons in a horizontal row
+        btn_row = ctk.CTkFrame(self.frame_disk, fg_color="transparent")
+        btn_row.grid(row=2, column=0, padx=20, pady=5, sticky="w")
         
+        ctk.CTkButton(btn_row, text="Run Optimization (Defrag/Trim)", fg_color=d_base, hover_color=d_hover, command=self.run_optimize_drive).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_row, text="Open Windows Defrag GUI", fg_color=d_base, hover_color=d_hover, command=self.run_dfrgui).pack(side="left")
+        
+        # Log takes remaining space
         self.disk_log = ctk.CTkTextbox(self.frame_disk, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
-        self.disk_log.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+        self.disk_log.grid(row=4, column=0, padx=20, pady=10, sticky="nsew")
         self.disk_log.configure(state="disabled")
         self.disk_log.tag_config("info", foreground="#00FF00")
         self.disk_log.tag_config("warn", foreground="#FFD700")
@@ -596,12 +605,14 @@ class PanaceaApp(ctk.CTk):
         self.disk_log.configure(state="disabled")
 
     def refresh_drives(self):
-        for widget in self.drives_frame.winfo_children():
-            widget.destroy()
         drives = self.disk_opt.get_drive_info()
-        for d in drives:
-            rb = ctk.CTkRadioButton(self.drives_frame, text=f"{d['letter']} - {d['type']}", variable=self.selected_drive, value=d['letter'])
-            rb.pack(anchor="w", padx=10, pady=5)
+        drive_values = [f"{d['letter']}" for d in drives]
+        if drive_values:
+            self.drive_menu.configure(values=drive_values)
+            self.selected_drive.set(drive_values[0])
+        else:
+            self.drive_menu.configure(values=["No drives"])
+            self.selected_drive.set("No drives")
 
     def run_clean_temp(self):
         def task():
@@ -711,32 +722,33 @@ class PanaceaApp(ctk.CTk):
         
         title = ctk.CTkLabel(hero, text="SYSTEM RESURRECTION", font=ctk.CTkFont(size=32, weight="bold"), text_color="#FFD700")
         title.pack(anchor="center")
-        subtitle = ctk.CTkLabel(hero, text="One-Click Optimization & Restoration Suite", font=ctk.CTkFont(size=14), text_color="gray")
+        subtitle = ctk.CTkLabel(hero, text="Advanced Safety Protocol & Deep Optimization", font=ctk.CTkFont(size=14), text_color="gray")
         subtitle.pack(anchor="center")
 
         # Action Area
         self.action_frame = ctk.CTkFrame(self.frame_resurrect, fg_color=("gray90", "gray13"))
         self.action_frame.grid(row=1, column=0, padx=40, pady=10, sticky="ew")
         
-        self.progress_bar = ctk.CTkProgressBar(self.action_frame, orientation="horizontal", height=15)
+        # Larger Progress Bar with Gold Theme
+        self.progress_bar = ctk.CTkProgressBar(self.action_frame, orientation="horizontal", height=20, progress_color="#FFD700")
         self.progress_bar.set(0)
         self.progress_bar.pack(fill="x", padx=20, pady=(20, 10))
         
         self.lbl_status = ctk.CTkLabel(self.action_frame, text="Ready to Start", font=ctk.CTkFont(size=14, weight="bold"))
         self.lbl_status.pack(pady=(5, 0))
         
-        self.lbl_warning = ctk.CTkLabel(self.action_frame, text="(Process takes time. Run only when idle.)", font=ctk.CTkFont(size=11), text_color="gray70")
+        self.lbl_warning = ctk.CTkLabel(self.action_frame, text="(Includes: Auto System Restore, Browser Cleanup, Disk Health Scan)", font=ctk.CTkFont(size=11), text_color="gray70")
         self.lbl_warning.pack(pady=(0, 5))
 
         self.btn_resurrect_start = ctk.CTkButton(self.action_frame, text="INITIATE PROTOCOL", font=ctk.CTkFont(size=16, weight="bold"),
-                                                 fg_color="#FFD700", hover_color="#B8860B", text_color="black",
-                                                 height=40,
-                                                 command=self.run_god_mode)
+                                             fg_color="#FFD700", hover_color="#B8860B", text_color="black",
+                                             height=40,
+                                             command=self.run_god_mode)
         self.btn_resurrect_start.pack(pady=20)
         
         # Log Area (Terminal Style)
         log_frame = ctk.CTkFrame(self.frame_resurrect, corner_radius=10, fg_color="black")
-        log_frame.grid(row=2, column=0, padx=20, pady=20, sticky="nsew")
+        log_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         
         ctk.CTkLabel(log_frame, text="> EXECUTION LOG", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").pack(anchor="w", padx=10, pady=5)
         
@@ -754,33 +766,7 @@ class PanaceaApp(ctk.CTk):
     def log_god_msg(self, msg, level="info"):
         import re
         self.god_log.configure(state="normal")
-        
-        # 1. Fix spaced characters (e.g. "T e s t o" -> "Testo")
-        # Ensure it doesn't break normal spacing. Look for single chars separated by spaces.
-        # Simple heuristic: remove nulls first (already done in commands.py)
-        # If it still looks spaced, simple replace (optional, but command.py fix should handle strictly nulls)
-        
-        # 2. Filter out progress percentages (e.g. "Verification 26% complete", "eseguito al 26%")
-        # Regex matches number% or similar patterns
-        if re.search(r'\d{1,3}%', msg) or "eseguito al" in msg.lower():
-            # Update the status label instead of analyzing log spam
-            try:
-                # Extract percentage if possible
-                match = re.search(r'(\d{1,3})%', msg)
-                if match:
-                    perc = int(match.group(1))
-                    # Mapping phase 6 (SFC) to progress bar section (approx 0.8 to 1.0)
-                    # This is tricky without context, so maybe just show text on label
-                    self.lbl_status.configure(text=f"Processing... {perc}%")
-            except:
-                pass
-            
-            # Don't log this line to the text box
-            self.god_log.configure(state="disabled")
-            return
-
-        tag = level
-        self.god_log.insert(tk.END, msg + "\n", tag)
+        self.god_log.insert(tk.END, f"{msg}\n", level)
         self.god_log.see(tk.END)
         self.god_log.configure(state="disabled")
 
@@ -793,8 +779,23 @@ class PanaceaApp(ctk.CTk):
         self.progress_bar.set(0)
         self.god_log.configure(state="normal"); self.god_log.delete("0.0", tk.END); self.god_log.configure(state="disabled")
         
+        # Filters for Cleaner Output
+        def health_filter(line):
+            # SFC / DISM / CHKDSK filter
+            bad_phrases = [
+                "Avvio in corso", "Attendere", "L'operazione richieder", "100%", "completed", "Avanzamento:", "ETA:", "Fase:", "totale:", "percent complete",
+                # CHKDSK Noise
+                "Il file system", "etichetta del volume", "Durata fase", "Verifica file", "Verifica indici", "Verifica descrittori", "journal USN",
+                "KB di spazio", "KB in", "KB occupati", "KB disponibili", "byte in ogni", "unit", "allocazione"
+            ]
+            # Keep final results or phase indicators, drop progress noise if needed or verbose intros
+            for phrase in bad_phrases:
+                if phrase in line: return False
+            if line.strip() == "": return False
+            return True
+            
         def sequence():
-            steps = 7 # 6 phases + complete
+            steps = 8 # Safety, Browser, Cleanup, Network, Disk Opt, Disk Scan, Health, Verification
             current_step = 0
             
             def update_progress(step_i, status_text):
@@ -802,47 +803,64 @@ class PanaceaApp(ctk.CTk):
                 self.lbl_status.configure(text=status_text)
             
             try:
-                # PHASE 0: RESTORE POINT
-                current_step += 1; update_progress(current_step, "Phase 1/6: Creating Restore Point (Safety)")
+                # PHASE 1: SAFETY (Auto-Enable Restore)
+                current_step += 1; update_progress(current_step, "Phase 1: Safety Backup")
                 self.log_god_msg("\n[PHASE 1] SAFETY BACKUP INITIATED...", "head")
+                
+                # Verify/Enable System Restore first
+                self.log_god_msg("Verifying System Restore state...", "info")
+                self.restore_mgr.ensure_restore_enabled("C:\\")
+                
                 success, msg = self.restore_mgr.create_restore_point("Panacea GodMode Auto-Restore")
                 if success: self.log_god_msg(f"Restore Point: {msg}", "info")
                 else: self.log_god_msg(f"Restore Point Warning: {msg}", "warn")
                 
-                # PHASE 1
-                current_step += 1; update_progress(current_step, "Phase 2/6: System Cleanup")
-                self.log_god_msg("\n[PHASE 2] SYSTEM CLEANUP INITIATED...", "head")
+                # PHASE 2: BROWSER CLEANUP
+                current_step += 1; update_progress(current_step, "Phase 2: Browser Cleanup")
+                self.log_god_msg("\n[PHASE 2] BROWSER CLEANUP...", "head")
+                bc_count, bc_size = self.cleanup_mgr.clean_browser_caches()
+                self.log_god_msg(f"Browser Cache: Cleared {bc_count} files ({bc_size / (1024*1024):.2f} MB)", "info")
+
+                # PHASE 3: SYSTEM CLEANUP
+                current_step += 1; update_progress(current_step, "Phase 3: System Junk Cleanup")
+                self.log_god_msg("\n[PHASE 3] SYSTEM JUNK CLEANUP...", "head")
                 count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=lambda m: self.log_god_msg(m, "info"))
                 self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB", "info")
                 success, msg = self.cleanup_mgr.empty_recycle_bin()
                 self.log_god_msg(f"Recycle Bin: {msg}", "info")
 
-                # PHASE 2
-                current_step += 1; update_progress(current_step, "Phase 3/6: Network Reset")
-                self.log_god_msg("\n[PHASE 3] NETWORK RESET INITIATED...", "head")
+                # PHASE 4: NETWORK
+                current_step += 1; update_progress(current_step, "Phase 4: Network Reset")
+                self.log_god_msg("\n[PHASE 4] NETWORK RESET...", "head")
                 self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", lambda m: self.log_god_msg(m, "info"))
                 self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", lambda m: self.log_god_msg(m, "info"))
 
-                # PHASE 3
-                current_step += 1; update_progress(current_step, "Phase 4/6: Disk Optimization")
-                self.log_god_msg("\n[PHASE 4] DISK OPTIMIZATION (C:) INITIATED...", "head")
+                # PHASE 5: DISK OPTIMIZATION
+                current_step += 1; update_progress(current_step, "Phase 5: Disk Defrag/Trim")
+                self.log_god_msg("\n[PHASE 5] DISK OPTIMIZATION (C:)...", "head")
                 self.disk_opt.analyze_optimize_drive("C:", progress_callback=lambda m: self.log_god_msg(m, "info"))
 
-                # PHASE 4
-                current_step += 1; update_progress(current_step, "Phase 5/6: System Health Check")
-                self.log_god_msg("\n[PHASE 5] DISM HEALTH CHECK INITIATED...", "head")
-                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", lambda m: self.log_god_msg(m, "info"))
-                
-                # PHASE 5
-                current_step += 1; update_progress(current_step, "Phase 6/6: Integrity Scan (SFC)")
-                self.log_god_msg("\n[PHASE 6] SFC INTEGRITY SCAN INITIATED (Please Wait)...", "head")
-                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"))
+                # PHASE 6: DISK HEALTH
+                current_step += 1; update_progress(current_step, "Phase 6: Disk Health Scan")
+                self.log_god_msg("\n[PHASE 6] DISK HEALTH CHECK (CHKDSK)...", "head")
+                # /scan runs online (no reboot), /perf speeds it up
+                self.cmd_runner.run_command_stream("chkdsk C: /scan /perf", "CHKDSK", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
 
-                current_step += 1; update_progress(current_step, "Protocol Complete")
+                # PHASE 7: SYSTEM IMAGE HEALTH
+                current_step += 1; update_progress(current_step, "Phase 7: DISM Health Check")
+                self.log_god_msg("\n[PHASE 7] DISM IMAGE HEALTH...", "head")
+                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
+                
+                # PHASE 8: SFC (skipped for speed if preferred, but kept for god mode)
+                current_step += 1; update_progress(current_step, "Phase 8: Integrity Scan (SFC)")
+                self.log_god_msg("\n[PHASE 8] SFC INTEGRITY SCAN...", "head")
+                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
+
+                update_progress(steps, "Protocol Complete")
                 self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
-                self.log_god_msg("\n[!] CRITICAL ADVICE:", "warn")
-                self.log_god_msg("1. Go to 'Apps' tab -> Uninstall unused programs.", "info")
-                self.log_god_msg("2. Go to 'Apps' tab -> Disable unnecessary startup items.", "info")
+                
+                # Final Tip
+                self.log_god_msg("\n[TIP] For best results: Uninstall useless programs and manage startup apps from the APPS tab and then restart your PC.", "warn")
                 
                 messagebox.showinfo("Success", "Resurrection Protocol Finished Successfully.\n\nA system restart is highly recommended.")
 

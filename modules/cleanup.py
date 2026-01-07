@@ -18,6 +18,57 @@ class CleanupManager:
             paths.append(win_temp)
         return list(set(paths)) # Remove duplicates
 
+    def clean_browser_caches(self):
+        """Clears cache for Chrome, Edge, and Firefox"""
+        deleted_count = 0
+        deleted_size = 0
+        
+        users_dir = os.path.dirname(os.environ['USERPROFILE'])
+        # We only really care about current user usually, but let's stick to env vars
+        local_app_data = os.environ.get('LOCALAPPDATA')
+        
+        if not local_app_data: return 0, 0
+
+        # Define targets
+        targets = [
+            os.path.join(local_app_data, r"Google\Chrome\User Data\Default\Cache"),
+            os.path.join(local_app_data, r"Google\Chrome\User Data\Default\Code Cache"),
+            os.path.join(local_app_data, r"Microsoft\Edge\User Data\Default\Cache"),
+            os.path.join(local_app_data, r"Microsoft\Edge\User Data\Default\Code Cache"),
+            os.path.join(local_app_data, r"Mozilla\Firefox\Profiles"), # Needs wildcard handling
+        ]
+
+        self.logger.log("Starting Browser Cleanup...")
+
+        for target in targets:
+            # Handle Firefox wildcard profiles
+            if "Firefox" in target:
+                 # Look for /cache2 inside profiles
+                 if os.path.exists(target):
+                     for profile in os.listdir(target):
+                         cache_path = os.path.join(target, profile, "cache2")
+                         if os.path.exists(cache_path):
+                             c, s = self._delete_folder_contents(cache_path)
+                             deleted_count += c; deleted_size += s
+            else:
+                if os.path.exists(target):
+                    c, s = self._delete_folder_contents(target)
+                    deleted_count += c; deleted_size += s
+        
+        return deleted_count, deleted_size
+
+    def _delete_folder_contents(self, folder_path):
+        c, s = 0, 0
+        for root, dirs, files in os.walk(folder_path):
+            for name in files:
+                try:
+                    fp = os.path.join(root, name)
+                    sz = os.path.getsize(fp)
+                    os.remove(fp)
+                    c += 1; s += sz
+                except: pass
+        return c, s
+
     def clean_temp_files(self, progress_callback=None):
         total_deleted = 0
         total_freed = 0

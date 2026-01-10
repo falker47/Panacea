@@ -9,4 +9,5 @@ build/
 # VF
 venv/
 .env
+modules/__pycache__/
 

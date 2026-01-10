@@ -23,7 +23,15 @@ class PanaceaApp(ctk.CTk):
         super().__init__()
         
         self.title("Panacea System Optimizer")
-        self.geometry("950x550")
+        
+        # Center window on screen
+        window_width = 950
+        window_height = 600
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
         
         # Set Icon at Runtime
         try:
@@ -210,17 +218,17 @@ class PanaceaApp(ctk.CTk):
         self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
         self.dash_os.pack()
 
-        # Windows Update Status Chip (Moved above uptime)
-        self.frame_update_status = ctk.CTkFrame(self.card_sys, fg_color="gray30", corner_radius=15, height=25)
-        self.frame_update_status.pack(pady=(10, 5))
-        self.lbl_update_status = ctk.CTkLabel(self.frame_update_status, text="Checking Updates...", font=ctk.CTkFont(size=12), text_color="black")
-        self.lbl_update_status.pack(padx=10, pady=2)
+        # Update Status Label (shows checking/up-to-date message)
+        self.lbl_update_status = ctk.CTkLabel(self.card_sys, text="Looking for updates...", font=ctk.CTkFont(size=12), text_color="gray")
+        self.lbl_update_status.pack(pady=(10, 5))
+
+        # Update Buttons Row (Hidden by default, centered horizontally)
+        self.btn_update_row = ctk.CTkFrame(self.card_sys, fg_color="transparent")
         
-        # Update Buttons (Hidden by default)
-        self.btn_run_update = ctk.CTkButton(self.card_sys, text="Install Required", height=24, width=120, 
+        self.btn_run_update = ctk.CTkButton(self.btn_update_row, text="Install Required", height=28, width=140, 
                                             fg_color="#F44336", hover_color="#C62828",
                                             command=self.run_windows_update)
-        self.btn_view_optional = ctk.CTkButton(self.card_sys, text="View Optional", height=24, width=120, 
+        self.btn_view_optional = ctk.CTkButton(self.btn_update_row, text="View Optional", height=28, width=140, 
                                                fg_color="#FFC107", hover_color="#FFA000", text_color="black",
                                                command=self.run_view_optional_updates)
         
@@ -537,26 +545,29 @@ class PanaceaApp(ctk.CTk):
              self.after(0, lambda: self._update_updates_gui(-1, -1, "Check Failed"))
 
     def _update_updates_gui(self, mandatory, optional, status):
-        self.lbl_update_status.configure(text=status)
-        
-        # Hide both buttons first
+        # Hide button row first
+        self.btn_update_row.pack_forget()
         self.btn_run_update.pack_forget()
         self.btn_view_optional.pack_forget()
         
         if mandatory > 0 or optional > 0:
-            # Amber if only optional, Red if mandatory
+            # Hide status label, show buttons
+            self.lbl_update_status.pack_forget()
+            self.btn_update_row.pack(pady=(10, 5), before=self.dash_uptime_val)
+            
             if mandatory > 0:
-                self.frame_update_status.configure(fg_color="#F44336") # Red
-                self.btn_run_update.pack(pady=(5, 2), before=self.dash_uptime_val)
-            else:
-                self.frame_update_status.configure(fg_color="#FFC107") # Amber
+                self.btn_run_update.configure(text=f"Install Required ({mandatory})")
+                self.btn_run_update.pack(side="left", padx=5)
             
             if optional > 0:
-                self.btn_view_optional.pack(pady=(2, 5), before=self.dash_uptime_val)
+                self.btn_view_optional.configure(text=f"View Optional ({optional})")
+                self.btn_view_optional.pack(side="left", padx=5)
         elif mandatory == 0 and optional == 0:
-            self.frame_update_status.configure(fg_color="#4CAF50") # Green
+            # System is up to date
+            self.lbl_update_status.configure(text="✓ System is up to date", text_color="#4CAF50")
         else:
-            self.frame_update_status.configure(fg_color="gray30") # Gray for error
+            # Check failed
+            self.lbl_update_status.configure(text="Update check failed", text_color="gray")
 
     def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug):
         if self.dash_os.cget("text").startswith("OS: Win ..."):
@@ -695,8 +706,10 @@ class PanaceaApp(ctk.CTk):
             # Use CREATE_NO_WINDOW to hide CMD flash
             subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
                              creationflags=subprocess.CREATE_NO_WINDOW)
-            # Refresh update status after a delay (give time for updates to install)
-            self.lbl_update_status.configure(text="Updating...")
+            # Hide buttons, show status and refresh after delay
+            self.btn_update_row.pack_forget()
+            self.lbl_update_status.configure(text="Updating... please wait", text_color="gray")
+            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
             self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
         except Exception as e:
             messagebox.showerror("Error", f"Failed to launch updater: {e}")
@@ -707,7 +720,9 @@ class PanaceaApp(ctk.CTk):
             import os
             os.system("start ms-settings:windowsupdate-optionalupdates")
             # Refresh update status after a delay
-            self.lbl_update_status.configure(text="Checking...")
+            self.btn_update_row.pack_forget()
+            self.lbl_update_status.configure(text="Looking for updates...", text_color="gray")
+            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
             self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open settings: {e}")

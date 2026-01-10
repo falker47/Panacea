@@ -43,22 +43,44 @@ class SystemMonitor:
         """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)'"""
         try:
             import subprocess
-            # Query WMI for memory modules - use comma without space
-            cmd = 'wmic memorychip get Speed,SMBIOSMemoryType'
+            # Query WMI for memory modules - use CSV to ensure correct column mapping
+            cmd = 'wmic memorychip get Speed,SMBIOSMemoryType /format:csv'
             output = subprocess.check_output(cmd, shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode()
             lines = [l.strip() for l in output.split('\n') if l.strip()]
             
-            # Skip header line
-            data_lines = [l for l in lines if not l.startswith('SMBIOS') and not l.startswith('Speed')]
-            if not data_lines:
+            if len(lines) < 2:
+                # Should be at least header + 1 data line
                 return ""
             
+            # Header line: Node,SMBIOSMemoryType,Speed (order may vary)
+            header = lines[0].split(',')
+            
+            # Identify columns
+            speed_idx = -1
+            type_idx = -1
+            
+            for i, col in enumerate(header):
+                if "Speed" in col: speed_idx = i
+                if "SMBIOSMemoryType" in col: type_idx = i
+            
+            if speed_idx == -1 or type_idx == -1:
+                return ""
+
+            # Data lines
+            data_lines = lines[1:]
             module_count = len(data_lines)
             
-            # Parse first module - format is "Speed  SMBIOSMemoryType" like "3200  26"
-            parts = data_lines[0].split()
-            speed = parts[0] if parts else "?"
-            smbios_type = int(parts[-1]) if len(parts) > 0 else 0
+            # Parse first module
+            parts = data_lines[0].split(',')
+            
+            if len(parts) <= max(speed_idx, type_idx):
+                return ""
+                
+            speed = parts[speed_idx]
+            try:
+                smbios_type = int(parts[type_idx])
+            except:
+                smbios_type = 0
             
             # SMBIOSMemoryType: 20=DDR, 21=DDR2, 24=DDR3, 26=DDR4, 34=DDR5
             type_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}

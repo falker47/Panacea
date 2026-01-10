@@ -582,26 +582,55 @@ class PanaceaApp(ctk.CTk):
             if disk_model:
                 self.dash_disk_info.configure(text=disk_model)
         
-        self.dash_uptime_val.configure(text=f"Time since restart: {uptime}")
+        # Uptime
+        new_uptime = f"Time since restart: {uptime}"
+        if self.dash_uptime_val.cget("text") != new_uptime:
+            self.dash_uptime_val.configure(text=new_uptime)
         
         # Update CPU Graph
         self.cpu_graph.add_value(cpu_usage)
-        self.dash_cpu_val.configure(text=f"{round(cpu_usage, 1)}%")
+        new_cpu_val = f"{round(cpu_usage, 1)}%"
+        if self.dash_cpu_val.cget("text") != new_cpu_val:
+            self.dash_cpu_val.configure(text=new_cpu_val)
         
         # Update RAM Graph
         self.ram_graph.add_value(p_ram)
-        self.dash_ram_val.configure(text=f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB")
-        self.dash_ram_perc.configure(text=f"{round(p_ram, 1)}%")
+        new_ram_val = f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB"
+        if self.dash_ram_val.cget("text") != new_ram_val:
+            self.dash_ram_val.configure(text=new_ram_val)
+        
+        new_ram_perc = f"{round(p_ram, 1)}%"
+        if self.dash_ram_perc.cget("text") != new_ram_perc:
+            self.dash_ram_perc.configure(text=new_ram_perc)
 
         # Disk
         def get_color(perc):
             if perc < 60: return "#4CAF50"
             if perc < 85: return "#FFC107"
             return "#F44336"
-        self.dash_disk_bar.set(p_disk / 100)
-        self.dash_disk_bar.configure(progress_color=get_color(p_disk))
-        self.dash_disk_val.configure(text=f"{f_disk} GB Free / {t_disk} GB")
-        self.dash_disk_perc.configure(text=f"{p_disk}%")
+        
+        # ProgressBar
+        current_prog = self.dash_disk_bar.get()
+        target_prog = p_disk / 100
+        if abs(current_prog - target_prog) > 0.01:
+            self.dash_disk_bar.set(target_prog)
+            
+        new_color = get_color(p_disk)
+        # ctk widgets don't easily expose current color, so we just set it if value changed significantly or periodically
+        # To avoid flicker, we can just set it. configure might be cheap if value is same, but let's be safe
+        try:
+             # Access internal color if possible or just set it
+             self.dash_disk_bar.configure(progress_color=new_color)
+        except:
+             pass
+
+        new_disk_val = f"{f_disk} GB Free / {t_disk} GB"
+        if self.dash_disk_val.cget("text") != new_disk_val:
+            self.dash_disk_val.configure(text=new_disk_val)
+            
+        new_disk_perc = f"{p_disk}%"
+        if self.dash_disk_perc.cget("text") != new_disk_perc:
+            self.dash_disk_perc.configure(text=new_disk_perc)
 
     def log_msg(self, msg):
         self.clean_log.configure(state="normal")
@@ -899,6 +928,9 @@ class LiveGraph(ctk.CTkFrame):
         self.line_color = line_color
         self.points = [0] * (width // 5) # one point every 5 pixels
         
+        # Create persistent line object
+        self.line_id = self.canvas.create_line(0,0,0,0, fill=self.line_color, width=2, smooth=True)
+        
     def add_value(self, value):
         # value 0-100
         self.points.pop(0)
@@ -906,7 +938,6 @@ class LiveGraph(ctk.CTkFrame):
         self.draw()
         
     def draw(self):
-        self.canvas.delete("all")
         w = self.width
         h = self.height
         step = w / (len(self.points) - 1)
@@ -915,9 +946,8 @@ class LiveGraph(ctk.CTkFrame):
         for i, val in enumerate(self.points):
             x = i * step
             # val is % so 100 is top (0 y), 0 is bottom (h y)
-            # Actually 100% should be at y=0, 0% at y=h
             y = h - (val / 100 * h)
             coords.extend([x, y])
             
         if len(coords) >= 4:
-            self.canvas.create_line(coords, fill=self.line_color, width=2, smooth=True)
+            self.canvas.coords(self.line_id, *coords)

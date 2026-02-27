@@ -632,27 +632,46 @@ class PanaceaApp(ctk.CTk):
         if self.dash_disk_perc.cget("text") != new_disk_perc:
             self.dash_disk_perc.configure(text=new_disk_perc)
 
+    def log_tools_msg(self, msg):
+        self.after(0, lambda: self._log_tools_msg_safe(msg))
+
+    def _log_tools_msg_safe(self, msg):
+        self.tools_log.configure(state="normal")
+        self.tools_log.insert(tk.END, msg + "\n")
+        self.tools_log.see(tk.END)
+        self.tools_log.configure(state="disabled")
+
     def log_msg(self, msg):
+        self.after(0, lambda: self._log_msg_safe(msg))
+
+    def _log_msg_safe(self, msg):
         self.clean_log.configure(state="normal")
         self.clean_log.insert(tk.END, msg + "\n")
         self.clean_log.see(tk.END)
         self.clean_log.configure(state="disabled")
 
     def log_disk_msg(self, msg):
+        self.after(0, lambda: self._log_disk_safe(msg))
+
+    def _log_disk_safe(self, msg):
         self.disk_log.configure(state="normal")
         self.disk_log.insert(tk.END, msg + "\n")
         self.disk_log.see(tk.END)
         self.disk_log.configure(state="disabled")
 
     def refresh_drives(self):
-        drives = self.disk_opt.get_drive_info()
-        drive_values = [f"{d['letter']}" for d in drives]
-        if drive_values:
-            self.drive_menu.configure(values=drive_values)
-            self.selected_drive.set(drive_values[0])
-        else:
-            self.drive_menu.configure(values=["No drives"])
-            self.selected_drive.set("No drives")
+        def task():
+            drives = self.disk_opt.get_drive_info()
+            drive_values = [f"{d['letter']}" for d in drives]
+            if drive_values:
+                self.after(0, lambda: self._update_drive_menu(drive_values))
+            else:
+                self.after(0, lambda: self._update_drive_menu(["No drives"]))
+        threading.Thread(target=task, daemon=True).start()
+
+    def _update_drive_menu(self, values):
+        self.drive_menu.configure(values=values)
+        self.selected_drive.set(values[0])
 
     def run_clean_temp(self):
         def task():
@@ -713,11 +732,14 @@ class PanaceaApp(ctk.CTk):
     
     def run_battery_report(self):
         import subprocess, os
-        try:
-            path = os.path.join(os.environ['USERPROFILE'], 'battery_report.html')
-            subprocess.run(f'powercfg /batteryreport /output "{path}"', shell=True, check=True)
-            os.startfile(path)
-        except Exception as e: messagebox.showerror("Error", str(e))
+        def task():
+            try:
+                path = os.path.join(os.environ['USERPROFILE'], 'battery_report.html')
+                subprocess.run(f'powercfg /batteryreport /output "{path}"', shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                os.startfile(path)
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error", str(e)))
+        threading.Thread(target=task, daemon=True).start()
 
     def run_create_restore(self):
         if messagebox.askyesno("Create Restore Point", "Create a Windows System Restore Point?\n(Requires Admin privileges)\nThis may take a minute."):
@@ -729,32 +751,52 @@ class PanaceaApp(ctk.CTk):
 
     def run_windows_update(self):
         # Open Windows Update Settings and try to trigger scan (hidden CMD)
-        try:
-            import os
-            os.system("start ms-settings:windowsupdate")
-            # Use CREATE_NO_WINDOW to hide CMD flash
-            subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
-                             creationflags=subprocess.CREATE_NO_WINDOW)
-            # Hide buttons, show status and refresh after delay
-            self.btn_update_row.pack_forget()
-            self.lbl_update_status.configure(text="Updating... please wait", text_color="gray")
-            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
-            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to launch updater: {e}")
+        import time
+        def task():
+            try:
+                import os
+                # Launch settings on main thread for UI responsiveness
+                self.after(0, lambda: os.system("start ms-settings:windowsupdate"))
+                # Use CREATE_NO_WINDOW to hide CMD flash
+                subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                # Update UI elements safely
+                self.after(0, self._set_updating_status)
+                
+                # Refresh update status after delay
+                time.sleep(30)
+                threading.Thread(target=self._check_updates_thread, daemon=True).start()
+            except Exception as e:
+                self.after(0, lambda msg=str(e): messagebox.showerror("Error", f"Failed to launch updater: {msg}"))
+        
+        threading.Thread(target=task, daemon=True).start()
+
+    def _set_updating_status(self):
+        self.btn_update_row.pack_forget()
+        self.lbl_update_status.configure(text="Updating... please wait", text_color="gray")
+        self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
 
     def run_view_optional_updates(self):
         # Open Windows Update optional updates page
-        try:
-            import os
-            os.system("start ms-settings:windowsupdate-optionalupdates")
-            # Refresh update status after a delay
-            self.btn_update_row.pack_forget()
-            self.lbl_update_status.configure(text="Looking for updates...", text_color="gray")
-            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
-            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open settings: {e}")
+        import time
+        def task():
+            try:
+                import os
+                self.after(0, lambda: os.system("start ms-settings:windowsupdate-optionalupdates"))
+                # Refresh update status after a delay
+                self.after(0, self._set_looking_status)
+                time.sleep(30)
+                threading.Thread(target=self._check_updates_thread, daemon=True).start()
+            except Exception as e:
+                self.after(0, lambda msg=str(e): messagebox.showerror("Error", f"Failed to open settings: {msg}"))
+        
+        threading.Thread(target=task, daemon=True).start()
+
+    def _set_looking_status(self):
+        self.btn_update_row.pack_forget()
+        self.lbl_update_status.configure(text="Looking for updates...", text_color="gray")
+        self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
 
     def _setup_resurrect_frame(self):
         self.frame_resurrect.grid_columnconfigure(0, weight=1)
@@ -808,7 +850,9 @@ class PanaceaApp(ctk.CTk):
         self.god_log.tag_config("head", foreground="#00BFFF") # Blue
 
     def log_god_msg(self, msg, level="info"):
-        import re
+        self.after(0, lambda: self._log_god_safe(msg, level))
+
+    def _log_god_safe(self, msg, level):
         self.god_log.configure(state="normal")
         self.god_log.insert(tk.END, f"{msg}\n", level)
         self.god_log.see(tk.END)
@@ -843,8 +887,8 @@ class PanaceaApp(ctk.CTk):
             current_step = 0
             
             def update_progress(step_i, status_text):
-                self.progress_bar.set(step_i / steps)
-                self.lbl_status.configure(text=status_text)
+                self.after(0, lambda: self.progress_bar.set(step_i / steps))
+                self.after(0, lambda: self.lbl_status.configure(text=status_text))
             
             try:
                 # PHASE 1: SAFETY (Auto-Enable Restore)

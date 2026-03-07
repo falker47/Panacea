@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''modules/theme.py'', doraise=True\\); py_compile.compile\\(''main.py'', doraise=True\\); py_compile.compile\\(''panacea_ui.py'', doraise=True\\); print\\(''All files compile OK''\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''modules/theme.py'', doraise=True\\); py_compile.compile\\(''main.py'', doraise=True\\); py_compile.compile\\(''panacea_ui.py'', doraise=True\\); print\\(''All files compile OK''\\)\")",
+      "Bash(/c/Users/Falker/AppData/Local/Programs/Python/Python*/python.exe)"
+    ]
+  }
+}

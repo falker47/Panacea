@@ -1,9 +1,15 @@
+import os
+import subprocess
+import time
 import tkinter as tk
 from tkinter import messagebox
-import customtkinter as ctk
 import threading
 import webbrowser
 from datetime import datetime
+
+import customtkinter as ctk
+from PIL import Image
+
 from modules.cleanup import CleanupManager
 from modules.disk import DiskOptimizer
 from modules.commands import CommandRunner
@@ -11,12 +17,13 @@ from modules.logger import Logger
 from modules.system_monitor import SystemMonitor
 from modules.restore import RestoreManager
 from modules.performance import PerformanceManager
-from modules.utils import resource_path
+from modules.utils import resource_path, NO_WINDOW
 from modules.theme import (
     APP_VERSION, APP_NAME, Colors, Fonts, Spacing, Dimensions
 )
-from PIL import Image
-import subprocess
+
+# Dashboard refresh interval (ms)
+_DASHBOARD_REFRESH_MS = 3000
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -902,7 +909,7 @@ class PanaceaApp(ctk.CTk):
                 t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug))
         except Exception:
             pass
-        self.after(3000, self.update_dashboard)
+        self.after(_DASHBOARD_REFRESH_MS, self.update_dashboard)
 
     def _check_updates_thread(self):
         try:
@@ -1095,14 +1102,12 @@ class PanaceaApp(ctk.CTk):
             self.show_toast(str(e), "error")
 
     def run_battery_report(self):
-        import os
-
         def task():
             try:
                 path = os.path.join(os.environ['USERPROFILE'], 'battery_report.html')
                 subprocess.run(f'powercfg /batteryreport /output "{path}"',
                                shell=True, check=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
+                               creationflags=NO_WINDOW)
                 os.startfile(path)
                 self.show_toast("Battery report generated.", "success")
             except Exception as e:
@@ -1119,13 +1124,11 @@ class PanaceaApp(ctk.CTk):
             threading.Thread(target=task, daemon=True).start()
 
     def run_windows_update(self):
-        import time, os
-
         def task():
             try:
                 self.after(0, lambda: os.system("start ms-settings:windowsupdate"))
                 subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True,
-                                 creationflags=subprocess.CREATE_NO_WINDOW)
+                                 creationflags=NO_WINDOW)
                 self.after(0, self._set_updating_status)
                 time.sleep(30)
                 threading.Thread(target=self._check_updates_thread, daemon=True).start()
@@ -1140,8 +1143,6 @@ class PanaceaApp(ctk.CTk):
         self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
 
     def run_view_optional_updates(self):
-        import time, os
-
         def task():
             try:
                 self.after(0, lambda: os.system("start ms-settings:windowsupdate-optionalupdates"))

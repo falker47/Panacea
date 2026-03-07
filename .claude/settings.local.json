@@ -3,7 +3,18 @@
     "allow": [
       "Bash(python -c \"import py_compile; py_compile.compile\\(''modules/theme.py'', doraise=True\\); py_compile.compile\\(''main.py'', doraise=True\\); py_compile.compile\\(''panacea_ui.py'', doraise=True\\); print\\(''All files compile OK''\\)\")",
       "Bash(python3 -c \"import py_compile; py_compile.compile\\(''modules/theme.py'', doraise=True\\); py_compile.compile\\(''main.py'', doraise=True\\); py_compile.compile\\(''panacea_ui.py'', doraise=True\\); print\\(''All files compile OK''\\)\")",
-      "Bash(/c/Users/Falker/AppData/Local/Programs/Python/Python*/python.exe)"
+      "Bash(/c/Users/Falker/AppData/Local/Programs/Python/Python*/python.exe)",
+      "Bash(python -c \":*)",
+      "Bash(where python3)",
+      "Bash(where python)",
+      "Bash(where py)",
+      "Bash(py -c \":*)",
+      "Bash(del \"\\\\?\\\\C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea\\\\nul\")",
+      "Bash(cmd /c \"del \\\\?\\\\C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea\\\\nul\")",
+      "Bash(cmd /c \"cd /d C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea && del /f /q \\\\?\\\\C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea\\\\nul\")",
+      "Bash(py -c \"import os; os.remove\\(''\\\\\\\\?\\\\C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea\\\\nul''\\); print\\(''Deleted!''\\)\")",
+      "Bash(py -c \"import os; os.remove\\(r''\\\\?\\\\C:\\\\Users\\\\Falker\\\\Desktop\\\\Code\\\\Panacea\\\\nul''\\); print\\(''Deleted!''\\)\")",
+      "Bash(py _delete_nul.py)"
     ]
   }
 }

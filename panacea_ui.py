@@ -669,31 +669,38 @@ class PanaceaApp(ctk.CTk):
 
                 # Create a VBScript updater that runs completely hidden (no window)
                 # VBScript is available on all Windows systems, no Python needed
+                exe_dir = os.path.dirname(current_exe)
+                exe_name = os.path.basename(current_exe)
+                tmp_name = os.path.basename(temp_path)
                 vbs_path = current_exe + ".updater.vbs"
                 bat_path = current_exe + ".updater.bat"
+                vbs_name = os.path.basename(vbs_path)
 
-                # Batch script does the actual work
+                # Batch script does the actual work using relative names
                 with open(bat_path, "w") as bat:
                     bat.write('@echo off\n')
-                    # Retry loop: wait for the exe to be released
+                    bat.write(f'cd /d "{exe_dir}"\n')
                     bat.write('setlocal\n')
                     bat.write('set RETRIES=0\n')
                     bat.write(':WAIT_LOOP\n')
-                    bat.write(f'ren "{current_exe}" Panacea.exe.old >NUL 2>&1\n')
+                    bat.write(f'ren "{exe_name}" "{exe_name}.old" >NUL 2>&1\n')
                     bat.write('if %errorlevel%==0 goto :DO_UPDATE\n')
                     bat.write('set /a RETRIES+=1\n')
                     bat.write('if %RETRIES% GEQ 20 goto :FAIL\n')
                     bat.write('ping -n 2 127.0.0.1 >NUL\n')
                     bat.write('goto :WAIT_LOOP\n')
                     bat.write(':DO_UPDATE\n')
-                    bat.write(f'move /Y "{temp_path}" "{current_exe}" >NUL 2>&1\n')
-                    bat.write(f'del "{current_exe}.old" >NUL 2>&1\n')
-                    bat.write(f'start "" "{current_exe}"\n')
-                    bat.write(f'del "{vbs_path}" >NUL 2>&1\n')
+                    bat.write(f'ren "{tmp_name}" "{exe_name}" >NUL 2>&1\n')
+                    bat.write(f'del "{exe_name}.old" >NUL 2>&1\n')
+                    # Relaunch with admin elevation via PowerShell (silent)
+                    bat.write(f'powershell -NoProfile -Command "Start-Process \'{exe_dir}\\{exe_name}\' -Verb RunAs" >NUL 2>&1\n')
+                    bat.write(f'del "{vbs_name}" >NUL 2>&1\n')
                     bat.write('del "%~f0" >NUL 2>&1\n')
                     bat.write('exit\n')
                     bat.write(':FAIL\n')
-                    bat.write(f'del "{vbs_path}" >NUL 2>&1\n')
+                    # Rollback on failure
+                    bat.write(f'ren "{exe_name}.old" "{exe_name}" >NUL 2>&1\n')
+                    bat.write(f'del "{vbs_name}" >NUL 2>&1\n')
                     bat.write('del "%~f0" >NUL 2>&1\n')
 
                 # VBScript wrapper runs the batch completely hidden (0 = vbHide)

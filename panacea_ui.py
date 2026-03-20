@@ -146,17 +146,17 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Panacea", font=ctk.CTkFont(family="Google Sans", size=30, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 20))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Panacea", font=ctk.CTkFont(family="Segoe UI", size=28, weight="bold"))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 15))
+
+        btn_pady = 5
         
-        btn_pady = 8
-        
-        # Color Palette (Base, Hover)
+        # Color Palette — unified blue/teal theme (Base, Hover)
         col_dash = ("#1F6AA5", "#144870")
-        self.col_clean_tuple = ("#C2185B", "#880E4F")  # Dark Pink 
-        self.col_disk_tuple = ("#2da16f", "#1f7a52")
-        self.col_tools = ("#d65729", "#9e3f1d")
-        self.col_apps = ("#7b2cbf", "#521c85")
+        self.col_clean_tuple = ("#1565C0", "#0D47A1")
+        self.col_disk_tuple = ("#00897B", "#00695C")
+        self.col_tools = ("#2E7D32", "#1B5E20")
+        self.col_apps = ("#455A64", "#37474F")
         
         self.sidebar_button_dashboard = ctk.CTkButton(self.sidebar_frame, text="Dashboard", height=35, anchor="w", 
                                                       fg_color=col_dash[0], hover_color=col_dash[1],
@@ -250,12 +250,13 @@ class PanaceaApp(ctk.CTk):
 
     def _setup_dashboard_frame(self):
         self.frame_dashboard.grid_columnconfigure((0, 1), weight=1)
+        self.frame_dashboard.grid_rowconfigure((1, 2), weight=1)
         
-        lbl = ctk.CTkLabel(self.frame_dashboard, text="Live System Monitor", font=ctk.CTkFont(size=28, weight="bold"))
+        lbl = ctk.CTkLabel(self.frame_dashboard, text="Live System Monitor", font=ctk.CTkFont(size=24, weight="bold"))
         lbl.grid(row=0, column=0, columnspan=2, padx=20, pady=(20, 20), sticky="w")
         
         # --- Card 1: System Specs ---
-        self.card_sys = ctk.CTkFrame(self.frame_dashboard)
+        self.card_sys = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_sys.grid(row=1, column=0, padx=(20, 10), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
@@ -280,11 +281,15 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(self.card_sys, text="(Restart is recommended once a week)", font=ctk.CTkFont(size=10), text_color="gray").pack(pady=(0, 5))
 
         # --- Card 2: Disk Usage ---
-        self.card_disk = ctk.CTkFrame(self.frame_dashboard)
+        self.card_disk = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_disk.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, width=200, height=15)
-        self.dash_disk_bar.pack(pady=10)
+        disk_bar_frame = ctk.CTkFrame(self.card_disk, fg_color="transparent")
+        disk_bar_frame.pack(pady=10, fill="x", padx=30)
+        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=18)
+        self.dash_disk_bar.pack(fill="x")
+        self.dash_disk_bar_label = ctk.CTkLabel(disk_bar_frame, text="0%", font=ctk.CTkFont(size=10, weight="bold"), text_color="white")
+        self.dash_disk_bar_label.place(relx=0.5, rely=0.5, anchor="center")
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
         self.dash_disk_val.pack()
         self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
@@ -293,22 +298,22 @@ class PanaceaApp(ctk.CTk):
         self.dash_disk_perc.pack(pady=5)
 
         # --- Card 3: CPU Graph ---
-        self.card_cpu = ctk.CTkFrame(self.frame_dashboard)
+        self.card_cpu = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_cpu.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=80, line_color="#4CAF50")
-        self.cpu_graph.pack(pady=5)
+        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=100, line_color="#4CAF50")
+        self.cpu_graph.pack(pady=5, fill="x", padx=15)
         self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text="CPU: ...", text_color="gray", wraplength=280)
         self.dash_cpu_name.pack()
         self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
         self.dash_cpu_val.pack(pady=5)
 
         # --- Card 4: RAM Graph ---
-        self.card_ram = ctk.CTkFrame(self.frame_dashboard)
+        self.card_ram = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_ram.grid(row=2, column=1, padx=(10, 20), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_ram, text="Memory (RAM) History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.ram_graph = LiveGraph(self.card_ram, width=300, height=80, line_color="#FFC107")
-        self.ram_graph.pack(pady=5)
+        self.ram_graph = LiveGraph(self.card_ram, width=300, height=100, line_color="#FFC107")
+        self.ram_graph.pack(pady=5, fill="x", padx=15)
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
         self.dash_ram_val.pack()
         self.dash_ram_info = ctk.CTkLabel(self.card_ram, text="", text_color="gray", font=ctk.CTkFont(size=11))
@@ -323,9 +328,11 @@ class PanaceaApp(ctk.CTk):
         btn_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         
         c_base, c_hover = self.col_clean_tuple
-        
-        ctk.CTkButton(btn_frame, text="Clean Temporary Files", fg_color=c_base, hover_color=c_hover, command=self.run_clean_temp).pack(fill="x", padx=20, pady=10)
-        ctk.CTkButton(btn_frame, text="Empty Recycle Bin", fg_color=c_base, hover_color=c_hover, command=self.run_empty_recycle).pack(fill="x", padx=20, pady=10)
+
+        self.btn_clean_temp = ctk.CTkButton(btn_frame, text="Clean Temporary Files", fg_color=c_base, hover_color=c_hover, command=self.run_clean_temp)
+        self.btn_clean_temp.pack(fill="x", padx=20, pady=10)
+        self.btn_empty_bin = ctk.CTkButton(btn_frame, text="Empty Recycle Bin", fg_color=c_base, hover_color=c_hover, command=self.run_empty_recycle)
+        self.btn_empty_bin.pack(fill="x", padx=20, pady=10)
         ctk.CTkButton(btn_frame, text="Open Windows Disk Cleanup", fg_color=c_base, hover_color=c_hover, command=self.run_cleanmgr).pack(fill="x", padx=20, pady=10)
         ctk.CTkLabel(btn_frame, text="Expert Warning: Takes 10+ minutes.", text_color="orange").pack(anchor="w", padx=20, pady=(10,0))
         ctk.CTkButton(btn_frame, text="Run Deep Clean (WinSxS)", fg_color="darkred", hover_color="#800000", command=self.run_deep_clean).pack(fill="x", padx=20, pady=10)
@@ -374,22 +381,22 @@ class PanaceaApp(ctk.CTk):
         
         t_base, t_hover = self.col_tools
         
-        grp1 = ctk.CTkFrame(container)
-        grp1.pack(fill="x", pady=10)
-        ctk.CTkLabel(grp1, text="System Integrity", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
+        grp1 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
+        grp1.pack(fill="x", pady=8)
+        ctk.CTkLabel(grp1, text="System Integrity", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
         self._add_tool_btn(grp1, "Run SFC Scan", "Scans system files.", "sfc /scannow", "SFC", t_base, t_hover)
         self._add_tool_btn(grp1, "Check Health (DISM)", "Checks system image.", "DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", t_base, t_hover)
         self._add_tool_btn(grp1, "Restore Health (DISM)", "Repairs system image.", "DISM /Online /Cleanup-Image /RestoreHealth", "DISM Restore", t_base, t_hover)
-        
-        grp2 = ctk.CTkFrame(container)
-        grp2.pack(fill="x", pady=10)
-        ctk.CTkLabel(grp2, text="Network Tools", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
+
+        grp2 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
+        grp2.pack(fill="x", pady=8)
+        ctk.CTkLabel(grp2, text="Network Tools", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
         self._add_tool_btn(grp2, "Flush DNS", "Clears DNS cache.", "ipconfig /flushdns", "DNS", t_base, t_hover)
         self._add_tool_btn(grp2, "Reset Winsock", "Resets network adapter.", "netsh winsock reset", "Winsock", t_base, t_hover)
-        
-        grp3 = ctk.CTkFrame(container)
-        grp3.pack(fill="x", pady=10)
-        ctk.CTkLabel(grp3, text="Power & Backup", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=5)
+
+        grp3 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
+        grp3.pack(fill="x", pady=8)
+        ctk.CTkLabel(grp3, text="Power & Backup", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
         ctk.CTkButton(grp3, text="Generate Battery Report", fg_color=t_base, hover_color=t_hover, command=self.run_battery_report).pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(grp3, text="Create Restore Point (Now)", fg_color=t_base, hover_color=t_hover, command=self.run_create_restore).pack(fill="x", padx=10, pady=5)
 
@@ -427,7 +434,7 @@ class PanaceaApp(ctk.CTk):
     def _setup_turbo_frame(self):
         self.frame_turbo.grid_columnconfigure(0, weight=1)
         
-        ctk.CTkLabel(self.frame_turbo, text="Turbo Mode", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
+        ctk.CTkLabel(self.frame_turbo, text="Turbo Mode", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
         ctk.CTkLabel(self.frame_turbo, text="Toggle performance settings. Changes apply immediately.", font=ctk.CTkFont(size=12), text_color="gray").grid(row=1, column=0, padx=20, pady=(0, 10), sticky="w")
         
         container = ctk.CTkScrollableFrame(self.frame_turbo)
@@ -479,8 +486,8 @@ class PanaceaApp(ctk.CTk):
         threading.Thread(target=self._load_turbo_states, daemon=True).start()
 
     def _create_turbo_toggle(self, parent, key, label, desc, get_fn, on_fn, off_fn):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", pady=5)
+        frame = ctk.CTkFrame(parent, border_width=1, border_color="#2a2a2a")
+        frame.pack(fill="x", pady=4)
         
         left = ctk.CTkFrame(frame, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True, padx=10, pady=10)
@@ -792,13 +799,11 @@ class PanaceaApp(ctk.CTk):
         target_prog = p_disk / 100
         if abs(current_prog - target_prog) > 0.01:
             self.dash_disk_bar.set(target_prog)
-            
+            self.dash_disk_bar_label.configure(text=f"{p_disk}%")
+
         new_color = get_color(p_disk)
-        # ctk widgets don't easily expose current color, so we just set it if value changed significantly or periodically
-        # To avoid flicker, we can just set it. configure might be cheap if value is same, but let's be safe
         try:
-             # Access internal color if possible or just set it
-             self.dash_disk_bar.configure(progress_color=new_color)
+            self.dash_disk_bar.configure(progress_color=new_color)
         except Exception:
             pass
 
@@ -827,6 +832,7 @@ class PanaceaApp(ctk.CTk):
             self.selected_drive.set("No drives")
 
     def run_clean_temp(self):
+        self.btn_clean_temp.configure(state="disabled", text="Cleaning...")
         def task():
             self.log_msg("Starting cleanup...")
             count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=self.log_msg)
@@ -836,15 +842,18 @@ class PanaceaApp(ctk.CTk):
             else:
                 self.log_msg(f"Finished. Deleted {count} files. Freed {freed / (1024*1024):.2f} MB.")
                 self.after(0, lambda c=count, f=freed: self._show_toast("Cleanup Complete", f"Deleted {c} files. Freed {f / (1024*1024):.2f} MB.", "success"))
+            self.after(0, lambda: self.btn_clean_temp.configure(state="normal", text="Clean Temporary Files"))
         threading.Thread(target=task, daemon=True).start()
 
     def run_empty_recycle(self):
+        self.btn_empty_bin.configure(state="disabled", text="Emptying...")
         def task():
             self.log_msg("Emptying Recycle Bin...")
             success, msg = self.cleanup_mgr.empty_recycle_bin()
             self.log_msg(msg)
             if success: self.after(0, lambda m=msg: self._show_toast("Success", m, "success"))
             else: self.after(0, lambda m=msg: self._show_toast("Error", m, "error"))
+            self.after(0, lambda: self.btn_empty_bin.configure(state="normal", text="Empty Recycle Bin"))
         threading.Thread(target=task, daemon=True).start()
 
     def run_cleanmgr(self):
@@ -934,7 +943,7 @@ class PanaceaApp(ctk.CTk):
         hero = ctk.CTkFrame(self.frame_resurrect, fg_color="transparent")
         hero.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
         
-        title = ctk.CTkLabel(hero, text="SYSTEM RESURRECTION", font=ctk.CTkFont(size=32, weight="bold"), text_color="#FFD700")
+        title = ctk.CTkLabel(hero, text="SYSTEM RESURRECTION", font=ctk.CTkFont(size=26, weight="bold"), text_color="#FFD700")
         title.pack(anchor="center")
         subtitle = ctk.CTkLabel(hero, text="Advanced Safety Protocol & Deep Optimization", font=ctk.CTkFont(size=14), text_color="gray")
         subtitle.pack(anchor="center")
@@ -1086,35 +1095,59 @@ class PanaceaApp(ctk.CTk):
 
         threading.Thread(target=sequence, daemon=True).start()
 class LiveGraph(ctk.CTkFrame):
-    def __init__(self, master, width=200, height=80, line_color="#00EE00", **kwargs):
+    def __init__(self, master, width=200, height=100, line_color="#00EE00", **kwargs):
         super().__init__(master, **kwargs)
-        self.canvas = ctk.CTkCanvas(self, width=width, height=height, bg="#1a1a1a", highlightthickness=0)
+        self.bg_color = "#111111"
+        self.grid_color = "#222222"
+        self.canvas = ctk.CTkCanvas(self, width=width, height=height, bg=self.bg_color, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.width = width
         self.height = height
         self.line_color = line_color
-        self.points = [0] * (width // 5) # one point every 5 pixels
-        
-        # Create persistent line object
-        self.line_id = self.canvas.create_line(0,0,0,0, fill=self.line_color, width=2, smooth=True)
-        
+        self.max_points = width // 5
+        self.points = [0] * self.max_points
+
+        # Draw grid lines and labels
+        self._draw_grid()
+
+        # Area fill polygon (under curve)
+        self.fill_id = self.canvas.create_polygon(0, 0, fill=self._fade_color(line_color), outline="", stipple="gray25")
+        # Main line
+        self.line_id = self.canvas.create_line(0, 0, 0, 0, fill=self.line_color, width=2, smooth=True)
+
+    def _fade_color(self, hex_color):
+        """Return a darker version of the color for area fill."""
+        r = int(hex_color[1:3], 16) // 3
+        g = int(hex_color[3:5], 16) // 3
+        b = int(hex_color[5:7], 16) // 3
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _draw_grid(self):
+        """Draw horizontal grid lines at 25%, 50%, 75%."""
+        for pct in (25, 50, 75):
+            y = self.height - (pct / 100 * self.height)
+            self.canvas.create_line(0, y, self.width, y, fill=self.grid_color, dash=(2, 4))
+            self.canvas.create_text(self.width - 2, y - 1, text=f"{pct}%", anchor="se",
+                                    fill="#444444", font=("Consolas", 7))
+
     def add_value(self, value):
-        # value 0-100
         self.points.pop(0)
         self.points.append(value)
         self.draw()
-        
+
     def draw(self):
         w = self.width
         h = self.height
         step = w / (len(self.points) - 1)
-        
-        coords = []
+
+        line_coords = []
         for i, val in enumerate(self.points):
             x = i * step
-            # val is % so 100 is top (0 y), 0 is bottom (h y)
             y = h - (val / 100 * h)
-            coords.extend([x, y])
-            
-        if len(coords) >= 4:
-            self.canvas.coords(self.line_id, *coords)
+            line_coords.extend([x, y])
+
+        if len(line_coords) >= 4:
+            self.canvas.coords(self.line_id, *line_coords)
+            # Area fill: line points + bottom-right + bottom-left
+            fill_coords = list(line_coords) + [w, h, 0, h]
+            self.canvas.coords(self.fill_id, *fill_coords)

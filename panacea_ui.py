@@ -37,11 +37,13 @@ class PanaceaApp(ctk.CTk):
         
         self.title(f"Panacea System Optimizer v{VERSION}")
         
-        # Center window on screen
+        # Center window on screen (DPI-aware)
         window_width = 900
         window_height = 560
+        self.update_idletasks()
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
+        # Account for DPI scaling: tk reports scaled coords after update_idletasks
         x = (screen_width - window_width) // 2
         y = (screen_height - window_height) // 2
         self.geometry(f"{window_width}x{window_height}+{x}+{y}")

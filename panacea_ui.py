@@ -660,7 +660,7 @@ class PanaceaApp(ctk.CTk):
         close_btn.bind("<Button-1>", lambda e: banner.destroy())
 
     def _auto_update(self, exe_url, banner):
-        """Download new exe, replace current, and relaunch."""
+        """Download new exe, replace current, and relaunch — fully silent."""
         self._update_banner_lbl.configure(text="  Downloading update... 0%")
 
         def download_and_replace():
@@ -692,30 +692,52 @@ class PanaceaApp(ctk.CTk):
                                     self._update_banner_lbl.configure(
                                         text=f"  Downloading... {p}% ({m:.1f}/{t:.1f} MB)"))
 
-                # Create a batch script that waits for us to exit, replaces exe, and relaunches
-                bat_path = current_exe + ".update.bat"
-                with open(bat_path, "w") as bat:
-                    bat.write(f'@echo off\n')
-                    bat.write(f'echo Updating Panacea...\n')
-                    bat.write(f'timeout /t 2 /nobreak >NUL\n')
-                    bat.write(f'move /Y "{temp_path}" "{current_exe}"\n')
-                    bat.write(f'start "" "{current_exe}"\n')
-                    bat.write(f'del "%~f0"\n')
+                # Create a VBScript updater that runs completely hidden (no window)
+                # VBScript is available on all Windows systems, no Python needed
+                vbs_path = current_exe + ".updater.vbs"
+                bat_path = current_exe + ".updater.bat"
 
-                # Launch the updater script and close the app
-                self.after(0, lambda: self._launch_updater_and_exit(bat_path))
+                # Batch script does the actual work
+                with open(bat_path, "w") as bat:
+                    bat.write('@echo off\n')
+                    # Retry loop: wait for the exe to be released
+                    bat.write('setlocal\n')
+                    bat.write('set RETRIES=0\n')
+                    bat.write(':WAIT_LOOP\n')
+                    bat.write(f'ren "{current_exe}" Panacea.exe.old >NUL 2>&1\n')
+                    bat.write('if %errorlevel%==0 goto :DO_UPDATE\n')
+                    bat.write('set /a RETRIES+=1\n')
+                    bat.write('if %RETRIES% GEQ 20 goto :FAIL\n')
+                    bat.write('ping -n 2 127.0.0.1 >NUL\n')
+                    bat.write('goto :WAIT_LOOP\n')
+                    bat.write(':DO_UPDATE\n')
+                    bat.write(f'move /Y "{temp_path}" "{current_exe}" >NUL 2>&1\n')
+                    bat.write(f'del "{current_exe}.old" >NUL 2>&1\n')
+                    bat.write(f'start "" "{current_exe}"\n')
+                    bat.write(f'del "{vbs_path}" >NUL 2>&1\n')
+                    bat.write('del "%~f0" >NUL 2>&1\n')
+                    bat.write('exit\n')
+                    bat.write(':FAIL\n')
+                    bat.write(f'del "{vbs_path}" >NUL 2>&1\n')
+                    bat.write('del "%~f0" >NUL 2>&1\n')
+
+                # VBScript wrapper runs the batch completely hidden (0 = vbHide)
+                with open(vbs_path, "w") as vbs:
+                    vbs.write(f'CreateObject("WScript.Shell").Run """{bat_path}""", 0, False\n')
+
+                self.after(0, lambda: self._launch_updater_and_exit(vbs_path))
 
             except Exception as e:
                 self.after(0, lambda: self._update_banner_lbl.configure(text=f"  Update failed: {e}"))
 
         threading.Thread(target=download_and_replace, daemon=True).start()
 
-    def _launch_updater_and_exit(self, bat_path):
-        """Launch the updater batch script and close the application."""
+    def _launch_updater_and_exit(self, vbs_path):
+        """Launch the silent VBScript updater and close the application."""
+        # wscript.exe runs .vbs natively on all Windows — completely silent
         subprocess.Popen(
-            f'cmd /c "{bat_path}"',
-            shell=True,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            ['wscript.exe', vbs_path],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
         )
         self.destroy()
         sys.exit(0)

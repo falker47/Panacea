@@ -1,3 +1,4 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
@@ -599,8 +600,13 @@ class PanaceaApp(ctk.CTk):
                 data = json.loads(resp.read().decode())
             remote_tag = data.get("tag_name", "").lstrip("v")
             if remote_tag and self._is_newer(remote_tag, VERSION):
-                html_url = data.get("html_url", f"https://github.com/{GITHUB_REPO}/releases")
-                self.after(0, lambda: self._show_update_banner(remote_tag, html_url))
+                # Find .exe asset download URL
+                exe_url = None
+                for asset in data.get("assets", []):
+                    if asset.get("name", "").lower().endswith(".exe"):
+                        exe_url = asset.get("browser_download_url")
+                        break
+                self.after(0, lambda: self._show_update_banner(remote_tag, exe_url))
         except Exception:
             pass
 
@@ -614,25 +620,82 @@ class PanaceaApp(ctk.CTk):
         except ValueError:
             return False
 
-    def _show_update_banner(self, new_ver, url):
+    def _show_update_banner(self, new_ver, exe_url):
         """Show a small banner at the top of the window for app updates."""
         banner = ctk.CTkFrame(self, fg_color="#1565C0", height=32, corner_radius=0)
         banner.grid(row=0, column=1, sticky="new", padx=0, pady=0)
         banner.lift()
 
-        lbl = ctk.CTkLabel(banner, text=f"  Panacea v{new_ver} available!",
+        self._update_banner_lbl = ctk.CTkLabel(banner, text=f"  Panacea v{new_ver} available!",
                            font=ctk.CTkFont(size=13), text_color="white")
-        lbl.pack(side="left", padx=(10, 5))
+        self._update_banner_lbl.pack(side="left", padx=(10, 5))
 
-        link = ctk.CTkLabel(banner, text="Download", font=ctk.CTkFont(size=13, underline=True),
-                            text_color="#BBDEFB", cursor="hand2")
-        link.pack(side="left", padx=5)
-        link.bind("<Button-1>", lambda e: webbrowser.open(url))
+        if exe_url:
+            link = ctk.CTkLabel(banner, text="Install Update", font=ctk.CTkFont(size=13, underline=True),
+                                text_color="#BBDEFB", cursor="hand2")
+            link.pack(side="left", padx=5)
+            link.bind("<Button-1>", lambda e, u=exe_url: self._auto_update(u, banner))
+        else:
+            link = ctk.CTkLabel(banner, text="View Release", font=ctk.CTkFont(size=13, underline=True),
+                                text_color="#BBDEFB", cursor="hand2")
+            link.pack(side="left", padx=5)
+            link.bind("<Button-1>", lambda e: webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases"))
 
         close_btn = ctk.CTkLabel(banner, text="✕", font=ctk.CTkFont(size=13),
                                  text_color="white", cursor="hand2", width=24)
         close_btn.pack(side="right", padx=(0, 8))
         close_btn.bind("<Button-1>", lambda e: banner.destroy())
+
+    def _auto_update(self, exe_url, banner):
+        """Download new exe, replace current, and relaunch."""
+        self._update_banner_lbl.configure(text="  Downloading update...")
+
+        def download_and_replace():
+            try:
+                current_exe = sys.executable
+                # If running from source (python.exe), fall back to browser download
+                if not current_exe.lower().endswith("panacea.exe"):
+                    self.after(0, lambda: webbrowser.open(exe_url))
+                    return
+
+                # Download to temp file next to current exe
+                temp_path = current_exe + ".update"
+                req = urllib.request.Request(exe_url, headers={"User-Agent": "Panacea"})
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    with open(temp_path, "wb") as f:
+                        while True:
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+
+                # Create a batch script that waits for us to exit, replaces exe, and relaunches
+                bat_path = current_exe + ".update.bat"
+                with open(bat_path, "w") as bat:
+                    bat.write(f'@echo off\n')
+                    bat.write(f'echo Updating Panacea...\n')
+                    bat.write(f'timeout /t 2 /nobreak >NUL\n')
+                    bat.write(f'move /Y "{temp_path}" "{current_exe}"\n')
+                    bat.write(f'start "" "{current_exe}"\n')
+                    bat.write(f'del "%~f0"\n')
+
+                # Launch the updater script and close the app
+                self.after(0, lambda: self._launch_updater_and_exit(bat_path))
+
+            except Exception as e:
+                self.after(0, lambda: self._update_banner_lbl.configure(text=f"  Update failed: {e}"))
+
+        threading.Thread(target=download_and_replace, daemon=True).start()
+
+    def _launch_updater_and_exit(self, bat_path):
+        """Launch the updater batch script and close the application."""
+        subprocess.Popen(
+            f'cmd /c "{bat_path}"',
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        self.destroy()
+        sys.exit(0)
 
     def _show_toast(self, title, message, msg_type="info"):
         """Show a compact toast notification instead of a tall messagebox."""

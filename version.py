@@ -1,2 +1,2 @@
-VERSION = "1.40"
+VERSION = "1.41"
 GITHUB_REPO = "falker47/panacea"

@@ -37,9 +37,10 @@ class PanaceaApp(ctk.CTk):
         
         self.title(f"Panacea System Optimizer v{VERSION}")
 
-        # Set initial size, then center after rendering
+        # Hide window until centered to avoid flash in wrong position
+        self.withdraw()
         self.geometry("900x560")
-        self.after(10, self._center_window)
+        self.after(100, self._center_and_show)
         
         # Set Icon at Runtime
         try:
@@ -89,6 +90,9 @@ class PanaceaApp(ctk.CTk):
 
         self.select_frame("Dashboard")
         self.update_dashboard()
+
+        # Clean up leftover .old exe from previous update
+        self._cleanup_old_exe()
 
         # Start update checks
         threading.Thread(target=self._check_updates_thread, daemon=True).start()
@@ -254,15 +258,8 @@ class PanaceaApp(ctk.CTk):
         self.card_disk = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_disk.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        disk_bar_frame = ctk.CTkFrame(self.card_disk, fg_color="transparent", height=24)
-        disk_bar_frame.pack(pady=10, fill="x", padx=30)
-        disk_bar_frame.pack_propagate(False)
-        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=24)
-        self.dash_disk_bar.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self.dash_disk_bar_label = ctk.CTkLabel(
-            disk_bar_frame, text="0%", font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="white", fg_color="transparent")
-        self.dash_disk_bar_label.place(relx=0.5, rely=0.5, anchor="center")
+        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=18)
+        self.dash_disk_bar.pack(pady=10, fill="x", padx=30)
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
         self.dash_disk_val.pack()
         self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
@@ -636,24 +633,26 @@ class PanaceaApp(ctk.CTk):
             link.bind("<Button-1>", lambda e: webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases"))
 
     def _auto_update(self, exe_url, banner):
-        """Download new exe, replace current, and relaunch — fully silent."""
-        self._update_banner_lbl.configure(text="  Downloading update... 0%")
+        """Download new exe, swap in-place, and relaunch — no external scripts."""
+        self._update_banner_lbl.configure(text="Downloading... 0%")
 
-        def download_and_replace():
+        def download_and_swap():
             try:
                 current_exe = sys.executable
-                # If running from source (python.exe), fall back to browser download
                 if not current_exe.lower().endswith("panacea.exe"):
                     self.after(0, lambda: webbrowser.open(exe_url))
                     return
 
-                # Download to temp file next to current exe
-                temp_path = current_exe + ".update"
+                exe_dir = os.path.dirname(current_exe)
+                new_exe = os.path.join(exe_dir, "Panacea.new.exe")
+                old_exe = os.path.join(exe_dir, "Panacea.old.exe")
+
+                # Download new exe
                 req = urllib.request.Request(exe_url, headers={"User-Agent": "Panacea"})
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     total = int(resp.headers.get("Content-Length", 0))
                     downloaded = 0
-                    with open(temp_path, "wb") as f:
+                    with open(new_exe, "wb") as f:
                         while True:
                             chunk = resp.read(65536)
                             if not chunk:
@@ -662,91 +661,90 @@ class PanaceaApp(ctk.CTk):
                             downloaded += len(chunk)
                             if total > 0:
                                 pct = int(downloaded * 100 / total)
-                                mb = downloaded / (1024 * 1024)
-                                total_mb = total / (1024 * 1024)
-                                self.after(0, lambda p=pct, m=mb, t=total_mb:
+                                self.after(0, lambda p=pct:
                                     self._update_banner_lbl.configure(
-                                        text=f"  Downloading... {p}% ({m:.1f}/{t:.1f} MB)"))
+                                        text=f"Downloading... {p}%"))
 
-                # Create a VBScript updater that runs completely hidden (no window)
-                # VBScript is available on all Windows systems, no Python needed
-                exe_dir = os.path.dirname(current_exe)
-                exe_name = os.path.basename(current_exe)
-                tmp_name = os.path.basename(temp_path)
-                vbs_path = current_exe + ".updater.vbs"
-                bat_path = current_exe + ".updater.bat"
-                vbs_name = os.path.basename(vbs_path)
+                self.after(0, lambda: self._update_banner_lbl.configure(text="Installing..."))
 
-                # Batch script does the actual work using relative names
-                with open(bat_path, "w") as bat:
-                    bat.write('@echo off\n')
-                    bat.write(f'cd /d "{exe_dir}"\n')
-                    bat.write('setlocal\n')
-                    bat.write('set RETRIES=0\n')
-                    bat.write(':WAIT_LOOP\n')
-                    bat.write(f'ren "{exe_name}" "{exe_name}.old" >NUL 2>&1\n')
-                    bat.write('if %errorlevel%==0 goto :DO_UPDATE\n')
-                    bat.write('set /a RETRIES+=1\n')
-                    bat.write('if %RETRIES% GEQ 20 goto :FAIL\n')
-                    bat.write('ping -n 2 127.0.0.1 >NUL\n')
-                    bat.write('goto :WAIT_LOOP\n')
-                    bat.write(':DO_UPDATE\n')
-                    bat.write(f'ren "{tmp_name}" "{exe_name}" >NUL 2>&1\n')
-                    bat.write(f'del "{exe_name}.old" >NUL 2>&1\n')
-                    # Relaunch with admin elevation via PowerShell (silent)
-                    bat.write(f'powershell -NoProfile -Command "Start-Process \'{exe_dir}\\{exe_name}\' -Verb RunAs" >NUL 2>&1\n')
-                    bat.write(f'del "{vbs_name}" >NUL 2>&1\n')
-                    bat.write('del "%~f0" >NUL 2>&1\n')
-                    bat.write('exit\n')
-                    bat.write(':FAIL\n')
-                    # Rollback on failure
-                    bat.write(f'ren "{exe_name}.old" "{exe_name}" >NUL 2>&1\n')
-                    bat.write(f'del "{vbs_name}" >NUL 2>&1\n')
-                    bat.write('del "%~f0" >NUL 2>&1\n')
+                # Windows allows renaming a running exe
+                # 1) Remove leftover .old from previous update
+                if os.path.exists(old_exe):
+                    try: os.remove(old_exe)
+                    except OSError: pass
 
-                # VBScript wrapper runs the batch completely hidden (0 = vbHide)
-                with open(vbs_path, "w") as vbs:
-                    vbs.write(f'CreateObject("WScript.Shell").Run """{bat_path}""", 0, False\n')
+                # 2) Rename running exe → .old
+                os.rename(current_exe, old_exe)
 
-                self.after(0, lambda: self._launch_updater_and_exit(vbs_path))
+                # 3) Rename new exe → Panacea.exe
+                os.rename(new_exe, current_exe)
+
+                # 4) Relaunch with admin and exit
+                self.after(0, lambda: self._relaunch_and_exit(current_exe))
 
             except Exception as e:
-                self.after(0, lambda: self._update_banner_lbl.configure(text=f"  Update failed: {e}"))
+                self.after(0, lambda: self._update_banner_lbl.configure(
+                    text=f"Update failed: {e}"))
+                # Try to rollback
+                try:
+                    if not os.path.exists(current_exe) and os.path.exists(old_exe):
+                        os.rename(old_exe, current_exe)
+                except OSError:
+                    pass
 
-        threading.Thread(target=download_and_replace, daemon=True).start()
+        threading.Thread(target=download_and_swap, daemon=True).start()
 
-    def _launch_updater_and_exit(self, vbs_path):
-        """Launch the silent VBScript updater and close the application."""
-        # wscript.exe runs .vbs natively on all Windows — completely silent
-        subprocess.Popen(
-            ['wscript.exe', vbs_path],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-        )
+    def _relaunch_and_exit(self, exe_path):
+        """Relaunch the exe with admin elevation and exit."""
+        import ctypes
+        ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", exe_path, "", os.path.dirname(exe_path), 1)
         self.destroy()
         sys.exit(0)
 
-    def _center_window(self):
-        """Center the window on screen, accounting for DPI scaling."""
-        self.update_idletasks()
-        w = self.winfo_width()
-        h = self.winfo_height()
-        if w <= 1 or h <= 1:
-            self.after(50, self._center_window)
-            return
-        # Get DPI scaling factor (e.g. 1.25 at 125%, 1.5 at 150%)
+    def _cleanup_old_exe(self):
+        """Remove leftover files from previous auto-update."""
         try:
-            scale = self._get_window_scaling()
+            exe_dir = os.path.dirname(sys.executable)
+            for suffix in ('.old.exe', '.update', '.updater.vbs', '.updater.bat', '.update.bat'):
+                path = os.path.join(exe_dir, f"Panacea{suffix}")
+                if os.path.exists(path):
+                    os.remove(path)
+        except OSError:
+            pass
+
+    def _center_and_show(self):
+        """Center the window on screen using Win32 API directly."""
+        self.update_idletasks()
+        try:
+            import ctypes
+            import ctypes.wintypes
+            # Get the top-level HWND (walk up from inner tkinter frame)
+            inner = self.winfo_id()
+            GA_ROOT = 2
+            hwnd = ctypes.windll.user32.GetAncestor(inner, GA_ROOT)
+            if not hwnd:
+                hwnd = inner
+            # Get actual window size from Windows
+            rect = ctypes.wintypes.RECT()
+            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            w = rect.right - rect.left
+            h = rect.bottom - rect.top
+            if w <= 1 or h <= 1:
+                self.after(50, self._center_and_show)
+                return
+            # Get screen work area (excludes taskbar)
+            sw = ctypes.windll.user32.GetSystemMetrics(0)
+            sh = ctypes.windll.user32.GetSystemMetrics(1)
+            x = (sw - w) // 2
+            y = (sh - h) // 2
+            # Position window directly via Win32 - bypasses ALL tkinter/CTk DPI scaling
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
         except Exception:
-            scale = 1.0
-        # winfo_screen* returns physical pixels; geometry expects logical coords
-        sw = self.winfo_screenwidth() / scale
-        sh = self.winfo_screenheight() / scale
-        # w, h from winfo are already in physical pixels, convert to logical
-        lw = w / scale
-        lh = h / scale
-        x = int((sw - lw) / 2)
-        y = int((sh - lh) / 2)
-        self.geometry(f"+{x}+{y}")
+            pass
+        self.deiconify()
 
     def _on_close(self):
         """Graceful shutdown: signal threads to stop, then destroy."""
@@ -828,7 +826,6 @@ class PanaceaApp(ctk.CTk):
         target_prog = p_disk / 100
         if abs(current_prog - target_prog) > 0.01:
             self.dash_disk_bar.set(target_prog)
-            self.dash_disk_bar_label.configure(text=f"{p_disk}%")
 
         new_color = get_color(p_disk)
         try:

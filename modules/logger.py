@@ -11,28 +11,29 @@ class Logger:
         return cls._instance
 
     def _initialize(self):
+        self.logger = logging.getLogger('PanaceaLogger')
+        # Guard: don't add handlers if they already exist
+        if self.logger.handlers:
+            return
+
         log_dir = os.path.join(os.environ['USERPROFILE'], 'Documents', 'SystemOptimizer')
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
-        
+
         log_file = os.path.join(log_dir, 'log.txt')
-        
-        self.logger = logging.getLogger('PanaceaLogger')
+
         self.logger.setLevel(logging.INFO)
-        
-        # File handler
+
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
         fh = logging.FileHandler(log_file)
         fh.setLevel(logging.INFO)
-        
-        # Console handler
+        fh.setFormatter(formatter)
+
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
-        
-        # Formatter
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        fh.setFormatter(formatter)
         ch.setFormatter(formatter)
-        
+
         self.logger.addHandler(fh)
         self.logger.addHandler(ch)
 

@@ -91,9 +91,12 @@ class PanaceaApp(ctk.CTk):
         self._setup_resurrect_frame()
         
         self._dashboard_lock = threading.Lock()
+        self._shutdown = threading.Event()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
         self.select_frame("Dashboard")
         self.update_dashboard()
-        
+
         # Start update checks
         threading.Thread(target=self._check_updates_thread, daemon=True).start()
         threading.Thread(target=self._check_app_update, daemon=True).start()
@@ -559,7 +562,8 @@ class PanaceaApp(ctk.CTk):
             self.logger.log(f"Dashboard update error: {e}", "WARNING")
         finally:
             self._dashboard_lock.release()
-        self.after(3000, self.update_dashboard)
+        if not self._shutdown.is_set():
+            self.after(3000, self.update_dashboard)
         
     def _check_updates_thread(self):
         try:
@@ -650,7 +654,7 @@ class PanaceaApp(ctk.CTk):
 
     def _auto_update(self, exe_url, banner):
         """Download new exe, replace current, and relaunch."""
-        self._update_banner_lbl.configure(text="  Downloading update...")
+        self._update_banner_lbl.configure(text="  Downloading update... 0%")
 
         def download_and_replace():
             try:
@@ -664,12 +668,22 @@ class PanaceaApp(ctk.CTk):
                 temp_path = current_exe + ".update"
                 req = urllib.request.Request(exe_url, headers={"User-Agent": "Panacea"})
                 with urllib.request.urlopen(req, timeout=120) as resp:
+                    total = int(resp.headers.get("Content-Length", 0))
+                    downloaded = 0
                     with open(temp_path, "wb") as f:
                         while True:
                             chunk = resp.read(65536)
                             if not chunk:
                                 break
                             f.write(chunk)
+                            downloaded += len(chunk)
+                            if total > 0:
+                                pct = int(downloaded * 100 / total)
+                                mb = downloaded / (1024 * 1024)
+                                total_mb = total / (1024 * 1024)
+                                self.after(0, lambda p=pct, m=mb, t=total_mb:
+                                    self._update_banner_lbl.configure(
+                                        text=f"  Downloading... {p}% ({m:.1f}/{t:.1f} MB)"))
 
                 # Create a batch script that waits for us to exit, replaces exe, and relaunches
                 bat_path = current_exe + ".update.bat"
@@ -698,6 +712,11 @@ class PanaceaApp(ctk.CTk):
         )
         self.destroy()
         sys.exit(0)
+
+    def _on_close(self):
+        """Graceful shutdown: signal threads to stop, then destroy."""
+        self._shutdown.set()
+        self.after(300, self.destroy)
 
     def _show_toast(self, title, message, msg_type="info"):
         """Show a compact toast notification instead of a tall messagebox."""
@@ -982,33 +1001,35 @@ class PanaceaApp(ctk.CTk):
             return True
             
         def sequence():
-            steps = 8 # Safety, Browser, Cleanup, Network, Disk Opt, Disk Scan, Health, Verification
+            steps = 8
             current_step = 0
-            
+
             def update_progress(step_i, status_text):
                 self.after(0, lambda s=step_i, t=status_text: (
                     self.progress_bar.set(s / steps),
                     self.lbl_status.configure(text=t)
                 ))
-            
+
+            def stopped():
+                return self._shutdown.is_set()
+
             try:
                 # PHASE 1: SAFETY (Auto-Enable Restore)
                 current_step += 1; update_progress(current_step, "Phase 1: Safety Backup")
                 self.log_god_msg("\n[PHASE 1] SAFETY BACKUP INITIATED...", "head")
-                
-                # Verify/Enable System Restore first
                 self.log_god_msg("Verifying System Restore state...", "info")
                 self.restore_mgr.ensure_restore_enabled("C:\\")
-                
                 success, msg = self.restore_mgr.create_restore_point("Panacea GodMode Auto-Restore")
                 if success: self.log_god_msg(f"Restore Point: {msg}", "info")
                 else: self.log_god_msg(f"Restore Point Warning: {msg}", "warn")
-                
+                if stopped(): return
+
                 # PHASE 2: BROWSER CLEANUP
                 current_step += 1; update_progress(current_step, "Phase 2: Browser Cleanup")
                 self.log_god_msg("\n[PHASE 2] BROWSER CLEANUP...", "head")
                 bc_count, bc_size = self.cleanup_mgr.clean_browser_caches()
                 self.log_god_msg(f"Browser Cache: Cleared {bc_count} files ({bc_size / (1024*1024):.2f} MB)", "info")
+                if stopped(): return
 
                 # PHASE 3: SYSTEM CLEANUP
                 current_step += 1; update_progress(current_step, "Phase 3: System Junk Cleanup")
@@ -1017,40 +1038,41 @@ class PanaceaApp(ctk.CTk):
                 self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB", "info")
                 success, msg = self.cleanup_mgr.empty_recycle_bin()
                 self.log_god_msg(f"Recycle Bin: {msg}", "info")
+                if stopped(): return
 
                 # PHASE 4: NETWORK
                 current_step += 1; update_progress(current_step, "Phase 4: Network Reset")
                 self.log_god_msg("\n[PHASE 4] NETWORK RESET...", "head")
                 self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", lambda m: self.log_god_msg(m, "info"))
                 self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", lambda m: self.log_god_msg(m, "info"))
+                if stopped(): return
 
                 # PHASE 5: DISK OPTIMIZATION
                 current_step += 1; update_progress(current_step, "Phase 5: Disk Defrag/Trim")
                 self.log_god_msg("\n[PHASE 5] DISK OPTIMIZATION (C:)...", "head")
                 self.disk_opt.analyze_optimize_drive("C:", progress_callback=lambda m: self.log_god_msg(m, "info"))
+                if stopped(): return
 
                 # PHASE 6: DISK HEALTH
                 current_step += 1; update_progress(current_step, "Phase 6: Disk Health Scan")
                 self.log_god_msg("\n[PHASE 6] DISK HEALTH CHECK (CHKDSK)...", "head")
-                # /scan runs online (no reboot), /perf speeds it up
                 self.cmd_runner.run_command_stream("chkdsk C: /scan /perf", "CHKDSK", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
+                if stopped(): return
 
                 # PHASE 7: SYSTEM IMAGE HEALTH
                 current_step += 1; update_progress(current_step, "Phase 7: DISM Health Check")
                 self.log_god_msg("\n[PHASE 7] DISM IMAGE HEALTH...", "head")
                 self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
-                
-                # PHASE 8: SFC (skipped for speed if preferred, but kept for god mode)
+                if stopped(): return
+
+                # PHASE 8: SFC
                 current_step += 1; update_progress(current_step, "Phase 8: Integrity Scan (SFC)")
                 self.log_god_msg("\n[PHASE 8] SFC INTEGRITY SCAN...", "head")
                 self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
 
                 update_progress(steps, "Protocol Complete")
                 self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
-                
-                # Final Tip
                 self.log_god_msg("\n[TIP] For best results: Uninstall useless programs and manage startup apps from the APPS tab and then restart your PC.", "warn")
-                
                 self.after(0, lambda: self._show_toast("Success", "Resurrection Protocol Finished. A system restart is highly recommended.", "success"))
 
             except Exception as e:

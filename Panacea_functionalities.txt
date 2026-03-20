@@ -1,0 +1,79 @@
+================================================================================
+PANACEA SYSTEM OPTIMIZER - FUNCTIONALITIES OVERVIEW
+================================================================================
+
+Panacea is a comprehensive Windows system utility designed for maintenance,
+performance boosting, and system health monitoring. Below is a detailed
+breakdown of its features.
+
+1. DASHBOARD & MONITORING
+--------------------------
+* REAL-TIME METRICS: Live graphs tracking CPU and RAM (Memory) usage percentage.
+* DISK STATUS: Visual progress bar and text info for the primary drive (C:), 
+  showing free vs. total capacity.
+* SYSTEM SPECS: Identification of OS version, CPU model, RAM capacity/speed, 
+  and disk hardware type (SSD/HDD).
+* UPTIME TRACKER: Monitors how long the PC has been running, with reminders 
+  to restart for optimal performance.
+* WINDOWS UPDATES: Integrated checks for mandatory and optional updates with 
+  shortcuts to the Windows Update settings.
+
+2. SYSTEM CLEANUP
+-----------------
+* TEMP FILES CLEANER: Automatically locates and deletes junk files from 
+  %TEMP% and C:\Windows\Temp.
+* RECYCLE BIN: One-click emptying of the system recycle bin across all drives.
+* NATIVE DISK CLEANUP: Quick access to the built-in Windows 'cleanmgr' utility.
+* DEEP CLEAN (WinSxS): Runs advanced DISM component cleanup to reclaim storage 
+  taken by outdated Windows Update files.
+
+3. DISK OPTIMIZATION
+--------------------
+* SMART OPTIMIZATION: Identifies the drive type to either perform a 'TRIM' 
+  (for SSDs) or 'Defragmentation' (for HDDs).
+* DRIVE SELECTION: Support for analyzing and optimizing multiple logical drives.
+* LIVE FEED: A dedicated log shows real-time progress of the optimization tasks.
+
+4. TURBO MODE (PERFORMANCE PROFILES)
+------------------------------------
+* MASTER TOGGLE: Apply all performance tweaks with a single switch.
+* POWER PLAN: Switches Windows to "High Performance" power scheme to 
+  eliminate CPU throttling.
+* VISUAL EFFECTS: Disables system animations, shadows, and transparency to 
+  reduce GPU/CPU load on the UI.
+* SERVICE MANAGEMENT: Toggles background services like:
+    - SysMain (Superfetch): Stops app pre-loading to save RAM.
+    - Windows Search: Stops background indexing to reduce disk usage.
+    - Print Spooler: Disables printing services if not needed.
+
+5. ADVANCED TOOLS
+-----------------
+* SYSTEM INTEGRITY (SFC): Runs 'sfc /scannow' to find and repair corrupt files.
+* IMAGE REPAIR (DISM): Provides 'CheckHealth' and 'RestoreHealth' protocols 
+  to fix the Windows System Image.
+* NETWORK RESET: Includes DNS Flush and Winsock Reset to fix connectivity issues.
+* BATTERY REPORT: Generates a professional HTML report of battery health history.
+* SYSTEM RESTORE: Quickly create manual restore points before making system changes.
+
+6. APP MANAGEMENT
+-----------------
+* UNINSTALLER: Shortcuts to both the modern Windows Apps Settings and the 
+  legacy Control Panel.
+* STARTUP MANAGER: Directly manage applications that launch when Windows starts.
+
+7. SYSTEM RESURRECTION (PROTOCOL X)
+-----------------------------------
+This is a fully automated, intensive multi-phase optimization sequence:
+- PHASE 1 (SAFETY): Verifies System Restore and creates a "GodMode" backup point.
+- PHASE 2 (BROWSERS): Clears caches from Chrome, Firefox, Edge, etc.
+- PHASE 3 (JUNK): Executes full system cleanup.
+- PHASE 4 (NETWORK): Complete network logic reset.
+- PHASE 5 (DISK): Runs optimization on the primary drive.
+- PHASE 6 (HEALTH): Performs an online CHKDSK scan for file system errors.
+- PHASE 7 (IMAGE): Full DISM repair sequence.
+- PHASE 8 (INTEGRITY): Final integrity verification with SFC.
+
+================================================================================
+Developer: Maurizio Falconi (falker47)
+Built with Python 3.10+, CustomTkinter, and Native Windows APIs.
+================================================================================

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Panacea (Dev)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["main.py"],
+      "port": 0
+    },
+    {
+      "name": "Build EXE",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/build_exe.bat"],
+      "port": 0
+    },
+    {
+      "name": "Package Source",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["scripts/package_source.py"],
+      "port": 0
+    }
+  ]
+}

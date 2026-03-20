@@ -36,17 +36,10 @@ class PanaceaApp(ctk.CTk):
         super().__init__()
         
         self.title(f"Panacea System Optimizer v{VERSION}")
-        
-        # Center window on screen (DPI-aware)
-        window_width = 900
-        window_height = 560
-        self.update_idletasks()
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        # Account for DPI scaling: tk reports scaled coords after update_idletasks
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
+
+        # Set initial size, then center after rendering
+        self.geometry("900x560")
+        self.after(10, self._center_window)
         
         # Set Icon at Runtime
         try:
@@ -150,51 +143,28 @@ class PanaceaApp(ctk.CTk):
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 15))
 
         btn_pady = 5
-        
+
         # Color Palette — unified blue/teal theme (Base, Hover)
         col_dash = ("#1F6AA5", "#144870")
         self.col_clean_tuple = ("#1565C0", "#0D47A1")
         self.col_disk_tuple = ("#00897B", "#00695C")
         self.col_tools = ("#2E7D32", "#1B5E20")
         self.col_apps = ("#455A64", "#37474F")
-        
-        self.sidebar_button_dashboard = ctk.CTkButton(self.sidebar_frame, text="Dashboard", height=35, anchor="w", 
-                                                      fg_color=col_dash[0], hover_color=col_dash[1],
-                                                      image=self.icons.get("dashboard"), compound="left",
-                                                      command=lambda: self.select_frame("Dashboard"))
-        self.sidebar_button_dashboard.grid(row=1, column=0, padx=20, pady=btn_pady)
-        
-        self.sidebar_button_clean = ctk.CTkButton(self.sidebar_frame, text="Cleaning", height=35, anchor="w", 
-                                                  fg_color=self.col_clean_tuple[0], hover_color=self.col_clean_tuple[1],
-                                                  image=self.icons.get("clean"), compound="left",
-                                                  command=lambda: self.select_frame("Cleaning"))
-        self.sidebar_button_clean.grid(row=2, column=0, padx=20, pady=btn_pady)
-        
-        self.sidebar_button_disk = ctk.CTkButton(self.sidebar_frame, text="Disk Opt", height=35, anchor="w", 
-                                                 fg_color=self.col_disk_tuple[0], hover_color=self.col_disk_tuple[1],
-                                                 image=self.icons.get("disk"), compound="left",
-                                                 command=lambda: self.select_frame("Disk"))
-        self.sidebar_button_disk.grid(row=3, column=0, padx=20, pady=btn_pady)
-        
-        self.sidebar_button_tools = ctk.CTkButton(self.sidebar_frame, text="Tools", height=35, anchor="w", 
-                                                  fg_color=self.col_tools[0], hover_color=self.col_tools[1],
-                                                  image=self.icons.get("tools"), compound="left",
-                                                  command=lambda: self.select_frame("Tools"))
-        self.sidebar_button_tools.grid(row=4, column=0, padx=20, pady=btn_pady)
 
-        self.sidebar_button_apps = ctk.CTkButton(self.sidebar_frame, text="Apps", height=35, anchor="w", 
-                                                 fg_color=self.col_apps[0], hover_color=self.col_apps[1],
-                                                 image=self.icons.get("apps"), compound="left",
-                                                 command=lambda: self.select_frame("Apps"))
-        self.sidebar_button_apps.grid(row=5, column=0, padx=20, pady=btn_pady)
+        def sidebar_btn(text, icon_name, frame_name, colors, row):
+            btn = ctk.CTkButton(self.sidebar_frame, text=text, height=35, anchor="w",
+                                fg_color=colors[0], hover_color=colors[1],
+                                image=self.icons.get(icon_name), compound="left",
+                                command=lambda: self.select_frame(frame_name))
+            btn.grid(row=row, column=0, padx=20, pady=btn_pady)
+            return btn
 
-        # Turbo Button
-        col_turbo = ("#00BCD4", "#00838F")  # Cyan
-        self.sidebar_button_turbo = ctk.CTkButton(self.sidebar_frame, text="Turbo", height=35, anchor="w", 
-                                                  fg_color=col_turbo[0], hover_color=col_turbo[1],
-                                                  image=self.icons.get("turbo"), compound="left",
-                                                  command=lambda: self.select_frame("Turbo"))
-        self.sidebar_button_turbo.grid(row=6, column=0, padx=20, pady=btn_pady)
+        self.sidebar_button_dashboard = sidebar_btn("Dashboard", "dashboard", "Dashboard", col_dash, 1)
+        self.sidebar_button_clean = sidebar_btn("Cleaning", "clean", "Cleaning", self.col_clean_tuple, 2)
+        self.sidebar_button_disk = sidebar_btn("Disk Opt", "disk", "Disk", self.col_disk_tuple, 3)
+        self.sidebar_button_tools = sidebar_btn("Tools", "tools", "Tools", self.col_tools, 4)
+        self.sidebar_button_apps = sidebar_btn("Apps", "apps", "Apps", self.col_apps, 5)
+        self.sidebar_button_turbo = sidebar_btn("Turbo", "turbo", "Turbo", ("#00BCD4", "#00838F"), 6)
 
         # Resurrection Button (God Mode)
         col_gold = "#FFD700" 
@@ -286,10 +256,12 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
         disk_bar_frame = ctk.CTkFrame(self.card_disk, fg_color="transparent")
         disk_bar_frame.pack(pady=10, fill="x", padx=30)
-        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=18)
+        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=22)
         self.dash_disk_bar.pack(fill="x")
-        self.dash_disk_bar_label = ctk.CTkLabel(disk_bar_frame, text="0%", font=ctk.CTkFont(size=10, weight="bold"), text_color="white")
-        self.dash_disk_bar_label.place(relx=0.5, rely=0.5, anchor="center")
+        self.dash_disk_bar_label = ctk.CTkLabel(
+            disk_bar_frame, text="0%", font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="white", fg_color="transparent", height=22)
+        self.dash_disk_bar_label.place(in_=self.dash_disk_bar, relx=0.5, rely=0.5, anchor="center")
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
         self.dash_disk_val.pack()
         self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
@@ -564,7 +536,10 @@ class PanaceaApp(ctk.CTk):
             t_disk, f_disk, p_disk = self.monitor.get_disk_usage()
             cpu_usage = self.monitor.get_cpu_usage()
             bat_perc, bat_plug = self.monitor.get_battery_status()
-            self.after(0, lambda: self._update_gui(os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug))
+            # Fetch slow cached data on background thread (not UI thread)
+            ram_info = self.monitor.get_ram_info()
+            disk_model = self.monitor.get_disk_model()
+            self.after(0, lambda: self._update_gui(os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug, ram_info, disk_model))
         except Exception as e:
             self.logger.log(f"Dashboard update error: {e}", "WARNING")
         finally:
@@ -639,25 +614,25 @@ class PanaceaApp(ctk.CTk):
         banner.grid(row=0, column=1, sticky="new", padx=0, pady=0)
         banner.lift()
 
-        self._update_banner_lbl = ctk.CTkLabel(banner, text=f"  Panacea v{new_ver} available!",
-                           font=ctk.CTkFont(size=13), text_color="white")
+        self._update_banner_lbl = ctk.CTkLabel(banner, text=f"v{new_ver} available",
+                           font=ctk.CTkFont(size=12), text_color="white")
         self._update_banner_lbl.pack(side="left", padx=(10, 5))
 
+        close_btn = ctk.CTkLabel(banner, text="✕", font=ctk.CTkFont(size=12),
+                                 text_color="white", cursor="hand2", width=20)
+        close_btn.pack(side="right", padx=(0, 6))
+        close_btn.bind("<Button-1>", lambda e: banner.destroy())
+
         if exe_url:
-            link = ctk.CTkLabel(banner, text="Install Update", font=ctk.CTkFont(size=13, underline=True),
+            link = ctk.CTkLabel(banner, text="Install", font=ctk.CTkFont(size=12, underline=True),
                                 text_color="#BBDEFB", cursor="hand2")
-            link.pack(side="left", padx=5)
+            link.pack(side="right", padx=4)
             link.bind("<Button-1>", lambda e, u=exe_url: self._auto_update(u, banner))
         else:
-            link = ctk.CTkLabel(banner, text="View Release", font=ctk.CTkFont(size=13, underline=True),
+            link = ctk.CTkLabel(banner, text="View", font=ctk.CTkFont(size=12, underline=True),
                                 text_color="#BBDEFB", cursor="hand2")
-            link.pack(side="left", padx=5)
+            link.pack(side="right", padx=4)
             link.bind("<Button-1>", lambda e: webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases"))
-
-        close_btn = ctk.CTkLabel(banner, text="✕", font=ctk.CTkFont(size=13),
-                                 text_color="white", cursor="hand2", width=24)
-        close_btn.pack(side="right", padx=(0, 8))
-        close_btn.bind("<Button-1>", lambda e: banner.destroy())
 
     def _auto_update(self, exe_url, banner):
         """Download new exe, replace current, and relaunch — fully silent."""
@@ -742,6 +717,19 @@ class PanaceaApp(ctk.CTk):
         self.destroy()
         sys.exit(0)
 
+    def _center_window(self):
+        """Center the window on screen using actual rendered dimensions."""
+        self.update_idletasks()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        # If window hasn't rendered yet (dimensions <= 1), retry shortly
+        if w <= 1 or h <= 1:
+            self.after(50, self._center_window)
+            return
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        self.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+
     def _on_close(self):
         """Graceful shutdown: signal threads to stop, then destroy."""
         self._shutdown.set()
@@ -757,11 +745,16 @@ class PanaceaApp(ctk.CTk):
         toast.attributes("-topmost", True)
         toast.configure(fg_color=bg)
 
-        # Size and position: bottom-right of parent window
+        # Size and position: bottom-right of parent window, clamped to screen
         t_w, t_h = 340, 80
         try:
             px = self.winfo_rootx() + self.winfo_width() - t_w - 20
             py = self.winfo_rooty() + self.winfo_height() - t_h - 20
+            # Clamp to screen bounds
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            px = max(0, min(px, sw - t_w))
+            py = max(0, min(py, sh - t_h))
         except Exception:
             px, py = 100, 100
         toast.geometry(f"{t_w}x{t_h}+{px}+{py}")
@@ -774,20 +767,16 @@ class PanaceaApp(ctk.CTk):
                                text_color="#E0E0E0", anchor="w", wraplength=310)
         msg_lbl.pack(padx=14, pady=(2, 10), fill="x")
 
-        toast.after(4000, toast.destroy)
+        toast.after(5000, toast.destroy)
 
-    def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug):
-        if self.dash_os.cget("text").startswith("OS: Win ..."):
-            self.dash_os.configure(text=os_info)
-            self.dash_cpu_name.configure(text=cpu_name)
-            # Get RAM info once
-            ram_info = self.monitor.get_ram_info()
-            if ram_info:
-                self.dash_ram_info.configure(text=ram_info)
-            # Get Disk info once
-            disk_model = self.monitor.get_disk_model()
-            if disk_model:
-                self.dash_disk_info.configure(text=disk_model)
+    def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug, ram_info="", disk_model=""):
+        # Update static info (OS, CPU name) and cached info every cycle
+        self.dash_os.configure(text=os_info)
+        self.dash_cpu_name.configure(text=cpu_name)
+        if ram_info:
+            self.dash_ram_info.configure(text=ram_info)
+        if disk_model:
+            self.dash_disk_info.configure(text=disk_model)
         
         # Uptime
         new_uptime = f"Time since restart: {uptime}"
@@ -985,11 +974,22 @@ class PanaceaApp(ctk.CTk):
         self.lbl_warning = ctk.CTkLabel(self.action_frame, text="(Includes: Auto System Restore, Browser Cleanup, Disk Health Scan)", font=ctk.CTkFont(size=11), text_color="gray70")
         self.lbl_warning.pack(pady=(0, 5))
 
-        self.btn_resurrect_start = ctk.CTkButton(self.action_frame, text="INITIATE PROTOCOL", font=ctk.CTkFont(size=16, weight="bold"),
+        btn_row = ctk.CTkFrame(self.action_frame, fg_color="transparent")
+        btn_row.pack(pady=20)
+
+        self.btn_resurrect_start = ctk.CTkButton(btn_row, text="INITIATE PROTOCOL", font=ctk.CTkFont(size=16, weight="bold"),
                                              fg_color="#FFD700", hover_color="#B8860B", text_color="black",
                                              height=40,
                                              command=self.run_god_mode)
-        self.btn_resurrect_start.pack(pady=20)
+        self.btn_resurrect_start.pack(side="left", padx=(0, 10))
+
+        self._resurrect_cancel = threading.Event()
+        self.btn_resurrect_cancel = ctk.CTkButton(btn_row, text="CANCEL", font=ctk.CTkFont(size=14, weight="bold"),
+                                             fg_color="#C62828", hover_color="#8E0000", text_color="white",
+                                             height=40, width=100,
+                                             command=self._cancel_resurrect)
+        # Hidden by default, shown when protocol is running
+        self.btn_resurrect_cancel.pack_forget()
         
         # Log Area (Terminal Style)
         log_frame = ctk.CTkFrame(self.frame_resurrect, corner_radius=10, fg_color="black")
@@ -1007,11 +1007,19 @@ class PanaceaApp(ctk.CTk):
     def log_god_msg(self, msg, level="info"):
         self._log_to_widget(self.god_log, msg, level)
 
+    def _cancel_resurrect(self):
+        self._resurrect_cancel.set()
+        self.btn_resurrect_cancel.configure(state="disabled", text="CANCELLING...")
+        self.log_god_msg("\n[!] CANCELLATION REQUESTED — stopping after current phase...", "warn")
+
     def run_god_mode(self):
         if not messagebox.askyesno("Confirm Resurrection", "Initiate System Resurrection Protocol?\n\nThis process is intensive and may take time.\nEnsure all work is saved."):
             return
 
         self.btn_resurrect_start.configure(state="disabled", text="PROTOCOL RUNNING...")
+        self._resurrect_cancel.clear()
+        self.btn_resurrect_cancel.configure(state="normal", text="CANCEL")
+        self.btn_resurrect_cancel.pack(side="left")
         self.lbl_status.configure(text="Initializing...", text_color="#FFD700")
         self.progress_bar.set(0)
         self.god_log.configure(state="normal"); self.god_log.delete("0.0", tk.END); self.god_log.configure(state="disabled")
@@ -1042,7 +1050,7 @@ class PanaceaApp(ctk.CTk):
                 ))
 
             def stopped():
-                return self._shutdown.is_set()
+                return self._shutdown.is_set() or self._resurrect_cancel.is_set()
 
             try:
                 # PHASE 1: SAFETY (Auto-Enable Restore)
@@ -1101,10 +1109,14 @@ class PanaceaApp(ctk.CTk):
                 self.log_god_msg("\n[PHASE 8] SFC INTEGRITY SCAN...", "head")
                 self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
 
-                update_progress(steps, "Protocol Complete")
-                self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
-                self.log_god_msg("\n[TIP] For best results: Uninstall useless programs and manage startup apps from the APPS tab and then restart your PC.", "warn")
-                self.after(0, lambda: self._show_toast("Success", "Resurrection Protocol Finished. A system restart is highly recommended.", "success"))
+                if self._resurrect_cancel.is_set():
+                    self.log_god_msg("\n=== PROTOCOL CANCELLED BY USER ===", "warn")
+                    self.after(0, lambda: self.lbl_status.configure(text="Cancelled", text_color="#EF6C00"))
+                else:
+                    update_progress(steps, "Protocol Complete")
+                    self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
+                    self.log_god_msg("\n[TIP] For best results: Uninstall useless programs and manage startup apps from the APPS tab and then restart your PC.", "warn")
+                    self.after(0, lambda: self._show_toast("Success", "Resurrection Protocol Finished. A system restart is highly recommended.", "success"))
 
             except Exception as e:
                 self.log_god_msg(f"\n[!] ERROR: {str(e)}", "err")
@@ -1113,7 +1125,9 @@ class PanaceaApp(ctk.CTk):
 
             finally:
                 self.after(0, lambda: self.btn_resurrect_start.configure(state="normal", text="INITIATE PROTOCOL"))
-                self.after(0, lambda: self.lbl_status.configure(text="Ready", text_color="gray"))
+                self.after(0, lambda: self.btn_resurrect_cancel.pack_forget())
+                if not self._resurrect_cancel.is_set():
+                    self.after(0, lambda: self.lbl_status.configure(text="Ready", text_color="gray"))
 
         threading.Thread(target=sequence, daemon=True).start()
 class LiveGraph(ctk.CTkFrame):

@@ -82,6 +82,7 @@ class CleanupManager:
             if progress_callback:
                 progress_callback(f"Scanning {base_path}...")
 
+            batch_count = 0
             for root, dirs, files in os.walk(base_path):
                 for name in files:
                     file_path = os.path.join(root, name)
@@ -90,6 +91,10 @@ class CleanupManager:
                         os.remove(file_path)
                         total_deleted += 1
                         total_freed += size
+                        batch_count += 1
+                        # Report progress every 50 files
+                        if progress_callback and batch_count % 50 == 0:
+                            progress_callback(f"Deleted {total_deleted} files ({total_freed / (1024*1024):.1f} MB freed)...")
                     except Exception:
                         pass  # Locked files are expected
 

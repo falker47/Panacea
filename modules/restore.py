@@ -9,8 +9,9 @@ class RestoreManager:
         """Checks if System Restore is enabled, enables it if not."""
         try:
             self.logger.log(f"Ensuring System Restore is enabled on {drive}...")
-            enable_cmd = f"powershell.exe -Command \"Enable-ComputerRestore -Drive '{drive}'\""
-            subprocess.run(enable_cmd, shell=True, capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command', f"Enable-ComputerRestore -Drive '{drive}'"],
+                capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
             
             # We assume it worked or was already on. 
             return True
@@ -21,8 +22,10 @@ class RestoreManager:
     def get_last_restore_points(self, limit=3):
         """Returns list of (date, description) tuples"""
         try:
-            cmd = f"powershell.exe -Command \"Get-ComputerRestorePoint | Select-Object -Last {limit} CreationTime, Description | ConvertTo-Json\""
-            p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+            p = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command',
+                 f"Get-ComputerRestorePoint | Select-Object -Last {limit} CreationTime, Description | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
             
             if p.returncode != 0 or not p.stdout.strip():
                 return []
@@ -62,7 +65,7 @@ class RestoreManager:
 
         try:
             process = subprocess.run(
-                ['powershell.exe', '-Command', cmd],
+                ['powershell.exe', '-NoProfile', '-Command', cmd],
                 capture_output=True, text=True, timeout=60,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )

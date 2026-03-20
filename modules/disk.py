@@ -23,8 +23,7 @@ class DiskOptimizer:
 
     def open_optimize_gui(self):
         try:
-            p = subprocess.Popen(["dfrgui.exe"], creationflags=subprocess.DETACHED_PROCESS)
-            p.communicate = None  # Release handle
+            subprocess.Popen(["dfrgui.exe"], creationflags=subprocess.DETACHED_PROCESS, close_fds=True)
             self.logger.log("Launched Windows Defragment and Optimize Drives GUI.")
         except Exception as e:
             self.logger.log(f"Failed to launch dfrgui: {e}", "ERROR")
@@ -44,11 +43,10 @@ class DiskOptimizer:
             # CREATE_NO_WINDOW = 0x08000000 to hide console window
             creation_flags = 0x08000000
             
-            # Force UTF-8 encoding for the subprocess
-            wrapped_cmd = f'cmd /c "chcp 65001 >NUL & {cmd}"'
-            
+            # Force UTF-8 encoding via chcp, then run the command
+            # Using list form to avoid shell injection
             process = subprocess.Popen(
-                wrapped_cmd,
+                ['cmd', '/c', f'chcp 65001 >NUL & {cmd}'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 shell=False,

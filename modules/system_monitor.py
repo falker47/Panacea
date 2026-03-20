@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 import subprocess
+import time
 
 class SystemMonitor:
     def __init__(self):
@@ -10,6 +11,20 @@ class SystemMonitor:
         self._prev_idle = 0
         self._prev_total = 0
         self.get_cpu_usage()  # Prime initial values so first real call has a delta
+        # Cache for slow calls (wmic/PowerShell)
+        self._cache = {}
+        self._cache_ttl = 120  # seconds
+
+    def _cached(self, key, func):
+        """Return cached result if fresh, otherwise call func and cache it."""
+        now = time.time()
+        if key in self._cache:
+            val, ts = self._cache[key]
+            if now - ts < self._cache_ttl:
+                return val
+        val = func()
+        self._cache[key] = (val, now)
+        return val
 
     def get_ram_usage(self):
         """Returns (total_gb, available_gb, percent_used)"""
@@ -41,7 +56,10 @@ class SystemMonitor:
             return 0, 0, 0
 
     def get_ram_info(self):
-        """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)'"""
+        """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)' (cached)"""
+        return self._cached("ram_info", self._fetch_ram_info)
+
+    def _fetch_ram_info(self):
         try:
             cmd = 'wmic memorychip get Speed,SMBIOSMemoryType /format:csv'
             output = subprocess.check_output(cmd, shell=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode()
@@ -101,10 +119,13 @@ class SystemMonitor:
             return 0, 0, 0
 
     def get_disk_model(self):
-        """Returns disk model string e.g. 'SSD Samsung MZVLB1T0...'"""
+        """Returns disk model string e.g. 'SSD Samsung MZVLB1T0...' (cached)"""
+        return self._cached("disk_model", self._fetch_disk_model)
+
+    def _fetch_disk_model(self):
         try:
-            cmd = ['powershell', '-Command',
-                   "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty FriendlyName, MediaType | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
+            cmd = ['powershell', '-NoProfile', '-Command',
+                   "Get-Partition -DriveLetter C | Get-Disk | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
             output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
 
             if '|' in output:
@@ -222,7 +243,7 @@ foreach ($update in $result.Updates) {
 }
 Write-Output "$mandatory,$optional"
 """
-            cmd = ['powershell', '-Command', ps_script]
+            cmd = ['powershell', '-NoProfile', '-Command', ps_script]
             output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45).decode().strip()
             
             lines = output.splitlines()

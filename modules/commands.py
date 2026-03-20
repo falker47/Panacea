@@ -26,16 +26,13 @@ class CommandRunner:
             # Creation flags to hide window
             creation_flags = 0x08000000
             
-            # Force UTF-8 encoding for the subprocess
-            # We wrap the command in cmd.exe to set codepage first
-            # 'chcp 65001' sets UTF-8. '>NUL' hides the chcp status output ("Active code page: 65001")
-            wrapped_cmd = f'cmd /c "chcp 65001 >NUL & {command_str}"'
-            
+            # Force UTF-8 encoding via chcp, then run the command
+            # Using list form to avoid shell injection
             process = subprocess.Popen(
-                wrapped_cmd,
+                ['cmd', '/c', f'chcp 65001 >NUL & {command_str}'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                shell=False, # We are running cmd explicitly
+                shell=False,
                 creationflags=creation_flags
             )
             

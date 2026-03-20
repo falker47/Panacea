@@ -19,11 +19,12 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def decode_console_bytes(line_bytes, encodings=('utf-8', 'cp1252', 'cp850')):
-    """Decode bytes from Windows console output, trying multiple encodings."""
+def decode_console_bytes(line_bytes, encodings=('utf-8', 'cp1252', 'cp850', 'mbcs')):
+    """Decode bytes from Windows console output, trying multiple encodings.
+    Prioritizes UTF-8 (set via chcp 65001), then Windows codepages as fallback."""
     for enc in encodings:
         try:
             return line_bytes.decode(enc).strip()
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, LookupError):
             continue
     return line_bytes.decode('utf-8', errors='replace').strip()

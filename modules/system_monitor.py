@@ -3,12 +3,13 @@ import os
 import platform
 import shutil
 import subprocess
-import threading
-import time
 
 class SystemMonitor:
     def __init__(self):
-        pass
+        # Store previous CPU times for delta-based usage calculation
+        self._prev_idle = 0
+        self._prev_total = 0
+        self.get_cpu_usage()  # Prime initial values so first real call has a delta
 
     def get_ram_usage(self):
         """Returns (total_gb, available_gb, percent_used)"""
@@ -36,16 +37,14 @@ class SystemMonitor:
             percent = ((total_gb - avail_gb) / total_gb) * 100 if total_gb > 0 else 0
             
             return round(total_gb, 1), round(avail_gb, 1), round(percent, 1)
-        except:
+        except Exception:
             return 0, 0, 0
 
     def get_ram_info(self):
         """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)'"""
         try:
-            import subprocess
-            # Query WMI for memory modules - use CSV to ensure correct column mapping
             cmd = 'wmic memorychip get Speed,SMBIOSMemoryType /format:csv'
-            output = subprocess.check_output(cmd, shell=True, creationflags=subprocess.CREATE_NO_WINDOW).decode()
+            output = subprocess.check_output(cmd, shell=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode()
             lines = [l.strip() for l in output.split('\n') if l.strip()]
             
             if len(lines) < 2:
@@ -79,7 +78,7 @@ class SystemMonitor:
             speed = parts[speed_idx]
             try:
                 smbios_type = int(parts[type_idx])
-            except:
+            except (ValueError, IndexError):
                 smbios_type = 0
             
             # SMBIOSMemoryType: 20=DDR, 21=DDR2, 24=DDR3, 26=DDR4, 34=DDR5
@@ -96,37 +95,28 @@ class SystemMonitor:
             total, used, free = shutil.disk_usage("C:\\")
             total_gb = total / (1024**3)
             free_gb = free / (1024**3)
-            percent = (used / total) * 100
+            percent = (used / total) * 100 if total > 0 else 0
             return round(total_gb, 1), round(free_gb, 1), round(percent, 1)
-        except:
+        except Exception:
             return 0, 0, 0
 
     def get_disk_model(self):
         """Returns disk model string e.g. 'SSD Samsung MZVLB1T0...'"""
         try:
-            import subprocess
-            # 1. Get FriendlyName (Model) reliably
-            cmd_model = ['powershell', '-Command', "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty FriendlyName"]
-            try:
-                model_name = subprocess.check_output(cmd_model, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
-            except:
-                return "Unknown Model"
+            cmd = ['powershell', '-Command',
+                   "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty FriendlyName, MediaType | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
+            output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
 
-            if not model_name: return "Unknown Model"
-
-            # 2. Try to get MediaType separately (Non-critical)
-            try:
-                cmd_type = ['powershell', '-Command', "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty MediaType"]
-                media_type = subprocess.check_output(cmd_type, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip() # SSD or HDD
-                
-                # If media type is known and not in name, prepend it
-                if media_type in ["SSD", "HDD"] and media_type not in model_name:
+            if '|' in output:
+                model_name, media_type = output.rsplit('|', 1)
+                model_name = model_name.strip()
+                media_type = media_type.strip()
+                if media_type in ("SSD", "HDD") and media_type not in model_name:
                     return f"{media_type} {model_name}"
-            except:
-                pass # If media type fails, just return model name
+                return model_name or "Unknown Model"
 
-            return model_name
-        except:
+            return output or "Unknown Model"
+        except Exception:
             return "Unknown Model"
 
     def get_cpu_info(self):
@@ -140,21 +130,18 @@ class SystemMonitor:
             mhz, _ = winreg.QueryValueEx(key, "~MHz")
             winreg.CloseKey(key)
             
-            # Get core count
-            import os
             cores = os.cpu_count() or 0
             
             # Format: "AMD Ryzen 7 5800X\n(8 Cores @ 3.8 GHz)"
             ghz = round(mhz / 1000, 1)
             return f"{cpu_name.strip()}\n({cores} Cores @ {ghz} GHz)"
-        except:
-            # Fallback
+        except Exception:
             return platform.processor()
             
     def get_os_info(self):
         try:
             return f"{platform.system()} {platform.release()}"
-        except:
+        except Exception:
             return "Windows"
 
     def get_system_uptime(self):
@@ -168,37 +155,37 @@ class SystemMonitor:
             hours = (t % 86400) // 3600
             mins = (t % 3600) // 60
             return f"{int(days)}d {int(hours)}h {int(mins)}m"
-        except:
+        except Exception:
             return "Unknown"
 
     def get_cpu_usage(self):
-        """Returns int cpu percent. Tries typeperf (fast) then wmic (reliable)."""
-        # Try typeperf first (English locale usually)
+        """Returns CPU usage percent using GetSystemTimes (no subprocess overhead)."""
         try:
-            cmd = ['typeperf', r'\Processor(_Total)\% Processor Time', '-sc', '1']
-            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW).decode()
-            lines = output.strip().split('\n')
-            if len(lines) > 1:
-                val = lines[-1].split(',')[-1].replace('"', '')
-                return float(val)
-        except:
-            pass
-            
-        # Fallback to wmic (Locale independent usually)
-        # wmic cpu get loadpercentage
-        try:
-            cmd = ['wmic', 'cpu', 'get', 'loadpercentage']
-            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW).decode()
-            # Output:
-            # LoadPercentage
-            # 12
-            lines = [l.strip() for l in output.split('\n') if l.strip()]
-            if len(lines) > 1 and lines[1].isdigit():
-                return float(lines[1])
-        except:
-            pass
-            
-        return 0.0
+            idle = ctypes.c_ulonglong()
+            kernel = ctypes.c_ulonglong()
+            user = ctypes.c_ulonglong()
+            ctypes.windll.kernel32.GetSystemTimes(
+                ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)
+            )
+            idle_val = idle.value
+            total_val = kernel.value + user.value
+
+            if self._prev_total == 0:
+                # First call — no delta yet, return 0
+                self._prev_idle = idle_val
+                self._prev_total = total_val
+                return 0.0
+
+            d_idle = idle_val - self._prev_idle
+            d_total = total_val - self._prev_total
+            self._prev_idle = idle_val
+            self._prev_total = total_val
+
+            if d_total == 0:
+                return 0.0
+            return round((1.0 - d_idle / d_total) * 100, 1)
+        except Exception:
+            return 0.0
 
     def get_battery_status(self):
         """Returns (percent, is_plugged_str)"""

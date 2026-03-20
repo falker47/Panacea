@@ -1,5 +1,6 @@
 import subprocess
 from modules.logger import Logger
+from modules.utils import decode_console_bytes
 
 class CommandRunner:
     def __init__(self):
@@ -43,38 +44,13 @@ class CommandRunner:
                 if not line_bytes and process.poll() is not None:
                     break
                 if line_bytes:
-                    try:
-                        # Priority: UTF-8 -> CP1252 (ANSI) -> CP850 (OEM) -> MBCS
-                        # UTF-8: Modern/Forced tools
-                        # CP1252: Stubborn local tools (e.g. CHKDSK often outputs ANSI)
-                        # CP850: Legacy
-                        line = None
-                        for enc in ['utf-8', 'cp1252', 'cp850', 'mbcs']:
-                            try:
-                                line = line_bytes.decode(enc).strip()
-                                break
-                            except UnicodeDecodeError:
-                                continue
-                        
-                        if line is None:
-                            line = line_bytes.decode('utf-8', errors='replace').strip()
+                    line = decode_console_bytes(line_bytes, ('utf-8', 'cp1252', 'cp850', 'mbcs'))
+                    line = line.replace('\x00', '')
 
-                        # Fix common mojibake manually if needed, but correct encoding should work.
-                        # Windows CMD 'Ó' is often 'à' in CP850 displayed as CP437 or similar.
-                        # Actually 'Ó' (curly quote?) for 'ò' or 'à' suggests specific mismatches.
-                        # Let's rely on Python's cp850 which is standard for IT CMD.
-
-                        line = line.replace('\x00', '')
-                        
-                        if line:
-                            # Apply Filter
-                            if filter_func and not filter_func(line):
-                                continue
-                            
-                            progress_callback(line)
-
-                    except Exception:
-                        pass # Skip unparseable lines
+                    if line:
+                        if filter_func and not filter_func(line):
+                            continue
+                        progress_callback(line)
             
             return_code = process.wait()
             if return_code == 0:

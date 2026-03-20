@@ -2,6 +2,7 @@ import os
 import subprocess
 import string
 from modules.logger import Logger
+from modules.utils import decode_console_bytes
 
 class DiskOptimizer:
     def __init__(self):
@@ -16,38 +17,14 @@ class DiskOptimizer:
         return drives
 
     def get_drive_info(self):
-        """Returns a list of dicts with drive letter and type (SSD/HDD/Unknown)"""
-        drive_info = []
-        try:
-            # PowerShell command to get physical disk info
-            # We need to map Logical Disks to Physical Disks which is complex in pure WMI/PS without admin
-            # Simplified approach: Get all logical drives, attempt to guess or just list them.
-            # A better approach for MediaType is `Get-PhysicalDisk` but mapping it to C: is tricky.
-            # Using `winsat disk -drive letter` is invasive.
-            # We will use `defrag /A` analysis output or `Get-PhysicalDisk` generally.
-            
-            # Let's try to get PhysicalDisk info and assume simple mapping for now or just list detected physical disks
-            # Actually, `dfrgui` handles this best. 
-            # We will list logical drives and try to get MediaType via PowerShell if possible.
-            
-            ps_cmd = "powershell \"Get-PhysicalDisk | Select-Object FriendlyName, MediaType, DeviceId\""
-            # This doesn't directly map to volumes like C:.
-            
-            # Alternative: simpler, just list logical drives. The user can select one.
-            # We will just list the drives found.
-            drives = self.get_drives()
-            for d in drives:
-                # Default to Unknown/Generic
-                drive_info.append({"letter": d, "type": "Unknown (Windows manages)"})
-
-        except Exception as e:
-            self.logger.log(f"Error listing drives: {e}", "ERROR")
-        
-        return drive_info
+        """Returns a list of dicts with drive letter."""
+        drives = self.get_drives()
+        return [{"letter": d} for d in drives]
 
     def open_optimize_gui(self):
         try:
-            subprocess.Popen(["dfrgui.exe"])
+            p = subprocess.Popen(["dfrgui.exe"], creationflags=subprocess.DETACHED_PROCESS)
+            p.communicate = None  # Release handle
             self.logger.log("Launched Windows Defragment and Optimize Drives GUI.")
         except Exception as e:
             self.logger.log(f"Failed to launch dfrgui: {e}", "ERROR")
@@ -86,16 +63,7 @@ class DiskOptimizer:
                     if not line_bytes and process.poll() is not None:
                         break
                     if line_bytes:
-                         # 1. Try UTF-8 first
-                         # 2. Try CP1252 (Common for CHKDSK/Defrag in IT locale)
-                         # 3. Try CP850
-                        line = None
-                        for enc in ['utf-8', 'cp1252', 'cp850']:
-                            try:
-                                line = line_bytes.decode(enc).strip()
-                                break
-                            except: continue
-                        if line is None: line = line_bytes.decode('utf-8', errors='replace').strip()
+                        line = decode_console_bytes(line_bytes)
 
                         if line:
                             # Basic filtering for defrag clutter

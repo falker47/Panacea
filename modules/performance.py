@@ -34,9 +34,9 @@ class PerformanceManager:
 
     # --- Services ---
     def get_service_status(self, service_name):
-        """Returns True if running, False if stopped"""
+        """Returns True if running, False if stopped or query failed"""
         success, output = self._run_cmd(f"sc query {service_name}")
-        return "RUNNING" in output
+        return success and "RUNNING" in output
     
     def set_service(self, service_name, start=True):
         action = "start" if start else "stop"
@@ -45,28 +45,24 @@ class PerformanceManager:
     # --- Visual Effects ---
     def get_visual_effects(self):
         """Returns True if 'best appearance' (default), False if 'best performance'"""
-        # Check registry: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects
-        # VisualFXSetting: 0=Custom, 1=Best Appearance, 2=Best Performance
         try:
             import winreg
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects")
-            value, _ = winreg.QueryValueEx(key, "VisualFXSetting")
-            winreg.CloseKey(key)
-            return value != 2  # True if NOT best performance
-        except:
-            return True  # Assume default (appearance)
-    
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects") as key:
+                value, _ = winreg.QueryValueEx(key, "VisualFXSetting")
+            return value != 2
+        except Exception:
+            return True
+
     def set_visual_effects(self, enable_effects=True):
         """Set visual effects: True=Best Appearance, False=Best Performance"""
         try:
             import winreg
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
-                                  0, winreg.KEY_SET_VALUE)
-            value = 1 if enable_effects else 2
-            winreg.SetValueEx(key, "VisualFXSetting", 0, winreg.REG_DWORD, value)
-            winreg.CloseKey(key)
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
+                                0, winreg.KEY_SET_VALUE) as key:
+                value = 1 if enable_effects else 2
+                winreg.SetValueEx(key, "VisualFXSetting", 0, winreg.REG_DWORD, value)
             self.logger.log(f"Visual effects set to {'appearance' if enable_effects else 'performance'}")
             return True, "OK"
         except Exception as e:

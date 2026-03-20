@@ -8,14 +8,9 @@ class RestoreManager:
     def ensure_restore_enabled(self, drive="C:\\"):
         """Checks if System Restore is enabled, enables it if not."""
         try:
-             # Check status
-            check_cmd = f"powershell.exe -Command \"Get-ComputerRestorePoint -LastStatus\"" # Simple check isn't enough, we need Rstrui status
-            # Actually, effective way is WMI or registry. 
-            # Or simpler: Enable-ComputerRestore -Drive "C:\" (It's idempotent-ish)
-            
             self.logger.log(f"Ensuring System Restore is enabled on {drive}...")
             enable_cmd = f"powershell.exe -Command \"Enable-ComputerRestore -Drive '{drive}'\""
-            subprocess.run(enable_cmd, shell=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.run(enable_cmd, shell=True, capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
             
             # We assume it worked or was already on. 
             return True
@@ -27,7 +22,7 @@ class RestoreManager:
         """Returns list of (date, description) tuples"""
         try:
             cmd = f"powershell.exe -Command \"Get-ComputerRestorePoint | Select-Object -Last {limit} CreationTime, Description | ConvertTo-Json\""
-            p = subprocess.run(cmd, shell=True, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
             
             if p.returncode != 0 or not p.stdout.strip():
                 return []
@@ -58,20 +53,19 @@ class RestoreManager:
         """
         self.logger.log(f"Attempting to create restore point: {description}")
         
-        # Power move: Enable it first just in case
+        # Enable it first just in case
         self.ensure_restore_enabled()
-        
-        # Use single quotes for PowerShell string arguments to avoid conflict with the outer double quotes required by shell=True execution
-        cmd = f"Checkpoint-Computer -Description '{description}' -RestorePointType 'MODIFY_SETTINGS'"
-        
+
+        # Escape single quotes for PowerShell
+        safe_desc = description.replace("'", "''")
+        cmd = f"Checkpoint-Computer -Description '{safe_desc}' -RestorePointType 'MODIFY_SETTINGS'"
+
         try:
-            # We use PowerShell to execute the cmdlet
-            # The outer command uses double quotes to wrap the entire PS command string
-            ps_cmd = f'powershell.exe -Command "{cmd}"'
-            
-            # Run the command
-            # Using specific startup info to hide window if possible, though 'run_command' usually handles this via subprocess
-            process = subprocess.run(ps_cmd, shell=True, capture_output=True, text=True)
+            process = subprocess.run(
+                ['powershell.exe', '-Command', cmd],
+                capture_output=True, text=True, timeout=60,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
             
             if process.returncode == 0:
                 self.logger.log("Restore point created successfully.")
@@ -84,7 +78,7 @@ class RestoreManager:
                     return False, "Failed: Shadow Copy Volume error."
                 if "Privilege" in err or "Access" in err:
                     return False, "Failed: Run as Administrator."
-                return False, f"E: {err[:50]}..." # Truncate error for UI
+                return False, f"Error: {err[:120]}"
 
         except Exception as e:
             self.logger.log(f"Exception creating restore point: {e}", "ERROR")

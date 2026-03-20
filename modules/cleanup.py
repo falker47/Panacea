@@ -1,6 +1,6 @@
 import os
 import shutil
-import glob
+import subprocess
 from modules.logger import Logger
 
 class CleanupManager:
@@ -66,7 +66,10 @@ class CleanupManager:
                     sz = os.path.getsize(fp)
                     os.remove(fp)
                     c += 1; s += sz
-                except: pass
+                except PermissionError:
+                    pass  # Locked files are expected
+                except Exception as e:
+                    self.logger.log(f"Could not delete {os.path.join(root, name)}: {e}", "WARNING")
         return c, s
 
     def clean_temp_files(self, progress_callback=None):
@@ -87,17 +90,14 @@ class CleanupManager:
                         os.remove(file_path)
                         total_deleted += 1
                         total_freed += size
-                        self.logger.log(f"Deleted file: {file_path}")
-                    except Exception as e:
-                        # self.logger.log(f"Skipped file {file_path}: {e}", "WARNING")
-                        pass # Valid to skip locked files
-                
+                    except Exception:
+                        pass  # Locked files are expected
+
                 for name in dirs:
                     dir_path = os.path.join(root, name)
                     try:
                         shutil.rmtree(dir_path)
-                        self.logger.log(f"Deleted directory: {dir_path}")
-                    except Exception as e:
+                    except Exception:
                         pass
         
         result_msg = f"Cleanup complete. Deleted {total_deleted} files, freed {total_freed / (1024*1024):.2f} MB."
@@ -115,21 +115,16 @@ class CleanupManager:
             
             result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, flags)
             
-            # SHEmptyRecycleBin functions return S_OK (0) on success
-            if result == 0 or result == -2147418113: # 0x8000FFFF (catastrophic failure) often means empty or locked? 
-                # Actually, standard HRESULTs: S_OK, E_FAIL etc.
-                # If it's already empty, it might return something else or S_OK.
-                # Let's assume success if no exception for now, but check result.
-                self.logger.log("Recycle bin emptied successfully (API call).")
+            # S_OK = 0, E_UNEXPECTED = -2147418113 (0x8000FFFF, often means already empty)
+            if result == 0:
+                self.logger.log("Recycle bin emptied successfully.")
                 return True, "Recycle bin emptied."
+            elif result == -2147418113:
+                self.logger.log("Recycle bin was already empty.")
+                return True, "Recycle bin was already empty."
             else:
-                # If it returns non-zero, it might be an issue, but let's check common ones.
-                # 0x80040154 (Class not registered) etc.
-                # Let's just log result code.
-                self.logger.log(f"Recycle bin API returned code: {result}")
-                if result == -2147467259: # 'Unspecified error', happens if empty sometimes?
-                     pass
-                return True, "Recycle bin emptied." #(Optimistic)
+                self.logger.log(f"Recycle bin API returned code: {result}", "WARNING")
+                return False, f"Recycle bin operation returned code {result}."
 
         except Exception as e:
             self.logger.log(f"Failed to empty recycle bin: {e}", "ERROR")
@@ -137,9 +132,7 @@ class CleanupManager:
 
     def open_disk_cleanup(self):
         try:
-            import subprocess
-            # Launch cleanmgr.exe
-            subprocess.Popen(["cleanmgr.exe"])
+            subprocess.Popen(["cleanmgr.exe"], creationflags=subprocess.DETACHED_PROCESS)
             self.logger.log("Launched Disk Cleanup utility.")
             return True
         except Exception as e:

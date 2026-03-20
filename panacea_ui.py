@@ -13,10 +13,19 @@ from modules.restore import RestoreManager
 from modules.performance import PerformanceManager
 from modules.utils import resource_path
 from PIL import Image
+import os
 import subprocess
 import urllib.request
 import json
 from version import VERSION, GITHUB_REPO
+
+# Color constants
+COL_GREEN = "#00FF00"
+COL_GOLD = "#FFD700"
+COL_RED = "#F44336"
+COL_BLUE = "#00BFFF"
+COL_SUCCESS = "#4CAF50"
+COL_WARNING = "#FFC107"
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -69,7 +78,6 @@ class PanaceaApp(ctk.CTk):
         self.frame_turbo = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_resurrect = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         
-        self.graphs = {} # Store graph references
 
         self._setup_dashboard_frame()
         self._setup_cleaning_frame()
@@ -79,12 +87,34 @@ class PanaceaApp(ctk.CTk):
         self._setup_turbo_frame()
         self._setup_resurrect_frame()
         
+        self._dashboard_lock = threading.Lock()
         self.select_frame("Dashboard")
         self.update_dashboard()
         
         # Start update checks
         threading.Thread(target=self._check_updates_thread, daemon=True).start()
         threading.Thread(target=self._check_app_update, daemon=True).start()
+
+    def _create_log_textbox(self, parent, height=150):
+        """Create a styled terminal-like textbox with color tags."""
+        log = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color=COL_GREEN)
+        log.configure(state="disabled")
+        log.tag_config("info", foreground=COL_GREEN)
+        log.tag_config("warn", foreground=COL_GOLD)
+        log.tag_config("err", foreground=COL_RED)
+        return log
+
+    def _log_to_widget(self, widget, msg, level="info"):
+        """Append a message to a log textbox widget (thread-safe)."""
+        def _do():
+            widget.configure(state="normal")
+            widget.insert(tk.END, msg + "\n", level)
+            widget.see(tk.END)
+            widget.configure(state="disabled")
+        try:
+            self.after(0, _do)
+        except RuntimeError:
+            pass
 
     def _load_icons(self):
         self.icons = {}
@@ -102,7 +132,7 @@ class PanaceaApp(ctk.CTk):
         try:
             img_neg = Image.open(resource_path("assets/panacea_icon_negative.png"))
             self.icons["resurrect_negative"] = ctk.CTkImage(light_image=img_neg, dark_image=img_neg, size=(24, 24))
-        except:
+        except Exception:
             self.icons["resurrect_negative"] = self.icons.get("resurrect")
 
     def _setup_sidebar(self):
@@ -198,21 +228,19 @@ class PanaceaApp(ctk.CTk):
         self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/Nexus-portfolio/"))
 
     def select_frame(self, name):
-        self.frame_dashboard.grid_forget()
-        self.frame_cleaning.grid_forget()
-        self.frame_disk.grid_forget()
-        self.frame_tools.grid_forget()
-        self.frame_apps.grid_forget()
-        self.frame_turbo.grid_forget()
-        self.frame_resurrect.grid_forget()
-        
-        if name == "Dashboard": self.frame_dashboard.grid(row=0, column=1, sticky="nsew")
-        elif name == "Cleaning": self.frame_cleaning.grid(row=0, column=1, sticky="nsew")
-        elif name == "Disk": self.frame_disk.grid(row=0, column=1, sticky="nsew")
-        elif name == "Tools": self.frame_tools.grid(row=0, column=1, sticky="nsew")
-        elif name == "Apps": self.frame_apps.grid(row=0, column=1, sticky="nsew")
-        elif name == "Turbo": self.frame_turbo.grid(row=0, column=1, sticky="nsew")
-        elif name == "Resurrect": self.frame_resurrect.grid(row=0, column=1, sticky="nsew")
+        frame_map = {
+            "Dashboard": self.frame_dashboard,
+            "Cleaning": self.frame_cleaning,
+            "Disk": self.frame_disk,
+            "Tools": self.frame_tools,
+            "Apps": self.frame_apps,
+            "Turbo": self.frame_turbo,
+            "Resurrect": self.frame_resurrect,
+        }
+        for frame in frame_map.values():
+            frame.grid_forget()
+        if name in frame_map:
+            frame_map[name].grid(row=0, column=1, sticky="nsew")
 
     def _setup_dashboard_frame(self):
         self.frame_dashboard.grid_columnconfigure((0, 1), weight=1)
@@ -295,13 +323,8 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="Open Windows Disk Cleanup", fg_color=c_base, hover_color=c_hover, command=self.run_cleanmgr).pack(fill="x", padx=20, pady=10)
         ctk.CTkLabel(btn_frame, text="Expert Warning: Takes 10+ minutes.", text_color="orange").pack(anchor="w", padx=20, pady=(10,0))
         ctk.CTkButton(btn_frame, text="Run Deep Clean (WinSxS)", fg_color="darkred", hover_color="#800000", command=self.run_deep_clean).pack(fill="x", padx=20, pady=10)
-        self.clean_log = ctk.CTkTextbox(self.frame_cleaning, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.clean_log = self._create_log_textbox(self.frame_cleaning)
         self.clean_log.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
-        self.clean_log.configure(state="disabled")
-        # Reuse god mode tags for consistent coloring if needed later
-        self.clean_log.tag_config("info", foreground="#00FF00")
-        self.clean_log.tag_config("warn", foreground="#FFD700")
-        self.clean_log.tag_config("err", foreground="#F44336")
 
     def _setup_disk_frame(self):
         self.frame_disk.grid_columnconfigure(0, weight=1)
@@ -331,12 +354,8 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(btn_row, text="Open Windows Defrag GUI", fg_color=d_base, hover_color=d_hover, command=self.run_dfrgui).pack(side="left")
         
         # Log takes remaining space
-        self.disk_log = ctk.CTkTextbox(self.frame_disk, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.disk_log = self._create_log_textbox(self.frame_disk)
         self.disk_log.grid(row=4, column=0, padx=20, pady=10, sticky="nsew")
-        self.disk_log.configure(state="disabled")
-        self.disk_log.tag_config("info", foreground="#00FF00")
-        self.disk_log.tag_config("warn", foreground="#FFD700")
-        self.disk_log.tag_config("err", foreground="#F44336")
         
         self.refresh_drives()
 
@@ -371,12 +390,8 @@ class PanaceaApp(ctk.CTk):
         # Tools Execution Log
         ctk.CTkLabel(self.frame_tools, text="Execution Log", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").grid(row=2, column=0, padx=20, pady=(5, 0), sticky="w")
         
-        self.tools_log = ctk.CTkTextbox(self.frame_tools, height=150, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.tools_log = self._create_log_textbox(self.frame_tools)
         self.tools_log.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
-        self.tools_log.configure(state="disabled")
-        self.tools_log.tag_config("info", foreground="#00FF00")
-        self.tools_log.tag_config("warn", foreground="#FFD700")
-        self.tools_log.tag_config("err", foreground="#F44336")
         
         self.frame_tools.grid_rowconfigure(3, weight=1)
 
@@ -387,10 +402,7 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkButton(f, text=text, fg_color=col, hover_color=hover_col, command=lambda: self.run_cmd(cmd, name)).pack(side="right", fill="x", expand=True)
 
     def log_tools_msg(self, msg):
-        self.tools_log.configure(state="normal")
-        self.tools_log.insert(tk.END, msg + "\n")
-        self.tools_log.see(tk.END)
-        self.tools_log.configure(state="disabled")
+        self._log_to_widget(self.tools_log, msg)
 
     def _setup_apps_frame(self):
         self.frame_apps.grid_columnconfigure(0, weight=1)
@@ -452,9 +464,11 @@ class PanaceaApp(ctk.CTk):
              lambda: self.perf_mgr.set_spooler(True)),
         ]
         
+        self.turbo_getters = {}
         for key, label, desc, get_fn, on_fn, off_fn in toggle_config:
+            self.turbo_getters[key] = get_fn
             self._create_turbo_toggle(container, key, label, desc, get_fn, on_fn, off_fn)
-        
+
         # Initial state load (in background to avoid blocking)
         threading.Thread(target=self._load_turbo_states, daemon=True).start()
 
@@ -476,32 +490,26 @@ class PanaceaApp(ctk.CTk):
         self.turbo_switches[key] = switch
 
     def _load_turbo_states(self):
-        # Load current state for each toggle
         for key, var in self.turbo_vars.items():
             try:
-                if key == "power":
-                    state = self.perf_mgr.get_power_plan() == "high"
-                elif key == "visual":
-                    state = not self.perf_mgr.get_visual_effects()
-                elif key == "sysmain":
-                    state = not self.perf_mgr.get_sysmain_status()
-                elif key == "wsearch":
-                    state = not self.perf_mgr.get_wsearch_status()
-                elif key == "spooler":
-                    state = not self.perf_mgr.get_spooler_status()
-                else:
-                    state = False
+                get_fn = self.turbo_getters.get(key)
+                state = get_fn() if get_fn else False
                 self.after(0, lambda v=var, s=state: v.set(s))
-            except:
+            except Exception:
                 pass
 
     def _turbo_toggle_changed(self, key, on_fn, off_fn):
         state = self.turbo_vars[key].get()
         def task():
-            if state:
-                on_fn()
-            else:
-                off_fn()
+            try:
+                result = on_fn() if state else off_fn()
+                # If result is a tuple (success, msg), check success
+                if isinstance(result, tuple) and not result[0]:
+                    self.after(0, lambda: self.turbo_vars[key].set(not state))
+                    self.after(0, lambda: self._show_toast("Toggle Failed", str(result[1]), "error"))
+            except Exception as e:
+                self.after(0, lambda: self.turbo_vars[key].set(not state))
+                self.after(0, lambda: self._show_toast("Toggle Failed", str(e), "error"))
         threading.Thread(target=task, daemon=True).start()
 
     def _master_toggle_changed(self):
@@ -530,6 +538,8 @@ class PanaceaApp(ctk.CTk):
         threading.Thread(target=apply_all, daemon=True).start()
 
     def update_dashboard(self):
+        if not self._dashboard_lock.acquire(blocking=False):
+            return
         threading.Thread(target=self._update_data_thread, daemon=True).start()
 
     def _update_data_thread(self):
@@ -543,15 +553,17 @@ class PanaceaApp(ctk.CTk):
             bat_perc, bat_plug = self.monitor.get_battery_status()
             self.after(0, lambda: self._update_gui(os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug))
         except Exception as e:
-            pass
+            self.logger.log(f"Dashboard update error: {e}", "WARNING")
+        finally:
+            self._dashboard_lock.release()
         self.after(3000, self.update_dashboard)
         
     def _check_updates_thread(self):
         try:
             mandatory, optional, status = self.monitor.get_windows_update_status()
             self.after(0, lambda: self._update_updates_gui(mandatory, optional, status))
-        except:
-             self.after(0, lambda: self._update_updates_gui(-1, -1, "Check Failed"))
+        except Exception:
+            self.after(0, lambda: self._update_updates_gui(-1, -1, "Check Failed"))
 
     def _update_updates_gui(self, mandatory, optional, status):
         # Hide button row first
@@ -687,9 +699,9 @@ class PanaceaApp(ctk.CTk):
 
         # Disk
         def get_color(perc):
-            if perc < 60: return "#4CAF50"
-            if perc < 85: return "#FFC107"
-            return "#F44336"
+            if perc < 60: return COL_SUCCESS
+            if perc < 85: return COL_WARNING
+            return COL_RED
         
         # ProgressBar
         current_prog = self.dash_disk_bar.get()
@@ -703,8 +715,8 @@ class PanaceaApp(ctk.CTk):
         try:
              # Access internal color if possible or just set it
              self.dash_disk_bar.configure(progress_color=new_color)
-        except:
-             pass
+        except Exception:
+            pass
 
         new_disk_val = f"{f_disk} GB Free / {t_disk} GB"
         if self.dash_disk_val.cget("text") != new_disk_val:
@@ -715,16 +727,10 @@ class PanaceaApp(ctk.CTk):
             self.dash_disk_perc.configure(text=new_disk_perc)
 
     def log_msg(self, msg):
-        self.clean_log.configure(state="normal")
-        self.clean_log.insert(tk.END, msg + "\n")
-        self.clean_log.see(tk.END)
-        self.clean_log.configure(state="disabled")
+        self._log_to_widget(self.clean_log, msg)
 
     def log_disk_msg(self, msg):
-        self.disk_log.configure(state="normal")
-        self.disk_log.insert(tk.END, msg + "\n")
-        self.disk_log.see(tk.END)
-        self.disk_log.configure(state="disabled")
+        self._log_to_widget(self.disk_log, msg)
 
     def refresh_drives(self):
         drives = self.disk_opt.get_drive_info()
@@ -740,8 +746,12 @@ class PanaceaApp(ctk.CTk):
         def task():
             self.log_msg("Starting cleanup...")
             count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=self.log_msg)
-            self.log_msg(f"Finished. Deleted {count} files. Freed {freed / (1024*1024):.2f} MB.")
-            self.after(0, lambda c=count, f=freed: self._show_toast("Cleanup Complete", f"Deleted {c} files. Freed {f / (1024*1024):.2f} MB.", "success"))
+            if count == 0:
+                self.log_msg("No temporary files found.")
+                self.after(0, lambda: self._show_toast("No Cleanup Needed", "No temporary files found.", "info"))
+            else:
+                self.log_msg(f"Finished. Deleted {count} files. Freed {freed / (1024*1024):.2f} MB.")
+                self.after(0, lambda c=count, f=freed: self._show_toast("Cleanup Complete", f"Deleted {c} files. Freed {f / (1024*1024):.2f} MB.", "success"))
         threading.Thread(target=task, daemon=True).start()
 
     def run_empty_recycle(self):
@@ -789,12 +799,10 @@ class PanaceaApp(ctk.CTk):
         threading.Thread(target=task, daemon=True).start()
 
     def run_launch(self, cmd, desc):
-        import subprocess
         try: subprocess.Popen(cmd, shell=True)
         except Exception as e: messagebox.showerror("Error", str(e))
     
     def run_battery_report(self):
-        import subprocess, os
         try:
             path = os.path.join(os.environ['USERPROFILE'], 'battery_report.html')
             subprocess.run(f'powercfg /batteryreport /output "{path}"', shell=True, check=True)
@@ -810,10 +818,8 @@ class PanaceaApp(ctk.CTk):
             threading.Thread(target=task, daemon=True).start()
 
     def run_windows_update(self):
-        # Open Windows Update Settings and try to trigger scan (hidden CMD)
         try:
-            import os
-            os.system("start ms-settings:windowsupdate")
+            subprocess.Popen("start ms-settings:windowsupdate", shell=True)
             # Use CREATE_NO_WINDOW to hide CMD flash
             subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
                              creationflags=subprocess.CREATE_NO_WINDOW)
@@ -826,10 +832,8 @@ class PanaceaApp(ctk.CTk):
             messagebox.showerror("Error", f"Failed to launch updater: {e}")
 
     def run_view_optional_updates(self):
-        # Open Windows Update optional updates page
         try:
-            import os
-            os.system("start ms-settings:windowsupdate-optionalupdates")
+            subprocess.Popen("start ms-settings:windowsupdate-optionalupdates", shell=True)
             # Refresh update status after a delay
             self.btn_update_row.pack_forget()
             self.lbl_update_status.configure(text="Looking for updates...", text_color="gray")
@@ -878,23 +882,15 @@ class PanaceaApp(ctk.CTk):
         
         ctk.CTkLabel(log_frame, text="> EXECUTION LOG", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").pack(anchor="w", padx=10, pady=5)
         
-        self.god_log = ctk.CTkTextbox(log_frame, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color="#00FF00")
+        self.god_log = self._create_log_textbox(log_frame)
+        self.god_log.tag_config("head", foreground=COL_BLUE)
         self.god_log.pack(fill="both", expand=True, padx=5, pady=5)
+        self.god_log.configure(state="normal")
         self.god_log.insert("0.0", "Waiting for user command...\n")
         self.god_log.configure(state="disabled")
-        
-        # Tag configuration for coloring
-        self.god_log.tag_config("info", foreground="#00FF00") # Green
-        self.god_log.tag_config("warn", foreground="#FFD700") # Gold
-        self.god_log.tag_config("err", foreground="#F44336")  # Red
-        self.god_log.tag_config("head", foreground="#00BFFF") # Blue
 
     def log_god_msg(self, msg, level="info"):
-        import re
-        self.god_log.configure(state="normal")
-        self.god_log.insert(tk.END, f"{msg}\n", level)
-        self.god_log.see(tk.END)
-        self.god_log.configure(state="disabled")
+        self._log_to_widget(self.god_log, msg, level)
 
     def run_god_mode(self):
         if not messagebox.askyesno("Confirm Resurrection", "Initiate System Resurrection Protocol?\n\nThis process is intensive and may take time.\nEnsure all work is saved."):
@@ -925,8 +921,10 @@ class PanaceaApp(ctk.CTk):
             current_step = 0
             
             def update_progress(step_i, status_text):
-                self.progress_bar.set(step_i / steps)
-                self.lbl_status.configure(text=status_text)
+                self.after(0, lambda s=step_i, t=status_text: (
+                    self.progress_bar.set(s / steps),
+                    self.lbl_status.configure(text=t)
+                ))
             
             try:
                 # PHASE 1: SAFETY (Auto-Enable Restore)
@@ -992,12 +990,12 @@ class PanaceaApp(ctk.CTk):
 
             except Exception as e:
                 self.log_god_msg(f"\n[!] ERROR: {str(e)}", "err")
-                self.lbl_status.configure(text="Protocol Failed", text_color="red")
-                messagebox.showerror("Error", f"Sequence failed: {e}")
-            
+                self.after(0, lambda: self.lbl_status.configure(text="Protocol Failed", text_color="red"))
+                self.after(0, lambda: messagebox.showerror("Error", f"Sequence failed: {e}"))
+
             finally:
-                self.btn_resurrect_start.configure(state="normal", text="INITIATE PROTOCOL")
-                self.lbl_status.configure(text="Ready", text_color="gray")
+                self.after(0, lambda: self.btn_resurrect_start.configure(state="normal", text="INITIATE PROTOCOL"))
+                self.after(0, lambda: self.lbl_status.configure(text="Ready", text_color="gray"))
 
         threading.Thread(target=sequence, daemon=True).start()
 class LiveGraph(ctk.CTkFrame):

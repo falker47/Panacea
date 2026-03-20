@@ -6,7 +6,7 @@ def is_admin():
     """Check if the script is running with administrative privileges."""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 def resource_path(relative_path):
@@ -18,3 +18,12 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+def decode_console_bytes(line_bytes, encodings=('utf-8', 'cp1252', 'cp850')):
+    """Decode bytes from Windows console output, trying multiple encodings."""
+    for enc in encodings:
+        try:
+            return line_bytes.decode(enc).strip()
+        except (UnicodeDecodeError, ValueError):
+            continue
+    return line_bytes.decode('utf-8', errors='replace').strip()

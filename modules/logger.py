@@ -1,6 +1,5 @@
 import logging
 import os
-from datetime import datetime
 
 class Logger:
     _instance = None
@@ -46,6 +45,3 @@ class Logger:
             self.logger.warning(message)
         else:
             self.logger.info(message)
-
-    def get_log_path(self):
-        return os.path.join(os.environ['USERPROFILE'], 'Documents', 'SystemOptimizer', 'log.txt')

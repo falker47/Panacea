@@ -254,14 +254,15 @@ class PanaceaApp(ctk.CTk):
         self.card_disk = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
         self.card_disk.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
         ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        disk_bar_frame = ctk.CTkFrame(self.card_disk, fg_color="transparent")
+        disk_bar_frame = ctk.CTkFrame(self.card_disk, fg_color="transparent", height=24)
         disk_bar_frame.pack(pady=10, fill="x", padx=30)
-        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=22)
-        self.dash_disk_bar.pack(fill="x")
+        disk_bar_frame.pack_propagate(False)
+        self.dash_disk_bar = ctk.CTkProgressBar(disk_bar_frame, height=24)
+        self.dash_disk_bar.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.dash_disk_bar_label = ctk.CTkLabel(
-            disk_bar_frame, text="0%", font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="white", fg_color="transparent", height=22)
-        self.dash_disk_bar_label.place(in_=self.dash_disk_bar, relx=0.5, rely=0.5, anchor="center")
+            disk_bar_frame, text="0%", font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="white", fg_color="transparent")
+        self.dash_disk_bar_label.place(relx=0.5, rely=0.5, anchor="center")
         self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
         self.dash_disk_val.pack()
         self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
@@ -725,17 +726,27 @@ class PanaceaApp(ctk.CTk):
         sys.exit(0)
 
     def _center_window(self):
-        """Center the window on screen using actual rendered dimensions."""
+        """Center the window on screen, accounting for DPI scaling."""
         self.update_idletasks()
         w = self.winfo_width()
         h = self.winfo_height()
-        # If window hasn't rendered yet (dimensions <= 1), retry shortly
         if w <= 1 or h <= 1:
             self.after(50, self._center_window)
             return
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        self.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+        # Get DPI scaling factor (e.g. 1.25 at 125%, 1.5 at 150%)
+        try:
+            scale = self._get_window_scaling()
+        except Exception:
+            scale = 1.0
+        # winfo_screen* returns physical pixels; geometry expects logical coords
+        sw = self.winfo_screenwidth() / scale
+        sh = self.winfo_screenheight() / scale
+        # w, h from winfo are already in physical pixels, convert to logical
+        lw = w / scale
+        lh = h / scale
+        x = int((sw - lw) / 2)
+        y = int((sh - lh) / 2)
+        self.geometry(f"+{x}+{y}")
 
     def _on_close(self):
         """Graceful shutdown: signal threads to stop, then destroy."""

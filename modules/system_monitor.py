@@ -61,50 +61,35 @@ class SystemMonitor:
 
     def _fetch_ram_info(self):
         try:
-            cmd = 'wmic memorychip get Speed,SMBIOSMemoryType /format:csv'
-            output = subprocess.check_output(cmd, shell=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode()
-            lines = [l.strip() for l in output.split('\n') if l.strip()]
-            
-            if len(lines) < 2:
-                # Should be at least header + 1 data line
-                return ""
-            
-            # Header line: Node,SMBIOSMemoryType,Speed (order may vary)
-            header = lines[0].split(',')
-            
-            # Identify columns
-            speed_idx = -1
-            type_idx = -1
-            
-            for i, col in enumerate(header):
-                if "Speed" in col: speed_idx = i
-                if "SMBIOSMemoryType" in col: type_idx = i
-            
-            if speed_idx == -1 or type_idx == -1:
+            # wmic was removed in Windows 11 24H2+; use CIM via PowerShell.
+            cmd = ['powershell', '-NoProfile', '-Command',
+                   "Get-CimInstance Win32_PhysicalMemory | "
+                   "Select-Object Speed, SMBIOSMemoryType | ConvertTo-Json -Compress"]
+            output = subprocess.check_output(
+                cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW
+            ).decode().strip()
+
+            if not output:
                 return ""
 
-            # Data lines
-            data_lines = lines[1:]
-            module_count = len(data_lines)
-            
-            # Parse first module
-            parts = data_lines[0].split(',')
-            
-            if len(parts) <= max(speed_idx, type_idx):
+            import json
+            data = json.loads(output)
+            # Single module: PowerShell returns an object, not an array
+            if isinstance(data, dict):
+                data = [data]
+            if not data:
                 return ""
-                
-            speed = parts[speed_idx]
-            try:
-                smbios_type = int(parts[type_idx])
-            except (ValueError, IndexError):
-                smbios_type = 0
-            
+
+            first = data[0]
+            speed = first.get("Speed", "")
+            smbios_type = first.get("SMBIOSMemoryType", 0) or 0
+
             # SMBIOSMemoryType: 20=DDR, 21=DDR2, 24=DDR3, 26=DDR4, 34=DDR5
             type_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
-            ddr_type = type_map.get(smbios_type, "DDR")
-            
-            return f"{ddr_type} @ {speed} MHz ({module_count} Moduli)"
-        except Exception as e:
+            ddr_type = type_map.get(int(smbios_type), "DDR")
+
+            return f"{ddr_type} @ {speed} MHz ({len(data)} Moduli)"
+        except Exception:
             return ""
 
     def get_disk_usage(self):

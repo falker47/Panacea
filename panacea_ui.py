@@ -32,7 +32,7 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
 class PanaceaApp(ctk.CTk):
-    def __init__(self, root_is_deprecated_use_self):
+    def __init__(self):
         super().__init__()
         
         self.title(f"Panacea System Optimizer v{VERSION}")
@@ -932,8 +932,12 @@ class PanaceaApp(ctk.CTk):
         if messagebox.askyesno("Create Restore Point", "Create a Windows System Restore Point?\n(Requires Admin privileges)\nThis may take a minute."):
             def task():
                 success, msg = self.restore_mgr.create_restore_point("Panacea Manual Point")
-                if success: self.after(0, lambda m=msg: self._show_toast("Success", m, "success"))
-                else: self.after(0, lambda m=msg: self._show_toast("Error", m, "error"))
+                if success:
+                    self.after(0, lambda m=msg: self._show_toast("Success", m, "success"))
+                elif msg.startswith("Skipped:"):
+                    self.after(0, lambda m=msg: self._show_toast("Skipped", m, "warning"))
+                else:
+                    self.after(0, lambda m=msg: self._show_toast("Error", m, "error"))
             threading.Thread(target=task, daemon=True).start()
 
     def run_windows_update(self):

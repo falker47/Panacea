@@ -49,15 +49,39 @@ class RestoreManager:
             self.logger.log(f"Error listing restore points: {e}", "ERROR")
             return []
 
+    def _get_latest_restore_point_seq(self):
+        """Return SequenceNumber of newest restore point, or None if none/error."""
+        try:
+            p = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command',
+                 "Get-ComputerRestorePoint | "
+                 "Sort-Object SequenceNumber | "
+                 "Select-Object -Last 1 -ExpandProperty SequenceNumber"],
+                capture_output=True, text=True, timeout=15,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            if p.returncode != 0:
+                return None
+            out = p.stdout.strip()
+            return int(out) if out else None
+        except Exception:
+            return None
+
     def create_restore_point(self, description="Panacea Auto-Restore"):
         """
         Creates a Windows System Restore Point.
         Requires Administrative privileges.
+
+        Windows throttles restore-point creation to one per 24h by default
+        (SystemRestorePointCreationFrequency reg value). When throttled,
+        Checkpoint-Computer exits 0 but silently does nothing, so we compare
+        the latest sequence number before/after to detect this.
         """
         self.logger.log(f"Attempting to create restore point: {description}")
-        
+
         # Enable it first just in case
         self.ensure_restore_enabled()
+
+        seq_before = self._get_latest_restore_point_seq()
 
         # Escape single quotes for PowerShell
         safe_desc = description.replace("'", "''")
@@ -69,8 +93,16 @@ class RestoreManager:
                 capture_output=True, text=True, timeout=60,
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
-            
+
             if process.returncode == 0:
+                seq_after = self._get_latest_restore_point_seq()
+                if (seq_before is not None and seq_after is not None
+                        and seq_after == seq_before):
+                    self.logger.log(
+                        "Restore point skipped: Windows 24h throttle "
+                        "(SystemRestorePointCreationFrequency).", "WARNING")
+                    return False, ("Skipped: a restore point was already "
+                                   "created within the last 24h (Windows limit).")
                 self.logger.log("Restore point created successfully.")
                 return True, "Restore Point created successfully."
             else:

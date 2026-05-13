@@ -65,7 +65,7 @@ def main():
         splash.destroy()
 
     # --- Main App ---
-    app = PanaceaApp(None)
+    app = PanaceaApp()
     app.mainloop()
 
 if __name__ == "__main__":

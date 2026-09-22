@@ -26,11 +26,7 @@ jobs:
         run: python -m compileall -q main.py panacea_ui.py version.py modules
 
       - name: Import smoke test
-        shell: python
-        run: |
-          import panacea_ui
-          import version
-          assert version.VERSION == "1.48", version.VERSION
+        run: python -c "import panacea_ui, version; assert version.VERSION == '1.48', version.VERSION"
 
       - name: Build executable
         shell: cmd

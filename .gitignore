@@ -1,13 +1,45 @@
+# Build artifacts
+build/
+dist/
+*.spec
+*.exe
+release/
+*.zip
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+*.egg
 
-# PyInstaller
-build/
-
-# VF
+# Virtual environments
 venv/
-.env
-modules/__pycache__/
+env/
+ENV/
+.venv/
+Lib/
+Scripts/
+Include/
+share/
+pyvenv.cfg
 
+# Environment / local config
+.env
+.env.*
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+modules/__pycache__/

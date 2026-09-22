@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile sources
+        run: python -m compileall -q main.py panacea_ui.py version.py modules
+
+      - name: Import smoke test
+        run: python -c "import panacea_ui, version; assert version.VERSION == '1.48', version.VERSION"
+
+      - name: Build executable
+        shell: cmd
+        run: >-
+          python -m PyInstaller
+          --noconsole
+          --onefile
+          --name "Panacea"
+          --icon="assets\panacea_icon.ico"
+          --add-data "assets;assets"
+          --clean
+          --collect-all customtkinter
+          main.py
+          --distpath "dist"
+          --workpath "build"
+          --specpath .
+
+      - name: Verify packaged executable
+        shell: powershell
+        run: |
+          if (-not (Test-Path "dist\Panacea.exe")) {
+            throw "PyInstaller did not produce dist\Panacea.exe"
+          }

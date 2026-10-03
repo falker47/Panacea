@@ -205,7 +205,7 @@ class PanaceaApp(ctk.CTk):
         self.footer_label = ctk.CTkLabel(self.sidebar_frame, text=footer_text,
                                          font=ctk.CTkFont(size=10), text_color="gray", cursor="hand2")
         self.footer_label.grid(row=9, column=0, padx=10, pady=(2, 20), sticky="s")
-        self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/Nexus-portfolio/"))
+        self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/"))
 
     def select_frame(self, name):
         frame_map = {

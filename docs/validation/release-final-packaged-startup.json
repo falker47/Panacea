@@ -1,0 +1,75 @@
+{
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python_harness": "3.14.3",
+  "executable": "C:\\Users\\Falker\\Desktop\\Code\\Panacea\\build\\release-candidate\\Panacea.exe",
+  "sha256": "6b40342a235824b4f368a4c2c8d131fa53c16385209b0317e82021c5228776d3",
+  "method": "Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.",
+  "samples": [
+    {
+      "sample": 1,
+      "mapped_window_seconds": 2.6392380999750458,
+      "window": {
+        "pid": 3076,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.6994568999507464,
+      "exit_code": 0
+    },
+    {
+      "sample": 2,
+      "mapped_window_seconds": 1.7780783000052907,
+      "window": {
+        "pid": 45288,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.837784699979238,
+      "exit_code": 0
+    },
+    {
+      "sample": 3,
+      "mapped_window_seconds": 1.8521211000042967,
+      "window": {
+        "pid": 41976,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.912040999974124,
+      "exit_code": 0
+    },
+    {
+      "sample": 4,
+      "mapped_window_seconds": 1.9250545999966562,
+      "window": {
+        "pid": 11508,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.1927169999689795,
+      "exit_code": 0
+    },
+    {
+      "sample": 5,
+      "mapped_window_seconds": 1.8356363999773748,
+      "window": {
+        "pid": 29976,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.896478799986653,
+      "exit_code": 0
+    }
+  ],
+  "median_mapped_window_seconds": 1.8521211000042967
+}

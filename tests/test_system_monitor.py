@@ -5,10 +5,7 @@ import modules.system_monitor as monitoring
 
 
 def bare_monitor():
-    monitor = SystemMonitor.__new__(SystemMonitor)
-    monitor._cache = {}
-    monitor._cache_ttl = 120
-    return monitor
+    return SystemMonitor()
 
 
 def test_fast_sample_does_not_wait_for_hardware_metadata():
@@ -84,10 +81,19 @@ def test_monitor_queries_launch_trusted_powershell_and_preserve_results(monkeypa
     monkeypatch.setattr(monitoring, 'system_executable', lambda name: trusted if name == 'powershell.exe' else None, raising=False)
     monkeypatch.setattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
     calls = []
-    def check_output(arguments, **kwargs):
+    def popen(arguments, **kwargs):
         calls.append((arguments, kwargs))
-        return output
-    monkeypatch.setattr(monitoring.subprocess, 'check_output', check_output)
+        class FinishedQuery:
+            returncode = 0
+            stdout = stderr = stdin = None
+            def communicate(self, timeout):
+                return output, b''
+            def poll(self):
+                return 0
+            def wait(self, timeout):
+                return 0
+        return FinishedQuery()
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', popen)
     result = getattr(bare_monitor(), method)()
     assert calls[0][0][0] == trusted
     assert calls[0][0][1:3] == ['-NoProfile', '-Command']
@@ -106,6 +112,224 @@ def test_monitor_query_resolution_failure_never_falls_back_to_path(monkeypatch, 
     monkeypatch.setattr(monitoring, 'system_executable', fail_resolution, raising=False)
     monkeypatch.setattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
     calls = []
-    monkeypatch.setattr(monitoring.subprocess, 'check_output', lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', lambda *args, **kwargs: calls.append(args))
     assert getattr(bare_monitor(), method)() == expected
     assert calls == []
+
+import threading
+import time
+import sys
+
+
+class BlockingQueryProcess:
+    def __init__(self):
+        self.returncode = None
+        self.communicating = threading.Event()
+        self.killed = threading.Event()
+        self.waited = threading.Event()
+        self.kill_thread = None
+        self.stdout = self.stderr = self.stdin = None
+
+    def communicate(self, timeout):
+        self.communicating.set()
+        assert self.killed.wait(3), 'test query was never cancelled'
+        return b'', b''
+
+    def poll(self):
+        return self.returncode
+
+    def kill(self):
+        self.kill_thread = threading.get_ident()
+        self.returncode = -1
+        self.killed.set()
+
+    def wait(self, timeout):
+        assert self.killed.wait(timeout)
+        self.waited.set()
+        return self.returncode
+
+
+def lifecycle_monitor():
+    subject = SystemMonitor()
+    assert hasattr(subject, '_query_output'), 'Monitor queries need owned process lifecycle'
+    assert hasattr(subject, 'close'), 'Monitor needs nonblocking query cancellation'
+    return subject
+
+
+def run_query_in_thread(subject, args=('trusted.exe',), timeout=30):
+    results = []
+    def run():
+        try:
+            results.append(subject._query_output(list(args), timeout=timeout))
+        except Exception as exc:
+            results.append(exc)
+    worker = threading.Thread(target=run)
+    worker.start()
+    return worker, results
+
+
+def test_close_cancels_and_reaps_owned_query_off_calling_thread(monkeypatch):
+    subject = lifecycle_monitor()
+    process = BlockingQueryProcess()
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', lambda *args, **kwargs: process)
+    worker, results = run_query_in_thread(subject)
+    try:
+        assert process.communicating.wait(2)
+        started = time.monotonic()
+        subject.close()
+        assert time.monotonic() - started < 0.2
+        assert process.waited.wait(2)
+        worker.join(2)
+        assert not worker.is_alive()
+        assert process.kill_thread != threading.get_ident()
+        assert results and isinstance(results[0], Exception)
+    finally:
+        if not process.killed.is_set():
+            process.kill()
+        worker.join(3)
+
+
+def test_closed_monitor_never_launches_another_query(monkeypatch):
+    subject = lifecycle_monitor()
+    calls = []
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', lambda *args, **kwargs: calls.append(args))
+    subject.close()
+    with pytest.raises(RuntimeError, match='closed'):
+        subject._query_output(['trusted.exe'], timeout=1)
+    assert calls == []
+
+
+def test_close_during_atomic_process_creation_cancels_resulting_child(monkeypatch):
+    subject = lifecycle_monitor()
+    entered, release = threading.Event(), threading.Event()
+    process = BlockingQueryProcess()
+    def create(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return process
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', create)
+    worker, results = run_query_in_thread(subject)
+    try:
+        assert entered.wait(2)
+        started = time.monotonic()
+        subject.close()
+        assert time.monotonic() - started < 0.2
+        assert not process.killed.is_set()
+        release.set()
+        assert process.waited.wait(2)
+        worker.join(2)
+        assert not worker.is_alive()
+        assert results and isinstance(results[0], Exception)
+        with pytest.raises(RuntimeError, match='closed'):
+            subject._query_output(['trusted.exe'], timeout=1)
+    finally:
+        release.set()
+        if not process.killed.is_set():
+            process.kill()
+        worker.join(3)
+
+
+def test_query_timeout_kills_and_waits_before_preserving_timeout(monkeypatch):
+    subject = lifecycle_monitor()
+    process = BlockingQueryProcess()
+    def timeout(timeout):
+        raise monitoring.subprocess.TimeoutExpired('trusted.exe', timeout)
+    process.communicate = timeout
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', lambda *args, **kwargs: process)
+    with pytest.raises(monitoring.subprocess.TimeoutExpired):
+        subject._query_output(['trusted.exe'], timeout=0.1)
+    assert process.killed.is_set()
+    assert process.waited.is_set()
+    subject.close()
+
+
+def test_failed_process_creation_does_not_poison_registry_or_shutdown(monkeypatch):
+    subject = lifecycle_monitor()
+    def fail(*args, **kwargs):
+        raise OSError('creation failed')
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', fail)
+    with pytest.raises(OSError, match='creation failed'):
+        subject._query_output(['trusted.exe'], timeout=1)
+    subject.close()
+    with pytest.raises(RuntimeError, match='closed'):
+        subject._query_output(['trusted.exe'], timeout=1)
+
+
+def test_native_sleeping_fixture_is_reaped_by_monitor_close(tmp_path, monkeypatch):
+    subject = lifecycle_monitor()
+    real_popen = monitoring.subprocess.Popen
+    processes = []
+    def native_fixture(arguments, **kwargs):
+        assert arguments[0] == sys.executable
+        kwargs['cwd'] = str(tmp_path)
+        process = real_popen(arguments, **kwargs)
+        processes.append(process)
+        return process
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', native_fixture)
+    child_script = tmp_path / 'sleeping_fixture.py'
+    ready_file = tmp_path / 'ready.txt'
+    child_script.write_text('import pathlib,sys,time\npathlib.Path(sys.argv[1]).write_text("ready")\ntime.sleep(30)\n')
+    worker, results = run_query_in_thread(subject, (sys.executable, str(child_script), str(ready_file)), timeout=30)
+    try:
+        deadline = time.monotonic() + 3
+        while not ready_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready_file.exists(), 'native fixture did not start'
+        subject.close()
+        worker.join(3)
+        assert not worker.is_alive()
+        assert results and isinstance(results[0], Exception)
+        assert len(processes) == 1
+        assert processes[0].poll() is not None
+        assert processes[0].wait(timeout=1) is not None
+    finally:
+        subject.close()
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+        worker.join(3)
+
+
+def test_query_communication_error_still_kills_and_waits(monkeypatch):
+    subject = lifecycle_monitor()
+    process = BlockingQueryProcess()
+    def fail(timeout):
+        raise OSError('pipe read failed')
+    process.communicate = fail
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', lambda *args, **kwargs: process)
+    with pytest.raises(OSError, match='pipe read failed'):
+        subject._query_output(['trusted.exe'], timeout=1)
+    assert process.killed.is_set()
+    assert process.waited.is_set()
+    subject.close()
+
+
+def test_native_timeout_reaps_fixture_and_closes_its_pipes(tmp_path, monkeypatch):
+    subject = lifecycle_monitor()
+    real_popen = monitoring.subprocess.Popen
+    processes = []
+    def native_fixture(arguments, **kwargs):
+        assert arguments[0] == sys.executable
+        kwargs['cwd'] = str(tmp_path)
+        process = real_popen(arguments, **kwargs)
+        processes.append(process)
+        return process
+    monkeypatch.setattr(monitoring.subprocess, 'Popen', native_fixture)
+    child_script = tmp_path / 'sleeping_fixture.py'
+    child_script.write_text('import time\ntime.sleep(30)\n')
+    try:
+        with pytest.raises(monitoring.subprocess.TimeoutExpired):
+            subject._query_output([sys.executable, str(child_script)], timeout=0.1)
+        assert len(processes) == 1
+        assert processes[0].poll() is not None
+        assert processes[0].stdout.closed
+        assert processes[0].stderr.closed
+    finally:
+        subject.close()
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+            process.stdout.close()
+            process.stderr.close()

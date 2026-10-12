@@ -31,7 +31,7 @@ Sources: [sharing rules](https://learn.microsoft.com/en-us/windows/win32/api/fil
 | --- | --- |
 | Original attribute-conversion reproductions before patch | RED: three cleanup and three Turbo cases |
 | pytest tests/test_cleanup.py tests/test_performance.py --basetemp build/tests-binding-completed -q | 53 passed |
-| pytest tests --basetemp build/tests-commit-candidate -q | 221 passed; no skips or failures, including frozen v1.47 source detection excerpt with mocked candidate manifest |
+| pytest tests --basetemp build/tests-final-monitor-lifecycle -q | 231 passed; no skips or failures, including frozen v1.47 detection excerpt and native owned-process/timeout fixtures |
 | Ruff; compileall main/UI/version/modules/scripts; imports | Passed |
 | Isolated PyInstaller 6.22.3 build; PE/name/version/checksum; real EXE --smoke-test | Passed; candidate-package.json |
 

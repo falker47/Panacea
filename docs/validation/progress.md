@@ -4,11 +4,11 @@
 
 - UI, command/cleanup/Turbo/restore safety, verified updater and draft release pipeline implemented for 1.49.0 on codex/panacea-next-generation.
 - Independent review found five defects; all corrected. Extended native attribute-mask testing found a further cleanup/Turbo path-binding defect; immutable opened-object validation and retained relative-create handles corrected it. A fresh case-sensitivity hypothesis was investigated and its native prerequisite rejected (145); see final-security.md.
-- Final integrated suite: 221 passed, zero skipped/failed, including published v1.47 source comparison/detection against a mocked candidate manifest; actual old EXE migration remains unrun. Ruff and compile/import checks passed. An earlier transient Tk read failure remains documented, not hidden.
-- Final isolated PyInstaller 6.22.3 package: 24,204,263 bytes, SHA-256 aab331fe38ecf186f5cb1d7f095871d49c4ae4dedfc4b7ffdac79f0d67397484; PE/version1.49.0 and real safe smoke exit0. Unsigned.
+- Final integrated suite: 231 passed, no skips/failures, including v1.47 source detection with mocked manifest and native monitor process/pipe cleanup; actual old EXE migration remains unrun. Ruff and compile/import checks passed. The earlier transient Tk failure remains documented.
+- Final isolated PyInstaller 6.22.3 package: 24,206,497 bytes, SHA-256 6b40342a235824b4f368a4c2c8d131fa53c16385209b0317e82021c5228776d3; PE/version1.49.0 and five real safe smokes exit0. Unsigned.
 - Forty-two final screenshots at two physical sizes and three CTk scales captured and visually reviewed; actual OS DPI changes remain untested.
-- Five final source timings and intermediate per-process idle samples recorded in performance-report.md; preserved before evidence excludes UAC/extraction.
-- Next: coherent commit/push/draft PR, exact-commit Windows CI, concrete Windows VM verification request. Stable publication, actual prior-version migration and new latest-download/ZEROfilez acceptance remain pending.
+- Fresh post-shutdown-correction source timings: median ready 0.894s / first metrics 0.699s; five packaged mapped-window samples median 1.852s. Earlier cohorts/idle data remain retained.
+- PR2 is open/draft, b7e8efb and cac08c8 pushed. CI cac08c8 passed; its orphan log motivated the final monitor correction. Next: final commit/CI. An expressly authorized disposable VM was requested; none supplied yet. Publication, real old-version migration and new latest/ZEROfilez acceptance remain pending.
 
 ## Earlier chronological checkpoint (superseded)
 

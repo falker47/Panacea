@@ -12,7 +12,7 @@ The prior-release source's first dashboard callback waited for RAM/disk metadata
 
 Raw baseline: [before-startup.json](before-startup.json). Current summary and all five raw heartbeat arrays: [final-validated-startup.json](final-validated-startup.json). Individual process outputs: build/validation/final-validated-sample-0.json through final-validated-sample-4.json.
 
-## Final post-build five-sample comparison
+## Five-sample comparison before the final query-shutdown correction
 
 The controller confirmed that the isolated PyInstaller build and smoke test were complete before this final repeat began. No build or tests ran concurrently. All five source processes completed successfully, with usable 1020x680 windows. The earlier exploratory run remains preserved as [final-validated-prebuild-startup.json](final-validated-prebuild-startup.json); the final-validated summary and individual sample files now contain the post-build repeat.
 
@@ -52,6 +52,12 @@ The JSON key working_set_mb contains the reported binary MiB values. Neither a z
 The final local Windows binary was built with isolated PyInstaller 6.22.3 and Python 3.14.3. Five sequential fresh `--smoke-test` launches all exited0 and produced a native visible client area1020x680. `scripts/packaged_probe.py` observed the first visible usable-sized window every20ms; median was1.906254s, individual values2.098890/1.919202/1.906254/1.799750/1.700776s. This includes onefile extraction and excludes UAC. Fixed1.5s smoke observation affects total runtime but not mapped-window time. No OS cache purge was performed; these are sequential cached-environment samples, not a controlled cold/warm experiment. [Raw package samples](packaged-startup.json).
 
 The binary is24,204,263 bytes,8.6% larger than published v1.47's22,290,919 bytes. Runtime/toolchain and functionality differ, so this is an artifact-size comparison, not a controlled optimization claim. The prior EXE was downloaded/hash-verified but never executed on the host. [Candidate identity](candidate-package.json).
+
+## Final query-shutdown revision
+
+The final correction tracks/cancels only owned read-only monitor queries and closes their pipes. Older cohorts remain retained at their measured revisions. A fresh equivalent five-sample source run after the final build, without parallel build/capture work, is [release-final-startup.json](release-final-startup.json): median readiness 0.894027s versus baseline 1.238126s (27.8% lower), first core metric 0.698827s versus 3.305327s (78.9% lower), heartbeat p95 13.6925ms versus 13.6431ms (similar), maximum 160.7414ms versus 229.0915ms. Readiness is the shared 150ms event-loop observation after construction; first metric is GUI metric-callback entry, not a separate paint-completion measurement. Both original hooks share this scope.
+
+The final local package is 24,206,497 bytes with SHA-256 6b40342a235824b4f368a4c2c8d131fa53c16385209b0317e82021c5228776d3. All five new safe EXE launches passed with 1020x680 native visible client areas; median mapped-window time 1.852121s. [Raw final package samples](release-final-packaged-startup.json). These sequential samples retain the cache/UAC limits of the earlier package cohort. The current package remains unsigned. Real prior-version migration and true OS DPI are pending.
 
 ## Limits
 

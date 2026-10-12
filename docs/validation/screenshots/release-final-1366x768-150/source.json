@@ -1,0 +1,12 @@
+{
+  "recorded_utc": "2026-10-12T16:12:11.7368338Z",
+  "source_files": {
+    "panacea_ui.py": "b5f6a2bb8d08b7f9273fbfe81da23d1d50cb30b102c59104f12e0224549bc89c",
+    "modules\\system_monitor.py": "57a4bfed2bd80d3079c51e1ecdb21b216bfd257cdbfd843a7667ebe94bed7160",
+    "modules\\cleanup.py": "3de29e1c50156f4b4fe282d132a05974e71671345f3f01eeb0f105cdeb500fda",
+    "modules\\performance.py": "39ee7dd5becbd8d9b45638130f27ce972dd51b5c2f1a512d64e9c8277ec9f4aa",
+    "modules\\protected_files.py": "dfd4c33032a8967f569a3a69f283e043201c6239382acfe87c37870a90b29a91"
+  },
+  "method": "Seven current source views, native Windows pixels, 1366x768, CTk widget1.5/window1.0, 8000ms settle. Parent visually inspected all seven. No maintenance.",
+  "actual_os_dpi_tested": false
+}

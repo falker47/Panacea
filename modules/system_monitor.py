@@ -4,10 +4,17 @@ import platform
 import shutil
 import subprocess
 import time
+import threading
+import logging
 from modules.commands import system_executable
 
 class SystemMonitor:
     def __init__(self):
+        self._query_lock = threading.Lock()
+        self._query_processes = {}
+        self._query_closed = threading.Event()
+        self._close_lock = threading.Lock()
+        self._query_reaper = None
         # Store previous CPU times for delta-based usage calculation
         self._prev_idle = 0
         self._prev_total = 0
@@ -15,6 +22,76 @@ class SystemMonitor:
         # Cache for slow calls (wmic/PowerShell)
         self._cache = {}
         self._cache_ttl = 120  # seconds
+
+    def _query_output(self, arguments, timeout):
+        """Own each read-only query from atomic creation through process reap."""
+        process = None
+        reap_lock = threading.Lock()
+        try:
+            # Close's UI-side Event never waits on this lock. Its cancellation
+            # thread waits until any in-flight CreateProcess is registered.
+            with self._query_lock:
+                if self._query_closed.is_set():
+                    raise RuntimeError('System monitor is closed')
+                process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           stdin=subprocess.DEVNULL, shell=False,
+                                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                self._query_processes[process] = reap_lock
+            if self._query_closed.is_set():
+                raise RuntimeError('System monitor is closed')
+            output, error = process.communicate(timeout=timeout)
+            if self._query_closed.is_set():
+                raise RuntimeError('System monitor is closed')
+            if process.returncode:
+                raise subprocess.CalledProcessError(process.returncode, arguments, output=output, stderr=error)
+            return output
+        finally:
+            if process is not None:
+                self._reap_query(process, reap_lock)
+                # Only the communicating worker closes its streams. A close
+                # reaper must not race an active Windows pipe reader.
+                if process.poll() is not None:
+                    for stream in (process.stdin, process.stdout, process.stderr):
+                        if stream is not None:
+                            try:
+                                stream.close()
+                            except OSError:
+                                logging.getLogger(__name__).exception('Cannot close owned monitor query pipe')
+
+    def _reap_query(self, process, reap_lock):
+        # Communication may finish concurrently with cancellation. Serialize
+        # cleanup per handle, never block Tk, and never target an unowned PID.
+        with reap_lock:
+            try:
+                if process.poll() is None:
+                    try:
+                        process.kill()
+                    except OSError:
+                        # It may have exited between poll and TerminateProcess.
+                        if process.poll() is None:
+                            raise
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                logging.getLogger(__name__).exception('Cannot reap owned monitor query')
+            finally:
+                with self._query_lock:
+                    self._query_processes.pop(process, None)
+
+    def close(self):
+        """Cancel only owned read-only queries without blocking the UI thread."""
+        self._query_closed.set()
+        with self._close_lock:
+            if self._query_reaper is not None:
+                return
+            def cancel_owned():
+                with self._query_lock:
+                    owned = tuple(self._query_processes.items())
+                for process, reap_lock in owned:
+                    self._reap_query(process, reap_lock)
+            # Keep interpreter shutdown alive just long enough to reap our
+            # children after Tk closes; daemon query workers alone cannot do it.
+            self._query_reaper = threading.Thread(target=cancel_owned, name='panacea-monitor-close', daemon=False)
+            self._query_reaper.start()
 
     def _cached(self, key, func):
         """Return cached result if fresh, otherwise call func and cache it."""
@@ -76,9 +153,7 @@ class SystemMonitor:
             cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
                    "Get-CimInstance Win32_PhysicalMemory | "
                    "Select-Object Speed, SMBIOSMemoryType | ConvertTo-Json -Compress"]
-            output = subprocess.check_output(
-                cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW, shell=False
-            ).decode().strip()
+            output = self._query_output(cmd, timeout=15).decode().strip()
 
             if not output:
                 return ""
@@ -122,7 +197,7 @@ class SystemMonitor:
         try:
             cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
                    "Get-Partition -DriveLetter C | Get-Disk | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
-            output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW, shell=False).decode().strip()
+            output = self._query_output(cmd, timeout=15).decode().strip()
 
             if '|' in output:
                 model_name, media_type = output.rsplit('|', 1)
@@ -245,7 +320,7 @@ foreach ($update in $result.Updates) {
 Write-Output "$mandatory,$optional"
 """
             cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command', ps_script]
-            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45, shell=False).decode().strip()
+            output = self._query_output(cmd, timeout=45).decode().strip()
             
             lines = output.splitlines()
             if not lines: return 0, 0, "Unknown"

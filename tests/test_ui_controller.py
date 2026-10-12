@@ -304,3 +304,28 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
         _destroy_real_app(app)
         panacea_ui.ctk.set_widget_scaling(1.0)
         panacea_ui.ctk.set_window_scaling(1.0)
+
+
+def test_application_close_cancels_monitor_queries_before_destroying_tk():
+    app = app_without_window()
+    app._update_installing = False
+    app._update_cancel = threading.Event()
+    calls = []
+    app.monitor = SimpleNamespace(close=lambda: calls.append('monitor-close'))
+    app.destroy = lambda: calls.append('destroy')
+    app._on_close()
+    assert calls == ['monitor-close', 'destroy']
+    assert app._shutdown.is_set()
+    assert app._update_cancel.is_set()
+
+
+def test_update_replacement_guard_keeps_monitor_running_when_close_is_refused():
+    app = app_without_window()
+    app._update_installing = True
+    app._show_toast = Mock()
+    app.monitor = SimpleNamespace(close=Mock())
+    app.destroy = Mock()
+    app._on_close()
+    app.monitor.close.assert_not_called()
+    app.destroy.assert_not_called()
+    assert not app._shutdown.is_set()

@@ -886,6 +886,7 @@ class PanaceaApp(ctk.CTk):
         self._shutdown.set()
         self._resurrect_cancel.set()
         self._update_cancel.set()
+        self.monitor.close()
         self.workers.close()
         self.destroy()
 

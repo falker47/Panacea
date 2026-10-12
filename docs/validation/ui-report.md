@@ -116,3 +116,19 @@ Five-sample source timing evidence and its tail-latency caveat are in [performan
 No UAC, cleanup, repair, Turbo mutation, updater installation or Windows settings change was performed during these source evidence runs.
 
 No commit, branch mutation or release publication was performed by this domain.
+
+## Monitor query shutdown correction
+
+CI run 38272755049 passed its checks but runner orphan cleanup still terminated PowerShell/conhost after packaged smoke closure. The completed green cac08c8 snapshot is therefore intermediate evidence, not proof of correct query shutdown. Source inspection found that daemon monitor workers used unowned check_output calls and Tk shutdown did not cancel them.
+
+The three read-only queries now share a thread-safe owned-Popen registry. The closed check, process creation and registration are atomic under one short lock. SystemMonitor.close immediately marks the monitor closed and starts one non-daemon cancellation/reap thread, so Tk never waits for CreateProcess, communication or reap. That thread waits for any already-started constructor to register, kills only owned query handles and waits with a two-second bound per child. Queries started after closure are refused. The owning query worker closes its own stdout/stderr streams after reap; the cancellation thread never closes a pipe while its reader is active. TimeoutExpired and the existing query parsing/error contracts remain intact, with trusted executable argv and shell=False preserved. PanaceaApp calls monitor.close before destroying Tk; the update-replacement close guard remains in force.
+
+Watched RED-to-GREEN checks cover off-caller-thread cancellation, no launch after close, close during a held constructor, timeout, failed Popen, communication failure, the UI close hook and native timeout pipe cleanup. Two native fixtures launch only the current Python executable with sleeping scripts inside temporary test directories: closure is verified to kill and wait the owned child, and timeout is verified to reap the child and close stdout/stderr. No real PowerShell or maintenance command is invoked by those fixtures.
+
+Fresh isolated-runtime verification: 19 monitor tests passed; the complete UI-domain suite passed **47 tests in 4.90s**; the full repository suite passed **231 tests in 7.55s**, with no skipped tests or failures. Scoped ruff, py_compile and git diff --check passed. Existing real Tk viewport cases, including the hosted-runner wmmaxsize fixture, were retained.
+
+This correction does not alter presentation. The earlier screenshot/benchmark evidence remains retained at its measured revision; no full matrix recapture or benchmark was performed in this narrow shutdown task. A fresh package/smoke/CI run must directly confirm that production PowerShell/conhost orphans no longer remain.
+
+Parent final verification after source freeze: all231 repository tests, Ruff and compilation passed again. Seven current-source views were recaptured and inspected in screenshots/release-final-1366x768-150, at1366x768 with widget factor1.5/window factor1.0. Zero callback errors; core dashboard metrics/actions remain in view and hardware captions are populated. Tools and lower Turbo controls retain the documented scroll behavior. The earlier42-image six-condition matrix remains at its recorded revision; this one-line shutdown hook and query ownership change did not change presentation. Actual OS DPI remains unrun.
+
+Five refreshed source samples and five rebuilt safe EXE launches passed; final measurements and package digest are in performance-report.md and candidate-package.json. Final remote CI/orphan verification is recorded in the task handoff.

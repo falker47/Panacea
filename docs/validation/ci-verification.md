@@ -1,0 +1,9 @@
+# Candidate CI verification
+
+PR2: https://github.com/falker47/Panacea/pull/2. Initial implementation commit b7e8efb716424f03d8bcb786044d1689d44da1bb.
+
+The first Windows CI run https://github.com/falker47/Panacea/actions/runs/38272266389 installed pinned dependencies and passed static checks. Python3.12.10 on Windows Server2025 build26100 ran221 tests:220 passed, one real-Tk viewport test failed because the hosted desktop's default window-manager maximum clipped the requested1366px window to1028px. No cleanup, Turbo or updater test failed. Build was correctly skipped after the failed gate.
+
+Parent reproduced the small-maxsize behavior locally (one failed, one passed) before changing the fixture. The test now explicitly permits its intended virtual client viewport before setting physical geometry, while retaining assertions for exact width/height, every primary metric and all three action buttons. It also retains an imposed small default maximum as a regression trigger. Tests were not skipped or disabled, the product UI did not change, and actual on-screen size/scaling proof remains the separately reviewed42 screenshots. A virtual oversize runner window is not true OS DPI evidence.
+
+Final exact-head run status will be recorded in the task handoff after this narrowly scoped correction is pushed and checked.

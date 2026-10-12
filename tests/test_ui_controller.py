@@ -266,7 +266,12 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
     app = _safe_real_app(monkeypatch)
     try:
         app.update()
+        # Reproduce the hosted runner's small default window-manager limit.
+        panacea_ui.tk.Tk.maxsize(app, 1028, 780)
         # Test physical display pixels, independent of CTk logical coordinates.
+        # Permit this virtual viewport even when the runner monitor is1024px.
+        # Actual visible pixels/DPI are verified separately by screenshot QA.
+        panacea_ui.tk.Tk.maxsize(app, width, height)
         panacea_ui.tk.Tk.geometry(app, f'{width}x{height}')
         app._update_fast_gui({'ram': (16, 8, 50), 'disk': (512, 128, 75), 'cpu': 28.5,
                               'uptime': '4d 7h 49m', 'battery': (None, 'Unknown')})

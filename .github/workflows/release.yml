@@ -1,0 +1,91 @@
+name: Prepare Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Reviewed source commit SHA (40 hexadecimal characters)
+        required: true
+        type: string
+      tag:
+        description: Exact version tag matching version.py (for example v1.49.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: panacea-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Require immutable source
+        shell: pwsh
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          if ($env:SOURCE_REF -notmatch '^[a-fA-F0-9]{40}$') { throw 'An exact reviewed commit SHA is required' }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Check version and tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python scripts/release_tools.py --tag "$env:RELEASE_TAG"
+      - run: python -m ruff check .
+      - run: python -m pytest -q tests
+      - run: python -m compileall -q main.py panacea_ui.py version.py modules scripts
+      - run: python -c "import panacea_ui, modules.updater, modules.update_install"
+      - run: python scripts/build.py
+      - name: Verify version and safe packaged startup
+        shell: pwsh
+        run: |
+          $version = python scripts/release_tools.py
+          if ((Get-Item 'dist\Panacea.exe').VersionInfo.ProductVersion -ne $version) { throw 'Binary version mismatch' }
+          $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged smoke timed out' }
+          if ($process.ExitCode -ne 0) { throw "Packaged smoke failed: $($process.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-release-assets
+          path: |
+            dist/Panacea.exe
+            dist/Panacea.exe.sha256
+            dist/release-notes.md
+          if-no-files-found: error
+
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Panacea-release-assets
+          path: assets
+      - name: Create reviewable draft with binary assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          gh release create "$RELEASE_TAG" --draft --target "$SOURCE_REF" --title "Panacea $RELEASE_TAG" --notes-file assets/release-notes.md assets/Panacea.exe assets/Panacea.exe.sha256
+      - name: Verify both draft assets exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "$RELEASE_TAG" --json isDraft,assets --jq 'select(.isDraft == true and ([.assets[].name] | index("Panacea.exe")) != null and ([.assets[].name] | index("Panacea.exe.sha256")) != null)' > draft.json
+          test -s draft.json

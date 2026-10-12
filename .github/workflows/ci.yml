@@ -20,29 +20,22 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Static checks
+        run: python -m ruff check .
+
+      - name: Unit and integration tests (fixtures only)
+        run: python -m pytest -q tests
 
       - name: Compile sources
         run: python -m compileall -q main.py panacea_ui.py version.py modules
 
       - name: Import smoke test
-        run: python -c "import panacea_ui, version; assert version.VERSION == '1.48', version.VERSION"
+        run: python -c "import panacea_ui, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
 
       - name: Build executable
-        shell: cmd
-        run: >-
-          python -m PyInstaller
-          --noconsole
-          --onefile
-          --name "Panacea"
-          --icon="assets\panacea_icon.ico"
-          --add-data "assets;assets"
-          --clean
-          --collect-all customtkinter
-          main.py
-          --distpath "dist"
-          --workpath "build"
-          --specpath .
+        run: python scripts/build.py
 
       - name: Verify packaged executable
         shell: powershell
@@ -50,3 +43,18 @@ jobs:
           if (-not (Test-Path "dist\Panacea.exe")) {
             throw "PyInstaller did not produce dist\Panacea.exe"
           }
+          $version = python scripts/release_tools.py
+          $exeVersion = (Get-Item 'dist\Panacea.exe').VersionInfo.ProductVersion
+          if ($exeVersion -ne $version) { throw "EXE version $exeVersion differs from source $version" }
+          $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged GUI smoke timed out' }
+          if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke failed: $($process.ExitCode)" }
+
+      - name: Save candidate executable and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Windows-candidate
+          path: |
+            dist/Panacea.exe
+            dist/Panacea.exe.sha256
+          if-no-files-found: error

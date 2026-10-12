@@ -1,145 +1,311 @@
+"""Conservative cache cleanup with Windows handles protecting path traversal."""
+import ctypes
+from ctypes import wintypes
+from contextlib import contextmanager, ExitStack
+from dataclasses import dataclass, field
 import os
-import shutil
+from pathlib import Path
+import stat
 import subprocess
+import threading
+
+from modules.commands import system_executable
 from modules.logger import Logger
 
+
+@dataclass
+class CleanupResult:
+    count: int = 0
+    bytes: int = 0
+    skipped: list = field(default_factory=list)
+    errors: list = field(default_factory=list)
+    preview: bool = False
+
+    @property
+    def ok(self):
+        return not self.errors and not self.skipped
+
+
+class UnsafePath(OSError):
+    pass
+
+
+class _FileInfo(ctypes.Structure):
+    _fields_ = [('attributes', wintypes.DWORD), ('creation', wintypes.FILETIME),
+                ('access', wintypes.FILETIME), ('write', wintypes.FILETIME),
+                ('volume', wintypes.DWORD), ('size_high', wintypes.DWORD),
+                ('size_low', wintypes.DWORD), ('links', wintypes.DWORD),
+                ('index_high', wintypes.DWORD), ('index_low', wintypes.DWORD)]
+
+
+def _lexical_path(path):
+    """Immutable DOS identity: never resolve through an untrusted ancestor."""
+    full = os.path.abspath(path)
+    drive, tail = os.path.splitdrive(full)
+    if len(drive) != 2 or drive[1] != ':' or not drive[0].isalpha() or not tail.startswith('\\'):
+        raise UnsafePath('Only local DOS paths are supported')
+    if any(part.endswith((' ', '.')) or ':' in part for part in tail.split('\\') if part):
+        raise UnsafePath('Ambiguous file name refused')
+    return full
+
+
+def _validate_handle(kernel, handle, path):
+    """Bind the opened object to the approved spelling, including live attributes."""
+    expected = _lexical_path(path)
+    info = _FileInfo()
+    if not kernel.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    if info.attributes & 0x400:
+        raise UnsafePath(f'Reparse point refused: {path}')
+    if info.attributes & 0x10:
+        flags = wintypes.DWORD()
+        if not kernel.GetFileInformationByHandleEx(handle, 23, ctypes.byref(flags), ctypes.sizeof(flags)):
+            raise UnsafePath(f'Cannot verify directory case sensitivity: {path}')
+        if flags.value & 1:
+            raise UnsafePath(f'Case-sensitive directory refused: {path}')
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 0)
+    if not length or length >= len(buffer):
+        raise UnsafePath(f'Cannot verify final file identity: {path}')
+    actual = buffer.value
+    if not actual.startswith('\\\\?\\') or actual.startswith('\\\\?\\UNC\\'):
+        raise UnsafePath(f'Unsupported final file namespace: {path}')
+    if os.path.normcase(actual[4:].rstrip('\\')) != os.path.normcase(expected.rstrip('\\')):
+        raise UnsafePath(f'Opened object left its approved path: {path}')
+    return info
+
+
+def _validate_guards(guards):
+    for kernel, handle, path in guards:
+        _validate_handle(kernel, handle, path)
+
+
+def _kernel_api():
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.POINTER(_FileInfo)]
+    kernel.GetFileInformationByHandleEx.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+    kernel.GetFinalPathNameByHandleW.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    kernel.GetFinalPathNameByHandleW.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.SetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+    return kernel
+
+
+@contextmanager
+def _windows_handle(path, delete=False):
+    """Deny data-write/delete sharing and validate the actual opened object.
+
+    Attribute-only opens bypass sharing rules, so share flags alone cannot
+    prevent reparse conversion. Final-path binding is the mutation boundary.
+    """
+    if os.name != 'nt':
+        raise UnsafePath('Protected cleanup requires Windows file handles')
+    kernel = _kernel_api()
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                  wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    native = '\\\\?\\' + _lexical_path(path)
+    # Attribute-only opens do not participate in Windows sharing rules.
+    # LIST_DIRECTORY makes the deny-delete lock effective (READ_DATA for preview files).
+    access = 0x80 | (0x10000 if delete else 1)
+    handle = kernel.CreateFileW(native, access, 1, None, 3, 0x02200000, None)
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        info = _validate_handle(kernel, handle, path)
+        yield kernel, handle, info
+    finally:
+        kernel.CloseHandle(handle)
+
+
+@contextmanager
+def _guard_path(path):
+    """Retain validated ancestors; callers can recheck live attributes."""
+    full = Path(_lexical_path(path))
+    with ExitStack() as stack:
+        guards = []
+        for item in [*reversed(full.parents), full]:
+            kernel, handle, info = stack.enter_context(_windows_handle(item))
+            if not info.attributes & 0x10:
+                raise UnsafePath(f'Not a directory: {item}')
+            guards.append((kernel, handle, item))
+        _validate_guards(guards)
+        yield guards
+
+
 class CleanupManager:
-    def __init__(self):
-        self.logger = Logger()
+    def __init__(self, logger=None):
+        self.logger = logger if logger is not None else Logger()
+        self.last_result = CleanupResult()
+        self._lock = threading.RLock()
+
+    @staticmethod
+    def _normalized(path):
+        return os.path.normcase(os.path.abspath(path))
+
+    def _local_root(self):
+        profile = os.environ.get('USERPROFILE')
+        local = os.environ.get('LOCALAPPDATA')
+        if not profile or not local or not os.path.isabs(profile) or not os.path.isabs(local):
+            return None
+        expected = os.path.join(profile, 'AppData', 'Local')
+        return local if self._normalized(local) == self._normalized(expected) else None
+
+    @staticmethod
+    def _windows_root():
+        if os.name != 'nt':
+            return None
+        buffer = ctypes.create_unicode_buffer(32768)
+        if not ctypes.windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer)):
+            return None
+        return buffer.value
 
     def get_temp_paths(self):
         paths = []
-        # User Temp
-        if 'TEMP' in os.environ:
+        if os.environ.get('TEMP'):
             paths.append(os.environ['TEMP'])
-        # Windows Temp
-        win_temp = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), 'Temp')
-        if os.path.exists(win_temp):
-            paths.append(win_temp)
-        return list(set(paths)) # Remove duplicates
+        windows = self._windows_root()
+        if windows:
+            candidate = os.path.join(windows, 'Temp')
+            if os.path.isdir(candidate):
+                paths.append(candidate)
+        return list(dict.fromkeys(paths))
 
-    def clean_browser_caches(self):
-        """Clears cache for Chrome, Edge, and Firefox"""
-        deleted_count = 0
-        deleted_size = 0
-        
-        users_dir = os.path.dirname(os.environ['USERPROFILE'])
-        # We only really care about current user usually, but let's stick to env vars
-        local_app_data = os.environ.get('LOCALAPPDATA')
-        
-        if not local_app_data: return 0, 0
+    def _approved_temp(self, path):
+        if not isinstance(path, (str, os.PathLike)) or not os.path.isabs(path):
+            return False
+        local = self._local_root()
+        windows = self._windows_root()
+        approved = [os.path.join(root, 'Temp') for root in (local, windows) if root]
+        return self._normalized(path) in {self._normalized(item) for item in approved}
 
-        # Define targets
-        targets = [
-            os.path.join(local_app_data, r"Google\Chrome\User Data\Default\Cache"),
-            os.path.join(local_app_data, r"Google\Chrome\User Data\Default\Code Cache"),
-            os.path.join(local_app_data, r"Microsoft\Edge\User Data\Default\Cache"),
-            os.path.join(local_app_data, r"Microsoft\Edge\User Data\Default\Code Cache"),
-            os.path.join(local_app_data, r"Mozilla\Firefox\Profiles"), # Needs wildcard handling
-        ]
+    def _browser_paths(self):
+        local = self._local_root()
+        if not local:
+            return []
+        targets = [os.path.join(local, vendor, browser, 'User Data', 'Default', cache)
+                   for vendor, browser in (('Google', 'Chrome'), ('Microsoft', 'Edge'))
+                   for cache in ('Cache', 'Code Cache')]
+        profiles = os.path.join(local, 'Mozilla', 'Firefox', 'Profiles')
+        if os.path.isdir(profiles):
+            try:
+                with _guard_path(profiles) as guards:
+                    _validate_guards(guards)
+                    names = os.listdir(profiles)
+                    _validate_guards(guards)
+                    targets.extend(os.path.join(profiles, name, 'cache2') for name in names)
+            except OSError as exc:
+                self.last_result.skipped.append(f'{profiles}: {exc}')
+        return [path for path in targets if os.path.lexists(path)]
 
-        self.logger.log("Starting Browser Cleanup...")
+    def _delete_file(self, path, preview):
+        with _windows_handle(path, delete=not preview) as (kernel, handle, info):
+            if info.attributes & 0x10 or info.links != 1:
+                raise UnsafePath(f'Directory or multiply linked file refused: {path}')
+            size = (info.size_high << 32) | info.size_low
+            if not preview:
+                _validate_handle(kernel, handle, path)
+                disposition = wintypes.BOOL(True)
+                if not kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)):
+                    raise ctypes.WinError(ctypes.get_last_error())
+        return size
 
-        for target in targets:
-            # Handle Firefox wildcard profiles
-            if "Firefox" in target:
-                 # Look for /cache2 inside profiles
-                 if os.path.exists(target):
-                     for profile in os.listdir(target):
-                         cache_path = os.path.join(target, profile, "cache2")
-                         if os.path.exists(cache_path):
-                             c, s = self._delete_folder_contents(cache_path)
-                             deleted_count += c; deleted_size += s
-            else:
-                if os.path.exists(target):
-                    c, s = self._delete_folder_contents(target)
-                    deleted_count += c; deleted_size += s
-        
-        return deleted_count, deleted_size
+    def _walk_directory(self, directory, preview, progress_callback):
+        # Live checks reject persistent retargets; each child is independently
+        # bound by its own handle even if an ancestor was retargeted and restored.
+        try:
+            with _windows_handle(directory) as (kernel, handle, _):
+                with os.scandir(directory) as entries:
+                    names = [entry.name for entry in entries]
+                _validate_handle(kernel, handle, directory)
+        except OSError as exc:
+            self.last_result.errors.append(f'{directory}: {exc}')
+            return
+        for name in names:
+            path = os.path.join(directory, name)
+            try:
+                info = os.lstat(path)
+                if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+                    raise UnsafePath(f'Reparse point refused: {path}')
+                if stat.S_ISDIR(info.st_mode):
+                    with _windows_handle(path) as (_, _, held):
+                        if not held.attributes & 0x10:
+                            raise UnsafePath(f'Directory changed: {path}')
+                        self._walk_directory(path, preview, progress_callback)
+                elif stat.S_ISREG(info.st_mode):
+                    size = self._delete_file(path, preview)
+                    self.last_result.count += 1
+                    self.last_result.bytes += size
+                    if progress_callback and self.last_result.count % 50 == 0:
+                        progress_callback(f'Deleted {self.last_result.count} files...')
+                else:
+                    raise UnsafePath(f'Nonregular file refused: {path}')
+            except OSError as exc:
+                self.last_result.skipped.append(f'{path}: {exc}')
+            except Exception as exc:
+                self.last_result.errors.append(f'{path}: {exc}')
 
-    def _delete_folder_contents(self, folder_path):
-        c, s = 0, 0
-        for root, dirs, files in os.walk(folder_path):
-            for name in files:
-                try:
-                    fp = os.path.join(root, name)
-                    sz = os.path.getsize(fp)
-                    os.remove(fp)
-                    c += 1; s += sz
-                except PermissionError:
-                    pass  # Locked files are expected
-                except Exception as e:
-                    self.logger.log(f"Could not delete {os.path.join(root, name)}: {e}", "WARNING")
-        return c, s
+    def _process_root(self, path, preview=False, progress_callback=None):
+        try:
+            with _guard_path(path):
+                self._walk_directory(path, preview, progress_callback)
+        except OSError as exc:
+            self.last_result.skipped.append(f'{path}: {exc}')
+
+    def _temp_operation(self, preview, progress_callback=None):
+        with self._lock:
+            self.last_result = CleanupResult(preview=preview)
+            for path in self.get_temp_paths():
+                if not self._approved_temp(path):
+                    self.last_result.skipped.append(f'Unapproved temporary root: {path}')
+                    continue
+                if progress_callback:
+                    progress_callback(f'Scanning {path}...')
+                self._process_root(path, preview, progress_callback)
+            self.logger.log(f'Cleanup {"preview" if preview else "finished"}: {self.last_result.count} files, '
+                            f'{self.last_result.bytes} bytes; {len(self.last_result.skipped)} skipped, '
+                            f'{len(self.last_result.errors)} errors.')
+            return self.last_result.count, self.last_result.bytes
 
     def clean_temp_files(self, progress_callback=None):
-        total_deleted = 0
-        total_freed = 0
-        paths = self.get_temp_paths()
+        return self._temp_operation(False, progress_callback)
 
-        for base_path in paths:
-            self.logger.log(f"Cleaning path: {base_path}")
-            if progress_callback:
-                progress_callback(f"Scanning {base_path}...")
+    def preview_temp_files(self):
+        return self._temp_operation(True)
 
-            batch_count = 0
-            for root, dirs, files in os.walk(base_path):
-                for name in files:
-                    file_path = os.path.join(root, name)
-                    try:
-                        size = os.path.getsize(file_path)
-                        os.remove(file_path)
-                        total_deleted += 1
-                        total_freed += size
-                        batch_count += 1
-                        # Report progress every 50 files
-                        if progress_callback and batch_count % 50 == 0:
-                            progress_callback(f"Deleted {total_deleted} files ({total_freed / (1024*1024):.1f} MB freed)...")
-                    except Exception:
-                        pass  # Locked files are expected
+    def clean_browser_caches(self):
+        with self._lock:
+            self.last_result = CleanupResult()
+            for path in self._browser_paths():
+                self._process_root(path)
+            return self.last_result.count, self.last_result.bytes
 
-                for name in dirs:
-                    dir_path = os.path.join(root, name)
-                    try:
-                        shutil.rmtree(dir_path)
-                    except Exception:
-                        pass
-        
-        result_msg = f"Cleanup complete. Deleted {total_deleted} files, freed {total_freed / (1024*1024):.2f} MB."
-        self.logger.log(result_msg)
-        return total_deleted, total_freed
+    def _delete_folder_contents(self, folder_path):
+        with self._lock:
+            self.last_result = CleanupResult()
+            approved = self._approved_temp(folder_path) or self._normalized(folder_path) in {
+                self._normalized(path) for path in self._browser_paths()}
+            if approved:
+                self._process_root(folder_path)
+            else:
+                self.last_result.skipped.append(f'Unapproved cleanup root: {folder_path}')
+            return self.last_result.count, self.last_result.bytes
 
     def empty_recycle_bin(self):
         try:
-            # Use native Windows API via ctypes to avoid PowerShell issues
-            import ctypes
-            # SHERB_NOCONFIRMATION = 0x00000001
-            # SHERB_NOPROGRESSUI = 0x00000002
-            # SHERB_NOSOUND = 0x00000004
-            flags = 0x00000001 | 0x00000002 | 0x00000004
-            
-            result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, flags)
-            
-            # S_OK = 0, E_UNEXPECTED = -2147418113 (0x8000FFFF, often means already empty)
-            if result == 0:
-                self.logger.log("Recycle bin emptied successfully.")
-                return True, "Recycle bin emptied."
-            elif result == -2147418113:
-                self.logger.log("Recycle bin was already empty.")
-                return True, "Recycle bin was already empty."
-            else:
-                self.logger.log(f"Recycle bin API returned code: {result}", "WARNING")
-                return False, f"Recycle bin operation returned code {result}."
-
-        except Exception as e:
-            self.logger.log(f"Failed to empty recycle bin: {e}", "ERROR")
-            return False, f"Error: {e}"
+            result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 7)
+            if result in (0, -2147418113):
+                return True, 'Recycle bin emptied.' if result == 0 else 'Recycle bin was already empty.'
+            return False, f'Recycle bin operation returned code {result}.'
+        except Exception as exc:
+            self.logger.log(f'Failed to empty recycle bin: {exc}', 'ERROR')
+            return False, str(exc)
 
     def open_disk_cleanup(self):
         try:
-            subprocess.Popen(["cleanmgr.exe"], creationflags=subprocess.DETACHED_PROCESS)
-            self.logger.log("Launched Disk Cleanup utility.")
+            subprocess.Popen([system_executable('cleanmgr.exe')], shell=False,
+                             creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0))
             return True
-        except Exception as e:
-            self.logger.log(f"Failed to launch cleanmgr: {e}", "ERROR")
+        except Exception as exc:
+            self.logger.log(f'Failed to launch Disk Cleanup: {exc}', 'ERROR')
             return False

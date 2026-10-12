@@ -4,6 +4,7 @@ import platform
 import shutil
 import subprocess
 import time
+from modules.commands import system_executable
 
 class SystemMonitor:
     def __init__(self):
@@ -17,14 +18,24 @@ class SystemMonitor:
 
     def _cached(self, key, func):
         """Return cached result if fresh, otherwise call func and cache it."""
-        now = time.time()
+        now = time.monotonic()
         if key in self._cache:
             val, ts = self._cache[key]
             if now - ts < self._cache_ttl:
                 return val
         val = func()
-        self._cache[key] = (val, now)
+        self._cache[key] = (val, time.monotonic())
         return val
+
+    def sample_fast(self):
+        """Only native, low-latency samples; hardware metadata runs independently."""
+        return {"ram": self.get_ram_usage(), "disk": self.get_disk_usage(),
+                "cpu": self.get_cpu_usage(), "uptime": self.get_system_uptime(),
+                "battery": self.get_battery_status()}
+
+    def sample_metadata(self):
+        return {"os": self.get_os_info(), "cpu_name": self.get_cpu_info(),
+                "ram_info": self.get_ram_info(), "disk_model": self.get_disk_model()}
 
     def get_ram_usage(self):
         """Returns (total_gb, available_gb, percent_used)"""
@@ -62,11 +73,11 @@ class SystemMonitor:
     def _fetch_ram_info(self):
         try:
             # wmic was removed in Windows 11 24H2+; use CIM via PowerShell.
-            cmd = ['powershell', '-NoProfile', '-Command',
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
                    "Get-CimInstance Win32_PhysicalMemory | "
                    "Select-Object Speed, SMBIOSMemoryType | ConvertTo-Json -Compress"]
             output = subprocess.check_output(
-                cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW
+                cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW, shell=False
             ).decode().strip()
 
             if not output:
@@ -88,7 +99,7 @@ class SystemMonitor:
             type_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
             ddr_type = type_map.get(int(smbios_type), "DDR")
 
-            return f"{ddr_type} @ {speed} MHz ({len(data)} Moduli)"
+            return f"{ddr_type} @ {speed} MHz ({len(data)} modules)"
         except Exception:
             return ""
 
@@ -109,9 +120,9 @@ class SystemMonitor:
 
     def _fetch_disk_model(self):
         try:
-            cmd = ['powershell', '-NoProfile', '-Command',
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
                    "Get-Partition -DriveLetter C | Get-Disk | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
-            output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
+            output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW, shell=False).decode().strip()
 
             if '|' in output:
                 model_name, media_type = output.rsplit('|', 1)
@@ -140,7 +151,7 @@ class SystemMonitor:
             
             # Format: "AMD Ryzen 7 5800X\n(8 Cores @ 3.8 GHz)"
             ghz = round(mhz / 1000, 1)
-            return f"{cpu_name.strip()}\n({cores} Cores @ {ghz} GHz)"
+            return f"{cpu_name.strip()}\n({cores} logical processors @ {ghz} GHz)"
         except Exception:
             return platform.processor()
             
@@ -155,6 +166,7 @@ class SystemMonitor:
         try:
             # GetTickCount64 returns milliseconds
             lib = ctypes.windll.kernel32
+            lib.GetTickCount64.restype = ctypes.c_uint64
             t = lib.GetTickCount64()
             t = t / 1000
             days = t // 86400
@@ -197,20 +209,24 @@ class SystemMonitor:
         """Returns (percent, is_plugged_str)"""
         class SYSTEM_POWER_STATUS(ctypes.Structure):
             _fields_ = [
-                ('ACLineStatus', ctypes.c_byte),
-                ('BatteryFlag', ctypes.c_byte),
-                ('BatteryLifePercent', ctypes.c_byte),
-                ('SystemStatusFlag', ctypes.c_byte),
-                ('BatteryLifeTime', ctypes.c_ulong),
-                ('BatteryFullLifeTime', ctypes.c_ulong),
+                ('ACLineStatus', ctypes.c_ubyte),
+                ('BatteryFlag', ctypes.c_ubyte),
+                ('BatteryLifePercent', ctypes.c_ubyte),
+                ('SystemStatusFlag', ctypes.c_ubyte),
+                ('BatteryLifeTime', ctypes.c_uint32),
+                ('BatteryFullLifeTime', ctypes.c_uint32),
             ]
         status = SYSTEM_POWER_STATUS()
-        if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
-            percent = status.BatteryLifePercent
-            plugged = "Plugged In" if status.ACLineStatus == 1 else "On Battery"
-            if percent == 255: return (0, "Unknown")
-            return (percent, plugged)
-        return (0, "Unknown")
+        try:
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+                percent = status.BatteryLifePercent
+                if percent > 100 or status.BatteryFlag & 128:
+                    return (None, "Unknown")
+                plugged = {0: "On Battery", 1: "Plugged In"}.get(status.ACLineStatus, "Unknown")
+                return (percent, plugged)
+        except (AttributeError, OSError):
+            pass
+        return (None, "Unknown")
 
     def get_windows_update_status(self):
         """Returns (mandatory_count, optional_count, status_str)"""
@@ -228,8 +244,8 @@ foreach ($update in $result.Updates) {
 }
 Write-Output "$mandatory,$optional"
 """
-            cmd = ['powershell', '-NoProfile', '-Command', ps_script]
-            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45).decode().strip()
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command', ps_script]
+            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45, shell=False).decode().strip()
             
             lines = output.splitlines()
             if not lines: return 0, 0, "Unknown"

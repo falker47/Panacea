@@ -1,0 +1,9 @@
+{
+  "name": "Panacea.exe",
+  "size": 22290919,
+  "sha256": "67319fdeca35ba0e8e7cd36031c7098d42f3d535a8598935bd865c03fe77aab9",
+  "endpoint": "https://github.com/falker47/Panacea/releases/latest/download/Panacea.exe",
+  "baseline_release": "v1.47",
+  "executed": false,
+  "new_release_verified": false
+}

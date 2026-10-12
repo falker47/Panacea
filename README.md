@@ -5,7 +5,7 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The current codebase is **v1.48**.
+The current codebase is the **1.49.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
 
 ## What it does
 
@@ -24,6 +24,8 @@ The current codebase is **v1.48**.
 
 Locked/in-use files are skipped. Cleanup is irreversible once files or Recycle Bin contents are deleted.
 
+Cleanup accepts the conventional local-user Temp and explicit browser cache roots, verifies opened Windows objects and refuses junctions, hardlinks and unverifiable paths. Protected cleanup and Turbo snapshot storage require native identity/case-sensitivity support (Windows 10 version 1803 or newer, or Windows 11); unsupported filesystems and queries fail closed. Redirected or unconventional user storage may require using Windows' own tools.
+
 ### Disk optimization
 - enumerates available drive letters;
 - runs Windows `defrag <drive> /O`, which lets Windows choose the appropriate optimization for the media;
@@ -39,7 +41,7 @@ Panacea exposes commands including:
 - `chkdsk C: /scan /perf` inside the multi-step maintenance protocol.
 
 ### Restore points
-Panacea can enable System Restore and request a restore point through PowerShell. Windows may throttle restore-point creation; the current implementation detects the common case where `Checkpoint-Computer` exits successfully without creating a new point.
+Panacea requests a restore point through PowerShell and verifies that its sequence actually advanced. System Restore is not enabled implicitly. Unknown, unchanged or failed verification is reported as failure; Windows may throttle creation. Enable protection explicitly through Windows before using Resurrection if it is disabled.
 
 ### Turbo Mode
 Turbo Mode can change:
@@ -47,11 +49,11 @@ Turbo Mode can change:
 - the current user's `VisualFXSetting` registry value;
 - the running state of `SysMain`, `WSearch` and `Spooler`.
 
-These are real system changes, not just UI preferences. The controls also provide the corresponding restore path, but the app cannot guarantee that every machine or policy configuration will return to an identical prior state.
+The controls save the original power scheme, service running state and visual preference before changing them. Turning a control off restores that saved value; failures and unavailable state remain explicit. Windows policies and external changes can still prevent restoration.
 
 ### System Resurrection protocol
 The automated protocol currently sequences:
-1. restore-point attempt;
+1. verified restore point (the sequence stops if this prerequisite fails);
 2. browser-cache cleanup;
 3. temp-file and Recycle Bin cleanup;
 4. DNS/Winsock reset;
@@ -60,7 +62,7 @@ The automated protocol currently sequences:
 7. DISM health check;
 8. SFC scan.
 
-It is intentionally explicit here because this workflow modifies or cleans several parts of the system in one run.
+The panel retains individual step results and its completed, partial, failed or cancelled summary. Progress advances when a step finishes; cancellation stops before the next command. Browser caches, temporary files and Recycle Bin deletion are irreversible and confirmed before starting.
 
 ## Permissions and safety model
 
@@ -78,9 +80,9 @@ The project does not implement a registry cleaner or automatic driver updater. I
 
 ## Updates
 
-The desktop app checks this repository's GitHub Releases for a newer version. For packaged builds it can download a release `.exe` and replace the current executable.
+The desktop app checks GitHub Releases in the background and offers a manual check. It selects exactly `Panacea.exe` and `Panacea.exe.sha256`, rejects downgrade and unofficial URLs, and verifies the downloaded size, SHA-256 and Windows executable header before installation.
 
-The current updater relies on HTTPS/GitHub release delivery but does **not** verify a separately published signature or release checksum before replacement. Treat release provenance as part of the trust boundary.
+Automatic installation preserves the previous binary until the new GUI acknowledges readiness and rolls back on replacement or launch failure. Elevated replacement requires a protected installation directory; portable copies in user-writable Desktop or Downloads directories use the release-page/manual download alternative. Source execution never replaces the Python interpreter. GitHub release provenance remains part of the trust boundary; checksum verification is not Authenticode signing.
 
 ## Run from source
 
@@ -101,16 +103,21 @@ python main.py
 scripts\build_exe.bat
 ```
 
-The generated executable is written to `dist\Panacea.exe`. Build outputs are not intended to be committed to the source tree; distributable binaries should be published through GitHub Releases.
+The generated executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies. Build outputs are not committed; distributable binaries belong in GitHub Releases.
+
+For an automated local build use `python scripts/build.py`. `Panacea.exe --smoke-test` opens and closes the GUI without maintenance or UAC elevation.
 
 ## Verification
 
-The repository CI runs on Windows and:
-- compiles the Python sources;
-- imports the main UI modules;
-- verifies the declared application version;
-- builds the PyInstaller executable;
-- checks that `dist\Panacea.exe` was produced.
+The repository CI runs fixture-based unit/integration tests, static checks, compilation and import smoke, builds the Windows executable, verifies its PE header and version, and runs a safe packaged GUI smoke. Tests do not clean host files, change services or power plans, or run system repairs.
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q tests
+python -m ruff check .
+```
+
+The **Prepare Windows release** workflow accepts an immutable reviewed commit SHA and an exact tag matching `version.py`. It executes the checks and attaches `Panacea.exe` plus its checksum to a **draft** GitHub Release. Stable publication is a separate human approval gate after real Windows, prior-version update/restart, rollback and security checks. See [release notes](docs/releases/1.49.0.md) and [validation evidence](docs/validation).
 
 This is a build/smoke gate, not a substitute for manual testing of elevated Windows maintenance operations on representative Windows 10/11 systems.
 

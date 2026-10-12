@@ -16,25 +16,25 @@ class Logger:
         if self.logger.handlers:
             return
 
-        log_dir = os.path.join(os.environ['USERPROFILE'], 'Documents', 'SystemOptimizer')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-
-        log_file = os.path.join(log_dir, 'log.txt')
-
         self.logger.setLevel(logging.INFO)
 
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-        fh = logging.FileHandler(log_file)
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
+        try:
+            log_dir = os.path.join(os.environ.get('USERPROFILE', os.path.expanduser('~')), 'Documents', 'SystemOptimizer')
+            os.makedirs(log_dir, exist_ok=True)
+            fh = logging.FileHandler(os.path.join(log_dir, 'log.txt'), encoding='utf-8')
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(formatter)
+            self.logger.addHandler(fh)
+        except OSError:
+            # Logging must never prevent the maintenance UI from starting.
+            pass
 
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
         ch.setFormatter(formatter)
 
-        self.logger.addHandler(fh)
         self.logger.addHandler(ch)
 
     def log(self, message, level="INFO"):

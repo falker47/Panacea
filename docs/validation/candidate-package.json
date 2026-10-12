@@ -1,0 +1,11 @@
+{
+  "version": "1.49.0",
+  "size": 24204263,
+  "sha256": "aab331fe38ecf186f5cb1d7f095871d49c4ae4dedfc4b7ffdac79f0d67397484",
+  "signature": "NotSigned",
+  "smoke_exit": 0,
+  "total_smoke_seconds": 4.2339644,
+  "build_tool": "PyInstaller 6.22.3",
+  "python": "3.14.3",
+  "method": "Safe packaged GUI smoke without UAC or maintenance. Duration includes extraction, app construction and fixed 1.5 second observation; not readiness latency."
+}

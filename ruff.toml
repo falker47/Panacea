@@ -1,0 +1,6 @@
+target-version = "py310"
+extend-exclude = ["build", "dist"]
+
+[lint]
+# Undefined names, syntax and invalid escapes catch runtime issues in the legacy UI.
+select = ["F821", "F822", "F823", "E9", "W605"]

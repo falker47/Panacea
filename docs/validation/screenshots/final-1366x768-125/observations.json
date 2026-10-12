@@ -1,0 +1,61 @@
+{
+  "views": [
+    {
+      "section": "Dashboard",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Cleaning",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Disk",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Tools",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Apps",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Turbo",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    },
+    {
+      "section": "Resurrect",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.25
+    }
+  ],
+  "callback_errors": []
+}

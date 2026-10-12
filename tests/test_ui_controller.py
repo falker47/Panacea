@@ -1,6 +1,10 @@
 import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
+from functools import wraps
+import os
+import subprocess
+import sys
 import panacea_ui
 from panacea_ui import PanaceaApp
 from modules.ui_dispatch import UiDispatcher, WorkerController
@@ -214,6 +218,28 @@ def _destroy_real_app(app):
     app.destroy()
 
 
+def isolated_tk_test(test):
+    """Each native layout case owns one fresh Tcl/CTk process, like the app."""
+    @wraps(test)
+    def run(*args, **kwargs):
+        if sys.platform != 'win32' and not os.environ.get('DISPLAY'):
+            pytest.skip('Native Tk requires a display')
+        if os.environ.get('PANACEA_ISOLATED_TK_CASE') == test.__name__:
+            return test(*args, **kwargs)
+        node = 'tests/test_ui_controller.py::' + test.__name__
+        if 'width' in kwargs:
+            node += f"[{kwargs['width']}-{kwargs['height']}-{kwargs['scale']}]"
+        environment = os.environ.copy()
+        environment['PANACEA_ISOLATED_TK_CASE'] = test.__name__
+        result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', node],
+            env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert '1 passed' in result.stdout, 'The child must execute exactly one native case: ' + result.stdout
+    return run
+
+
+@isolated_tk_test
 def test_real_tk_first_mapping_retains_a_usable_requested_size(monkeypatch):
     import pytest
     import sys
@@ -234,6 +260,7 @@ def test_real_tk_first_mapping_retains_a_usable_requested_size(monkeypatch):
         _destroy_real_app(app)
 
 
+@isolated_tk_test
 def test_real_tk_user_resize_after_mapping_respects_minimum(monkeypatch):
     import pytest
     import sys
@@ -258,6 +285,7 @@ import pytest
 
 
 @pytest.mark.parametrize('width,height,scale', [(1366, 768, 1.5), (1020, 680, 1.0)])
+@isolated_tk_test
 def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monkeypatch, width, height, scale):
     if panacea_ui.sys.platform != 'win32' and not panacea_ui.os.environ.get('DISPLAY'):
         pytest.skip('Real Tk layout requires a display')

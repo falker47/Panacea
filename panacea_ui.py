@@ -226,11 +226,12 @@ class PanaceaApp(ctk.CTk):
         outer.grid_rowconfigure(0, weight=1)
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
-        self._header(frame, 'Dashboard', 'Live system overview.', compact=True)
+        ctk.CTkLabel(frame, text='Dashboard', font=self._font(22, True), anchor='w').grid(
+            row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
         # A compact system summary, with a separate truthful Windows Update status.
         info = self._card(frame)
-        info.grid(row=1, column=0, padx=18, pady=(0, 9), sticky='ew')
+        info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
         system.grid(row=0, column=0, sticky='nsew', padx=(14, 7), pady=10)
@@ -254,7 +255,7 @@ class PanaceaApp(ctk.CTk):
             row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
 
         body = ctk.CTkFrame(frame, fg_color='transparent')
-        body.grid(row=2, column=0, padx=18, pady=(0, 9), sticky='ew')
+        body.grid(row=2, column=0, padx=18, pady=(0, 7), sticky='ew')
         body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
         for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
@@ -275,7 +276,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(25, True),
                                          text_color=TEXT, anchor='w')
         self.dash_cpu_val.pack(fill='x', padx=12)
-        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=49, line_color=COL_BLUE)
+        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=40, line_color=COL_BLUE)
         self.cpu_graph.pack(fill='x', padx=12, pady=(5, 5))
         self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…',
                                           text_color=MUTED, font=self._font(10),
@@ -285,7 +286,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(25, True),
                                           text_color=TEXT, anchor='w')
         self.dash_ram_perc.pack(fill='x', padx=12)
-        self.ram_graph = LiveGraph(self.card_ram, width=175, height=49, line_color=COL_GOLD)
+        self.ram_graph = LiveGraph(self.card_ram, width=175, height=40, line_color=COL_GOLD)
         self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED,
                                          font=self._font(11), anchor='w', wraplength=185)
@@ -316,7 +317,7 @@ class PanaceaApp(ctk.CTk):
         # Two meaningful actions. Navigation is already in the sidebar: no redundant
         # "Open cleanup" tile. Preview feedback remains in-place on the dashboard.
         self.card_sys = self._card(frame)
-        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 8), sticky='ew')
+        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 6), sticky='ew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
         heading = ctk.CTkFrame(self.card_sys, fg_color='transparent')
         heading.grid(row=0, column=0, columnspan=2, sticky='ew', padx=12, pady=(8, 5))

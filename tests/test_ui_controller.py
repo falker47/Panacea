@@ -146,6 +146,20 @@ def test_preview_reports_incomplete_inspection_as_partial():
     status = app.operation_label.configure.call_args.kwargs['text']
     assert 'partial' in status.lower() or 'failed' in status.lower()
 
+def test_preview_results_are_visible_on_the_dashboard_without_navigation():
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.dash_preview_status = Mock()
+    app.select_frame = Mock()
+    app.cleanup_mgr.preview_temp_files = lambda: (12, 1572864)
+    app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], ok=True)
+    app._request_operation = lambda name, work, show: show(work()) or True
+    app.run_preview_temp()
+    assert '12 files' in app.dash_preview_status.configure.call_args.kwargs['text']
+    assert '1.5 MB' in app.dash_preview_status.configure.call_args.kwargs['text']
+    app.select_frame.assert_not_called()
+
+
 def test_centering_preserves_requested_geometry_when_it_fits():
     assert PanaceaApp._fit_window_size(1100, 700, 1920, 1080, 1.0) == (1100, 700)
 
@@ -321,7 +335,7 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
                     result.extend(buttons_in(child))
             return result
         actions = buttons_in(app.card_sys)
-        assert len(actions) == 3
+        assert len(actions) == 2  # Preview and restore; sidebar already opens Cleanup.
         for widget in [app.dash_cpu_val, app.dash_ram_perc, app.dash_disk_perc, *actions]:
             assert widget.winfo_rooty() >= top
             assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{widget.cget("text")} below viewport'

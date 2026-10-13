@@ -234,7 +234,7 @@ class PanaceaApp(ctk.CTk):
         info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
-        system.grid(row=0, column=0, sticky='nsew', padx=(14, 7), pady=10)
+        system.grid(row=0, column=0, sticky='nsew', padx=(14, 7), pady=8)
         self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', anchor='w',
                                     font=self._font(15, True), text_color=TEXT)
         self.dash_os.pack(anchor='w')
@@ -255,7 +255,7 @@ class PanaceaApp(ctk.CTk):
             row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
 
         body = ctk.CTkFrame(frame, fg_color='transparent')
-        body.grid(row=2, column=0, padx=18, pady=(0, 7), sticky='ew')
+        body.grid(row=2, column=0, padx=18, pady=(0, 5), sticky='ew')
         body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
         for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
@@ -267,7 +267,7 @@ class PanaceaApp(ctk.CTk):
             (self.card_disk, 'System drive · C:', 'drive'),
         ):
             heading = ctk.CTkFrame(card, fg_color='transparent')
-            heading.pack(fill='x', padx=12, pady=(9, 2))
+            heading.pack(fill='x', padx=12, pady=(7, 1))
             ctk.CTkLabel(heading, text='', image=self.action_icons[icon_name],
                          width=24, height=24).pack(side='left', padx=(0, 6))
             ctk.CTkLabel(heading, text=title, font=self._font(12, True),
@@ -276,7 +276,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(25, True),
                                          text_color=TEXT, anchor='w')
         self.dash_cpu_val.pack(fill='x', padx=12)
-        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=40, line_color=COL_BLUE)
+        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=36, line_color=COL_BLUE)
         self.cpu_graph.pack(fill='x', padx=12, pady=(5, 5))
         self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…',
                                           text_color=MUTED, font=self._font(10),
@@ -286,7 +286,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(25, True),
                                           text_color=TEXT, anchor='w')
         self.dash_ram_perc.pack(fill='x', padx=12)
-        self.ram_graph = LiveGraph(self.card_ram, width=175, height=40, line_color=COL_GOLD)
+        self.ram_graph = LiveGraph(self.card_ram, width=175, height=36, line_color=COL_GOLD)
         self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
         self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED,
                                          font=self._font(11), anchor='w', wraplength=185)
@@ -320,7 +320,7 @@ class PanaceaApp(ctk.CTk):
         self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 6), sticky='ew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
         heading = ctk.CTkFrame(self.card_sys, fg_color='transparent')
-        heading.grid(row=0, column=0, columnspan=2, sticky='ew', padx=12, pady=(8, 5))
+        heading.grid(row=0, column=0, columnspan=2, sticky='ew', padx=12, pady=(5, 2))
         heading.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(heading, text='Quick actions', font=self._font(12, True),
                      height=20, anchor='w').grid(row=0, column=0, sticky='w')
@@ -329,7 +329,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_battery.grid(row=0, column=1, sticky='e')
         scan = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
                             border_color=BORDER, border_width=1, corner_radius=9)
-        scan.grid(row=1, column=0, sticky='nsew', padx=(11, 5), pady=(0, 10))
+        scan.grid(row=1, column=0, sticky='nsew', padx=(11, 5), pady=(0, 7))
         scan.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))
@@ -345,7 +345,7 @@ class PanaceaApp(ctk.CTk):
 
         restore = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
                                border_color=BORDER, border_width=1, corner_radius=9)
-        restore.grid(row=1, column=1, sticky='nsew', padx=(5, 11), pady=(0, 10))
+        restore.grid(row=1, column=1, sticky='nsew', padx=(5, 11), pady=(0, 7))
         restore.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))

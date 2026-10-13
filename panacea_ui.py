@@ -238,9 +238,14 @@ class PanaceaApp(ctk.CTk):
         self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', anchor='w',
                                     font=self._font(15, True), text_color=TEXT)
         self.dash_os.pack(anchor='w')
-        self.dash_uptime_val = ctk.CTkLabel(system, text='Uptime: —', anchor='w',
+        system_details = ctk.CTkFrame(system, fg_color='transparent')
+        system_details.pack(fill='x', pady=(3, 0))
+        self.dash_uptime_val = ctk.CTkLabel(system_details, text='Uptime: —', anchor='w',
                                             font=self._font(11), text_color=MUTED)
-        self.dash_uptime_val.pack(anchor='w', pady=(3, 0))
+        self.dash_uptime_val.pack(side='left')
+        self.dash_battery = ctk.CTkLabel(system_details, text='Power: —', anchor='w',
+                                         font=self._font(10), text_color=MUTED)
+        self.dash_battery.pack(side='left', padx=(10, 0))
         updates = ctk.CTkFrame(info, fg_color=SURFACE_ALT, corner_radius=8)
         updates.grid(row=0, column=1, sticky='nsew', padx=(7, 10), pady=7)
         updates.grid_columnconfigure(1, weight=1)
@@ -316,20 +321,12 @@ class PanaceaApp(ctk.CTk):
 
         # Two meaningful actions. Navigation is already in the sidebar: no redundant
         # "Open cleanup" tile. Preview feedback remains in-place on the dashboard.
-        self.card_sys = self._card(frame)
-        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 6), sticky='ew')
+        self.card_sys = ctk.CTkFrame(frame, fg_color='transparent')
+        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 4), sticky='ew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
-        heading = ctk.CTkFrame(self.card_sys, fg_color='transparent')
-        heading.grid(row=0, column=0, columnspan=2, sticky='ew', padx=12, pady=(5, 2))
-        heading.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(heading, text='Quick actions', font=self._font(12, True),
-                     height=20, anchor='w').grid(row=0, column=0, sticky='w')
-        self.dash_battery = ctk.CTkLabel(heading, text='Power: —', text_color=MUTED,
-                                         font=self._font(10), height=20)
-        self.dash_battery.grid(row=0, column=1, sticky='e')
         scan = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
                             border_color=BORDER, border_width=1, corner_radius=9)
-        scan.grid(row=1, column=0, sticky='nsew', padx=(11, 5), pady=(0, 7))
+        scan.grid(row=0, column=0, sticky='nsew', padx=(0, 5), pady=0)
         scan.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))
@@ -345,7 +342,7 @@ class PanaceaApp(ctk.CTk):
 
         restore = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
                                border_color=BORDER, border_width=1, corner_radius=9)
-        restore.grid(row=1, column=1, sticky='nsew', padx=(5, 11), pady=(0, 7))
+        restore.grid(row=0, column=1, sticky='nsew', padx=(5, 0), pady=0)
         restore.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))

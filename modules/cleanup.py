@@ -5,6 +5,7 @@ from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import threading
@@ -36,6 +37,11 @@ class _FileInfo(ctypes.Structure):
                 ('volume', wintypes.DWORD), ('size_high', wintypes.DWORD),
                 ('size_low', wintypes.DWORD), ('links', wintypes.DWORD),
                 ('index_high', wintypes.DWORD), ('index_low', wintypes.DWORD)]
+
+
+class _RecycleBinInfo(ctypes.Structure):
+    _fields_ = [('cbSize', wintypes.DWORD), ('i64Size', ctypes.c_longlong),
+                ('i64NumItems', ctypes.c_longlong)]
 
 
 def _lexical_path(path):
@@ -164,12 +170,14 @@ class CleanupManager:
         paths = []
         if os.environ.get('TEMP'):
             paths.append(os.environ['TEMP'])
+        elif self._local_root():
+            paths.append(os.path.join(self._local_root(), 'Temp'))
         windows = self._windows_root()
         if windows:
             candidate = os.path.join(windows, 'Temp')
             if os.path.isdir(candidate):
                 paths.append(candidate)
-        return list(dict.fromkeys(paths))
+        return list({self._normalized(path): path for path in paths}.values())
 
     def _approved_temp(self, path):
         if not isinstance(path, (str, os.PathLike)) or not os.path.isabs(path):
@@ -182,10 +190,23 @@ class CleanupManager:
     def _browser_paths(self):
         local = self._local_root()
         if not local:
+            self.last_result.skipped.append('User cache location could not be verified.')
             return []
-        targets = [os.path.join(local, vendor, browser, 'User Data', 'Default', cache)
-                   for vendor, browser in (('Google', 'Chrome'), ('Microsoft', 'Edge'))
-                   for cache in ('Cache', 'Code Cache')]
+        targets = []
+        for vendor, browser in (('Google', 'Chrome'), ('Microsoft', 'Edge')):
+            user_data = os.path.join(local, vendor, browser, 'User Data')
+            if not os.path.lexists(user_data):
+                continue
+            try:
+                with _guard_path(user_data) as guards:
+                    _validate_guards(guards)
+                    names = os.listdir(user_data)
+                    _validate_guards(guards)
+                    targets.extend(os.path.join(user_data, name, cache) for name in names
+                                   if name == 'Default' or re.fullmatch(r'Profile [0-9]+', name)
+                                   for cache in ('Cache', 'Code Cache'))
+            except OSError as exc:
+                self.last_result.skipped.append(f'{user_data}: {exc}')
         profiles = os.path.join(local, 'Mozilla', 'Firefox', 'Profiles')
         if os.path.isdir(profiles):
             try:
@@ -294,8 +315,17 @@ class CleanupManager:
     def empty_recycle_bin(self):
         try:
             result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 7)
-            if result in (0, -2147418113):
-                return True, 'Recycle bin emptied.' if result == 0 else 'Recycle bin was already empty.'
+            if result == 0:
+                return True, 'Recycle bin emptied.'
+            if result == -2147418113:
+                # E_UNEXPECTED is an error, not proof that every bin is empty.
+                info = _RecycleBinInfo()
+                info.cbSize = ctypes.sizeof(info)
+                query = ctypes.windll.shell32.SHQueryRecycleBinW
+                query.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(_RecycleBinInfo)]
+                query.restype = wintypes.LONG
+                if query(None, ctypes.byref(info)) == 0 and info.i64NumItems == 0:
+                    return True, 'Recycle bin is empty (verified).'
             return False, f'Recycle bin operation returned code {result}.'
         except Exception as exc:
             self.logger.log(f'Failed to empty recycle bin: {exc}', 'ERROR')

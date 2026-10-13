@@ -179,6 +179,7 @@ def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch
     app.run_battery_report()
     assert calls[0][0] == [r'C:\Windows\System32\powercfg.exe', '/batteryreport', '/output', r'C:\Users\A Name\battery_report.html']
     assert calls[0][1]['shell'] is False
+    assert calls[0][1]['stdin'] == panacea_ui.subprocess.DEVNULL
 
 def test_navigation_builds_each_section_only_when_first_opened():
     app = app_without_window()
@@ -217,6 +218,7 @@ def test_background_release_check_does_not_block_maintenance():
 
 def _safe_real_app(monkeypatch):
     """Real Tk layout, with every system/network boundary replaced before init."""
+    monkeypatch.setattr(panacea_ui, 'MaintenanceGuard', lambda: SimpleNamespace(is_blocked=lambda: False, mark_unknown=lambda: True, last_error=''))
     for name in ('Logger', 'CleanupManager', 'DiskOptimizer', 'CommandRunner', 'SystemMonitor', 'RestoreManager', 'PerformanceManager'):
         monkeypatch.setattr(panacea_ui, name, lambda: SimpleNamespace())
     for name in ('update_dashboard', '_load_metadata', 'refresh_drives', '_load_turbo_states', '_check_updates_thread', '_check_app_update'):
@@ -228,7 +230,9 @@ def _destroy_real_app(app):
     app._shutdown.set()
     app.workers.close()
     for callback_id in app.tk.call('after', 'info'):
-        app.after_cancel(callback_id)
+        # Cancel scheduling without deleting another widget's registered Tcl
+        # command. Its owning widget releases that command during destroy().
+        app.tk.call('after', 'cancel', callback_id)
     app.destroy()
 
 
@@ -371,3 +375,336 @@ def test_update_replacement_guard_keeps_monitor_running_when_close_is_refused():
     app.monitor.close.assert_not_called()
     app.destroy.assert_not_called()
     assert not app._shutdown.is_set()
+
+
+@pytest.mark.parametrize('method,manager,backend', [
+    ('run_cleanmgr', 'cleanup_mgr', 'open_disk_cleanup'),
+    ('run_dfrgui', 'disk_opt', 'open_optimize_gui'),
+])
+def test_failed_windows_tool_launch_has_visible_error(method, manager, backend):
+    app = app_without_window()
+    setattr(app, manager, SimpleNamespace(**{backend: lambda: False}))
+    app._show_toast = Mock()
+    app.operation_label = Mock()
+    getattr(app, method)()
+    assert app._show_toast.call_args.args[2] == 'error'
+
+
+def test_resurrection_targets_windows_system_drive(monkeypatch):
+    app = app_without_window()
+    monkeypatch.setenv('SystemDrive', 'D:')
+    monkeypatch.setattr('modules.commands.system_executable', lambda name: 'D:\\Windows\\System32\\' + name)
+    app._run_resurrection_sequence()
+    assert app.disk_opt.analyze_optimize_drive.call_args.args[0] == 'D:'
+    commands = [call.args[0] for call in app.cmd_runner.run_command_stream.call_args_list]
+    assert 'chkdsk D: /scan /perf' in commands
+
+
+def test_completed_resurrection_step_updates_only_its_actual_result():
+    app = app_without_window()
+    app._resurrection_states = {}
+    app._resurrection_rows = {}
+    app._set_resurrection_step('Restore point', 'completed', 'Verified checkpoint')
+    app._set_resurrection_step('Browser caches', 'failed', 'One locked file')
+    assert app._resurrection_states == {
+        'Restore point': ('completed', 'Verified checkpoint'),
+        'Browser caches': ('failed', 'One locked file'),
+    }
+
+
+def test_cancelled_resurrection_marks_unattempted_steps_without_success():
+    app = app_without_window()
+    app._resurrection_states = {'Restore point': ('completed', 'Verified')}
+    app._resurrection_rows = {}
+    app.lbl_status = Mock()
+    app.operation_label = Mock()
+    result = {'status': 'cancelled', 'steps': [
+        {'name': 'Restore point', 'success': True, 'message': 'Verified'}], 'total': 10}
+    app._finish_resurrection(result)
+    assert app._resurrection_states['Restore point'][0] == 'completed'
+    assert app._resurrection_states['Browser caches'][0] == 'not run'
+    assert app.last_resurrection_result == result
+
+
+def test_restore_saved_turbo_is_available_after_partial_activation():
+    app = app_without_window()
+    app.btn_restore_turbo = Mock()
+    app.turbo_saved_label = Mock()
+    app._update_installing = False
+    app._apply_saved_turbo(('power',))
+    assert app.btn_restore_turbo.configure.call_args.kwargs['state'] == 'normal'
+    assert '1' in app.turbo_saved_label.configure.call_args.kwargs['text']
+
+
+def test_no_drives_disables_optimization_without_selecting_fake_drive():
+    app = app_without_window()
+    app.drive_menu = Mock()
+    app.selected_drive = Mock(get=lambda: 'C:')
+    app.btn_optimize_drive = Mock()
+    app.drive_detail = Mock()
+    app._update_installing = False
+    app._set_drives([])
+    assert app.selected_drive.set.call_args.args == ('No drives',)
+    assert app.btn_optimize_drive.configure.call_args.kwargs['state'] == 'disabled'
+
+
+@pytest.mark.parametrize('width,height,scale', [(1366, 768, 1.5)])
+@isolated_tk_test
+def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch, width, height, scale):
+    panacea_ui.ctk.set_widget_scaling(scale)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, width, height)
+        panacea_ui.tk.Tk.geometry(app, f'{width}x{height}')
+        def actions(widget):
+            found = []
+            for child in widget.winfo_children():
+                if isinstance(child, (panacea_ui.ctk.CTkButton, panacea_ui.ctk.CTkSwitch)):
+                    if child.winfo_ismapped():
+                        found.append(child)
+                else:
+                    found.extend(actions(child))
+            return found
+        for name in ('Cleaning', 'Disk', 'Tools', 'Apps', 'Turbo', 'Resurrect'):
+            app.select_frame(name)
+            app.update()
+            frame = app.frames[name]
+            left, top = frame.winfo_rootx(), frame.winfo_rooty()
+            right, bottom = left + frame.winfo_width(), top + frame.winfo_height()
+            widgets = actions(frame)
+            if name == 'Resurrect':
+                widgets += list(app._resurrection_rows.values())
+            for widget in widgets:
+                assert widget.winfo_rooty() >= top
+                assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{name}: {widget.cget("text")} below viewport'
+                assert widget.winfo_rootx() >= left
+                assert widget.winfo_rootx() + widget.winfo_width() <= right, f'{name}: {widget.cget("text")} outside viewport'
+            if name == 'Cleaning':
+                log = app.clean_log
+                toggle = next(child for child in log.master.winfo_children()
+                              if isinstance(child, panacea_ui.ctk.CTkButton))
+                assert not log.winfo_manager()
+                toggle.invoke()
+                app.update()
+                assert log.winfo_ismapped()
+                canvas = log.master.master._parent_canvas
+                before = canvas.yview()
+                assert before[1] < 1.0, 'Expanded details should overflow the compact viewport'
+                canvas.event_generate('<MouseWheel>', delta=-120)
+                app.update()
+                assert canvas.yview()[0] > before[0]
+                toggle.invoke()
+                app.update()
+                assert not log.winfo_manager()
+    finally:
+        _destroy_real_app(app)
+
+
+def test_unavailable_metrics_do_not_render_zero_or_healthy():
+    app = app_without_window()
+    names = ('dash_uptime_val', 'dash_cpu_val', 'cpu_graph', 'ram_graph', 'dash_ram_val', 'dash_ram_perc',
+             'dash_disk_bar', 'dash_disk_state', 'dash_disk_val', 'dash_disk_perc', 'dash_battery')
+    for name in names:
+        setattr(app, name, Mock())
+    app._update_fast_gui({'ram': None, 'disk': None, 'cpu': None, 'uptime': 'Unknown', 'battery': (None, 'Unknown')})
+    assert app.dash_cpu_val.configure.call_args.kwargs['text'] == '—'
+    assert app.dash_disk_state.configure.call_args.kwargs['text'] == 'Unavailable'
+    app.cpu_graph.add_value.assert_not_called()
+    app.ram_graph.add_value.assert_not_called()
+
+
+def test_battery_report_open_failure_preserves_saved_result(monkeypatch, tmp_path):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    monkeypatch.setattr(panacea_ui.os, 'startfile', Mock(side_effect=OSError('No HTML association')), raising=False)
+    app._request_operation = lambda name, work, success: success(tmp_path / 'battery_report.html')
+    app.run_battery_report()
+    text = app.operation_label.configure.call_args.kwargs['text']
+    assert 'saved' in text.lower() and 'battery_report.html' in text
+    assert app._show_toast.call_args.args[2] == 'warning'
+
+
+def test_callback_drain_does_not_reschedule_after_queued_shutdown():
+    app = app_without_window()
+    app.after = Mock()
+    app.dispatcher.post(app._shutdown.set)
+    app._drain_callbacks()
+    app.after.assert_not_called()
+
+
+def test_close_defers_until_owned_maintenance_finishes(monkeypatch):
+    monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
+    app = app_without_window()
+    app._update_installing = False
+    app._update_cancel = threading.Event()
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    app.monitor = SimpleNamespace(close=Mock())
+    app.destroy = Mock()
+    entered, release = threading.Event(), threading.Event()
+    def maintenance():
+        entered.set()
+        release.wait(3)
+        return True
+    try:
+        assert app._request_operation('fixture', maintenance)
+        assert entered.wait(3)
+        app._on_close()
+        app.destroy.assert_not_called()
+        assert app._resurrect_cancel.is_set()
+        release.set()
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.destroy.assert_called_once()
+        app.monitor.close.assert_called_once()
+    finally:
+        release.set()
+        app.workers.join(3)
+
+
+@pytest.mark.parametrize('target', ['ms-settings:appsfeatures', 'ms-settings:startupapps',
+                                   'ms-settings:windowsupdate', 'ms-settings:windowsupdate-optionalupdates'])
+def test_windows_settings_routes_exact_destination_without_claiming_completion(monkeypatch, target):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.apps_status = Mock()
+    opened = []
+    monkeypatch.setattr(panacea_ui.os, 'startfile', opened.append, raising=False)
+    app.run_launch(target, 'Windows settings')
+    assert opened == [target]
+    assert app.operation_label.configure.call_args.kwargs['text'].startswith('Opened')
+
+
+def test_windows_settings_failure_replaces_previous_success(monkeypatch):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.apps_status = Mock()
+    app._show_toast = Mock()
+    monkeypatch.setattr(panacea_ui.os, 'startfile', Mock(side_effect=OSError('unavailable')), raising=False)
+    app.run_launch('ms-settings:appsfeatures', 'Apps settings')
+    assert 'Failed' in app.operation_label.configure.call_args.kwargs['text']
+    assert 'unavailable' in app.apps_status.configure.call_args.kwargs['text']
+
+
+def test_resurrection_stops_after_command_completion_becomes_unknown():
+    app = app_without_window()
+    def timed_out(*args, **kwargs):
+        app.cmd_runner.completion_unknown = True
+        return False
+    app.cmd_runner.run_command_stream.side_effect = timed_out
+    result = app._run_resurrection_sequence()
+    assert result['status'] == 'partial'
+    assert len(result['steps']) == 5
+    assert 'unknown' in result['steps'][-1]['message'].lower()
+    app.disk_opt.analyze_optimize_drive.assert_not_called()
+
+
+def test_unknown_command_completion_blocks_further_maintenance():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_uncertain = True
+    app._show_toast = Mock()
+    assert app._request_operation('Another repair', Mock()) is False
+    assert 'restart' in app._show_toast.call_args.args[1].lower()
+
+
+def test_component_cleanup_routes_command_output_to_cleanup_details(monkeypatch):
+    app = app_without_window()
+    app.log_msg = Mock()
+    app.log_tools_msg = Mock()
+    app._show_result = Mock()
+    app._request_operation = lambda name, work, done: done(work())
+    monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
+    app.cmd_runner.run_command_stream.side_effect = lambda cmd, name, callback: callback('fixture output') or True
+    app.run_deep_clean()
+    app.log_msg.assert_any_call('fixture output')
+    app.log_tools_msg.assert_not_called()
+
+
+@pytest.mark.parametrize('raises', [False, True])
+def test_timeout_guard_is_saved_before_result_delivery_and_blocks_reopen(tmp_path, raises):
+    from modules.maintenance_guard import MaintenanceGuard
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    path = tmp_path / 'guard'
+    app.maintenance_guard = MaintenanceGuard(path, lambda: 'windows-boot-id:10')
+    def work():
+        app.cmd_runner.completion_unknown = True
+        if raises:
+            raise RuntimeError('fixture failed after timeout')
+        return False
+    assert app._request_operation('fixture command', work)
+    app.workers.join(3)
+    assert MaintenanceGuard(path, lambda: 'windows-boot-id:10').is_blocked()
+    app.dispatcher.drain()
+    assert app._maintenance_uncertain
+    assert 'restart' in app.operation_label.configure.call_args.kwargs['text'].lower()
+    assert app._request_operation('Another command', Mock()) is False
+
+
+def test_timeout_guard_save_failure_stays_visible_and_blocks_session():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    app.maintenance_guard = SimpleNamespace(mark_unknown=Mock(return_value=False), last_error='Could not save the recovery guard: denied')
+    def work():
+        app.disk_opt.completion_unknown = True
+        return False
+    assert app._request_operation('fixture timeout', work)
+    app.workers.join(3)
+    app.dispatcher.drain()
+    app.maintenance_guard.mark_unknown.assert_called_once()
+    assert app._maintenance_uncertain
+    assert 'Could not save' in app.operation_label.configure.call_args.kwargs['text']
+
+
+@isolated_tk_test
+def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        app.focus_force()
+        for index, name in enumerate(app.frames, 1):
+            app.event_generate(f'<Control-Key-{index}>')
+            app.update()
+            assert app.active_frame == name
+        button = app.nav_buttons['Dashboard']
+        button._canvas.focus_force()
+        app.update()
+        button._canvas.event_generate('<Return>')
+        app.update()
+        assert app.active_frame == 'Dashboard'
+        button._canvas.event_generate('<Tab>')
+        app.update()
+        assert app.focus_get() != button._canvas
+        app.select_frame('Disk')
+        app._set_drives([{'letter': 'C:'}, {'letter': 'D:'}])
+        app.update()
+        app.drive_menu._canvas.focus_force()
+        app.drive_menu._canvas.event_generate('<Down>')
+        app.update()
+        assert app.selected_drive.get() == 'D:'
+        app.select_frame('Turbo')
+        invoked = []
+        switch = app.turbo_switches['power']
+        switch.configure(state='normal', command=lambda: invoked.append(True))
+        app.update()
+        switch._canvas.focus_force()
+        switch._canvas.event_generate('<space>')
+        app.update()
+        assert invoked == [True]
+        switch.configure(state='disabled')
+        switch._canvas.event_generate('<Return>')
+        app.update()
+        assert invoked == [True]
+    finally:
+        _destroy_real_app(app)

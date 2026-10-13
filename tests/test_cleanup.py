@@ -115,6 +115,61 @@ def test_browser_cleanup_only_touches_explicit_cache(manager):
     assert sentinel.read_bytes() == b'keep'
 
 
+@pytest.mark.parametrize('vendor,browser', [('Google', 'Chrome'), ('Microsoft', 'Edge')])
+def test_browser_cleanup_includes_numbered_profiles_and_preserves_user_data(manager, vendor, browser):
+    subject, temp = manager
+    user_data = temp.parent / vendor / browser / 'User Data'
+    profile = user_data / 'Profile 2'
+    cache = profile / 'Code Cache'
+    cache.mkdir(parents=True)
+    (cache / 'entry').write_bytes(b'12345')
+    sentinel = profile / 'Login Data'
+    sentinel.write_bytes(b'keep')
+    other = user_data / 'Unrecognized Data' / 'Cache'
+    other.mkdir(parents=True)
+    (other / 'keep').write_bytes(b'keep')
+    assert subject.clean_browser_caches() == (1, 5)
+    assert not (cache / 'entry').exists()
+    assert sentinel.read_bytes() == b'keep'
+    assert (other / 'keep').read_bytes() == b'keep'
+
+
+def test_browser_unknown_profile_location_is_not_reported_as_success(manager, monkeypatch):
+    subject, _ = manager
+    monkeypatch.delenv('LOCALAPPDATA')
+    assert subject.clean_browser_caches() == (0, 0)
+    assert not subject.last_result.ok
+
+
+def test_temp_preview_counts_case_variant_root_only_once(manager, monkeypatch):
+    subject, temp = manager
+    (temp / 'one').write_bytes(b'123')
+    # Model USER TEMP pointing at the Windows Temp root with different spelling.
+    monkeypatch.setattr(subject, '_windows_root', lambda: str(temp.parent))
+    monkeypatch.setenv('TEMP', str(temp).upper())
+    assert subject.preview_temp_files() == (1, 3)
+    assert (temp / 'one').read_bytes() == b'123'
+
+
+def test_missing_temp_environment_still_previews_known_user_temp(manager, monkeypatch):
+    subject, temp = manager
+    (temp / 'one').write_bytes(b'123')
+    monkeypatch.delenv('TEMP')
+    assert subject.preview_temp_files() == (1, 3)
+
+
+@pytest.mark.parametrize('items,query_code,success', [(1, 0, False), (0, 0, True), (0, -1, False)])
+def test_unexpected_recycle_error_requires_verified_empty_bin(manager, monkeypatch, items, query_code, success):
+    subject, _ = manager
+    def query(root, info_pointer):
+        info = info_pointer._obj
+        info.i64NumItems = items
+        return query_code
+    shell = SimpleNamespace(SHEmptyRecycleBinW=lambda *args: -2147418113, SHQueryRecycleBinW=query)
+    monkeypatch.setattr(cleanup.ctypes, 'windll', SimpleNamespace(shell32=shell))
+    assert subject.empty_recycle_bin()[0] is success
+
+
 def test_multiply_linked_file_preserves_outside_sentinel(manager, tmp_path):
     subject, temp = manager
     sentinel = tmp_path / 'important.txt'

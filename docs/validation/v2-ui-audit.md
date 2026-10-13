@@ -1,0 +1,138 @@
+# V2 UI action inventory and behavior audit
+
+Date: 2026-10-13. Read-only audit of the working tree on `feat/panacea-brand-dashboard-20261013`, baseline `24e2adede5e7b47506a33e6f49b459d9d61804bd`. Reviewed [panacea_ui.py](../../panacea_ui.py), [main.py](../../main.py), worker/sequence code, backend contracts, regression tests and the scoped validation reports. UI source SHA-256 at review: `7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca`.
+
+This is an inventory of implemented behavior and available evidence, not a claim that every Windows operation was executed successfully. No GUI, maintenance command, host setting change or update installation was launched for this documentation pass. Test links below identify the corresponding regression coverage; current integrated pass counts belong to the coordinator's final validation. Earlier state screenshots have their own source hashes and do not cover the later close/unknown-completion changes.
+
+## Shared execution, privileges and lifetime
+
+- The normal `main()` entry point requests administrator elevation before constructing the UI. UAC refusal shows an error and exits. `--smoke-test` skips elevation. Individual managers do not elevate themselves; denial or unavailable utilities must remain failures. Directly constructing `PanaceaApp` bypasses this entry-point privilege gate, as fixture tests deliberately do. See [startup tests](../../tests/test_startup.py).
+- `_request_operation` serializes maintenance in the default worker group. It blocks duplicate/incompatible requests while maintenance, an update download or installation is active. Registered maintenance buttons and Turbo switches are disabled; a handler-level guard also rejects requests. The group remains owned until the result has been delivered on the UI thread, then controls recover. Background metric, hardware, drive, Turbo and release queries use separate groups. Navigation and launch-only Windows shortcuts remain available. See [worker tests](../../tests/test_ui_dispatch.py) and [controller tests](../../tests/test_ui_controller.py).
+- Each owned operation shows Running, then its result or a visible failure/toast. Logs are dispatched to Tk rather than written from worker threads; section logs are bounded and buffered before a lazily built section exists. Logs expand/collapse without invoking a backend. A callback exception is logged by the dispatcher; it is not converted into a successful backend result.
+- Command/Disk timeout or unverifiable process completion sets `completion_unknown`. `_request_operation` wraps work in `guarded_work`; its `finally` persists a maintenance guard off the UI thread, before success/error delivery, including when work raises. Delivery latches `_maintenance_uncertain`, disables maintenance and shows the guard's reason or save failure. Resurrection stops before another phase. Startup constructs `MaintenanceGuard` and synchronously performs a protected read-only check before controls are built, so a persisted block survives reopening and appears in the initial status. Absent storage creates nothing and requires no boot query. The direct child is reaped where possible; a surviving Windows helper/service is not proven stopped.
+- The guard stores immutable records under `%LOCALAPPDATA%\Panacea\maintenance-guard`. It reads the `REG_DWORD` `BootId` from the 64-bit HKLM `SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters` key. It permits maintenance only when the current verified counter is greater than **every** recorded counter; equal/lower/reset/invalid readings remain blocked. No mutable wall-clock/WMI timestamp fallback is used. Unknown, corrupt, incomplete, unsafe or unreadable records remain blocked and are not deleted automatically; an unknown original boot cannot be cleared merely by observing a later known counter. Existing records are retained even after a verified later boot permits maintenance. If storage denies creation of every artifact, the same-session block and visible save error remain, but persistence across reopening cannot be guaranteed. There is no preflight storage mutation. See [guard tests](../../tests/test_maintenance_guard.py), `test_timeout_guard_is_saved_before_result_delivery_and_blocks_reopen` (success and exception cases), `test_timeout_guard_save_failure_stays_visible_and_blocks_session`, and the [maintenance audit](v2-maintenance-audit.md).
+- Closing during owned maintenance sets `_close_when_idle` and the Resurrection cancellation event, keeps the UI alive until the current operation's result is delivered, then closes. It does not kill a servicing command mid-step. Closing during update installation is refused. An idle/download close sets shutdown/download-cancel events, closes monitor/worker delivery and destroys Tk. Read-only monitor queries have a separate owned-process shutdown path. See `test_close_defers_until_owned_maintenance_finishes`, `test_application_close_cancels_monitor_queries_before_destroying_tk`, `test_update_replacement_guard_keeps_monitor_running_when_close_is_refused`, and `test_callback_drain_does_not_reschedule_after_queued_shutdown`.
+- Sidebar buttons and Ctrl+1…7 call `select_frame`; each section is built once and retains its widgets, last status and log during navigation. Navigation does not itself rerun operations. App restart starts a new UI session: preview/results/sequence progress are not resumed. Maintenance guard, Turbo originals and updater recovery records have explicit persistence. Buttons support Enter/Space, Turbo switches support Enter/Space, and the drive selector supports Up/Down; native keyboard checks are in the controller suite and coordinator evidence.
+
+## Dashboard
+
+| Visible action/data | Handler → effective call | Feedback, privilege and lifetime | Verification / external limit |
+| --- | --- | --- | --- |
+| CPU, memory, system drive, uptime, battery | `update_dashboard` → `SystemMonitor.sample_fast()`; schedules again 3 s after delivery | Separate `metrics` worker; valid values update graph/cards; unavailable values show em dash/Unavailable, never invented zero usage. No maintenance cancel control. | [Monitor tests](../../tests/test_system_monitor.py), `test_unavailable_metrics_do_not_render_zero_or_healthy`, [monitor audit](v2-monitor-audit.md); unusual hardware/multi-group CPU and live machine accuracy retain that report's limits. |
+| OS/CPU/RAM/disk details | `_load_metadata` → `sample_metadata()`; repeats 120 s after delivery | Separate `hardware` worker, Loading/fallback text. Cached query results are independent from fast samples. | Monitor tests cover trusted PowerShell, configured memory values, real system volume, query failure and shutdown. Live hardware metadata is not universally verified. |
+| Windows Update status | `_check_updates_thread` → `get_windows_update_status()` at startup | Separate `windows-updates` group; status text, success color only for verified zero counts; query failure is not up to date. | Monitor update-classification fixtures; live WUA/WSUS/network conditions untested here. No periodic update-status refresh button is exposed. |
+| Windows Update **View** | `run_windows_update` → `run_launch('ms-settings:windowsupdate', 'Windows Update')` → `os.startfile` | Opens Windows Settings; Opened / Continue in Windows, or Failed/toast. Does not install updates or monitor their completion. | Exact URI and opener failure controller tests; real Settings interaction remains external. |
+| Temporary files **Preview** | `run_preview_temp` → `cleanup_mgr.preview_temp_files()` | Serialized, read-only; Scanning → count/MB, skipped/error counts and Completed/Partial; exception shows Scan failed. Same cached summary updates Cleanup without navigation. No confirmation. | Cleanup traversal fixtures; preview/shared-dashboard/partial tests; [four native fixture states](v2-ui-states.md). No host Temp deletion. |
+| Restore point **Create** | `run_create_restore` → `restore_mgr.create_restore_point('Panacea Manual Point')` | Confirmation; owned worker; requires existing System Protection/admin rights. New unique checkpoint description and newer sequence must verify. No implicit protection enablement. | [Restore tests](../../tests/test_restore.py); throttling, denied privilege and real checkpoint creation remain disposable-Windows gates. |
+
+## Cleanup
+
+| Action | Handler → backend / parameters | Feedback and controls | Verification / external limit |
+| --- | --- | --- | --- |
+| **Preview** | Same `run_preview_temp` as Dashboard | Shared in-place summary and serialized scanning state; does not delete files. | Above; preview fixture counts are explicitly simulated. |
+| **Delete files** | `run_clean_temp` → `_cleanup_result(clean_temp_files, progress_callback=log_msg)` | Explicit permanent-deletion confirmation. Validated Temp roots only; actual deleted count/bytes, skips/errors → Completed or Failed / partial; Cleanup details. No mid-operation cancel. | [Cleanup tests](../../tests/test_cleanup.py): native disposable files, locked/reparse/hardlink/case-sensitive/redirected paths and count accuracy; negative-confirmation test proves no worker starts. Live Temp cleanup untested. |
+| **Empty bin** | `run_empty_recycle` → `empty_recycle_bin()` → `SHEmptyRecycleBinW(None, None, 7)` | Explicit all-items permanent-deletion confirmation; native prompt suppressed by backend flags. HRESULT/verified-empty handling; tuple result/toast. No cancel once underway. | Recycle HRESULT/query mocks; host Recycle Bin untouched. |
+| **Clean store** | `run_deep_clean` → `run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=log_msg)` → trusted `dism.exe … /NoRestart` | Confirmation, admin servicing, streamed result and restart-required feedback. The explicit log callback routes output to **Cleanup details**. | [Command tests](../../tests/test_commands.py) cover allowlist/arguments/deadline/restart code; controller regression checks the Cleanup output route. No real component removal. |
+| **Open utility** | `run_cleanmgr` → `cleanup_mgr.open_disk_cleanup()` → trusted `cleanmgr.exe` | Launch-only, outside maintenance worker; Opened on true, error toast on failure. Native utility owns selections/confirmation/UAC/completion. | Launch source audit, executable existence and mocked failed-launch UI test; not real Disk Cleanup execution. |
+| **Cleanup details** | `_section_log` toggle | Reveals/hides buffered bounded log. No backend or privileges. | Lazy section/log source audit and layout evidence. |
+
+## Disk
+
+| Action | Handler → backend / parameters | Feedback and controls | Verification / external limit |
+| --- | --- | --- | --- |
+| **Refresh** | `refresh_drives` → `disk_opt.get_drive_info()` | Separate `drive-list` group prevents duplicate concurrent reads; local fixed volumes only, capacity and explicit unavailable errors. Keeps an existing valid selection; otherwise first returned drive or No drives. | [Disk tests](../../tests/test_disk.py), native read-only enumeration in maintenance audit. Network/removable/optical volumes intentionally excluded. |
+| Drive selector / Up–Down | `_drive_selected` / `_cycle_drive` | Updates detail/capacity only. Unavailable/no drive disables Optimize; no fictitious C: fallback. Changing selection cannot alter a drive letter already captured by a running operation. | `test_no_drives_disables_optimization_without_selecting_fake_drive`, native fixture unavailable state, keyboard test. |
+| **Optimize** | `run_optimize_drive` validates `[A-Za-z]:` and inventory membership → `analyze_optimize_drive(letter, progress_callback=log_disk_msg)` → `defrag.exe <LETTER:> /O` | Confirmation; maintenance lock; Windows chooses optimization method; output log + checked exit status. Default timeout 7200 s, unknown-completion lock on unsafe completion. No user force-stop. | Command/drive grammar, no-callback output drain, timeout fixtures; actual defrag/TRIM and storage impact untested. |
+| **Open utility** | `run_dfrgui` → `open_optimize_gui()` → trusted `dfrgui.exe` | Launch-only, not serialized with owned maintenance; Opened or error toast. Native tool owns schedules/actions. | Mocked failure UI, source/executable existence audit; real optimization excluded. |
+| **Optimization output** | Log toggle | Same bounded section log behavior. | Layout/source inspection. |
+
+## Tools
+
+All five **Run** buttons use `run_cmd(command, description)` → `CommandRunner.run_command_stream(command, description, log_tools_msg)`. They confirm first, then use the shared maintenance lock and Tools output; component cleanup passes its own Cleanup log callback. The command backend accepts only the fixed allowlist, resolves system-directory executables, uses `shell=False`, `stdin=DEVNULL`, and defaults to a 3600 s deadline. Return code 0 succeeds; DISM 3010 succeeds with a restart-required message. Timeouts/unverified completion trigger the guard described above. There is no cancel-current-command button. Normal launch is elevated; launch/access/exit failures are visible rather than silently accepted.
+
+| Action | Exact effective operation | Specific feedback / evidence |
+| --- | --- | --- |
+| System file scan **Run** | `sfc.exe /scannow` | Can repair protected files. Command output/result; allowlist/exit/stream fixtures only, no real SFC run. |
+| Image health **Run** | `dism.exe /Online /Cleanup-Image /CheckHealth /NoRestart` | Checks recorded component-image corruption; does not substitute ScanHealth/RestoreHealth. Mocked command and restart-code checks. |
+| Repair image **Run** | `dism.exe /Online /Cleanup-Image /RestoreHealth /NoRestart` | Actual servicing may use Windows Update; repair/network/reboot behavior untested on host. |
+| Flush DNS **Run** | `ipconfig.exe /flushdns` | Confirmation; checked exit and output. No host DNS flush. |
+| Reset Winsock **Run** | `netsh.exe winsock reset` | Specific confirmation warns about interrupted connections/restart. No host network reset. |
+| **Restore point** | Same `run_create_restore` / `Panacea Manual Point` as Dashboard | Verified checkpoint contract and confirmation above; no rollback button. |
+| **Battery report** | `run_battery_report` → trusted `powercfg.exe /batteryreport /output <USERPROFILE>\battery_report.html`; `subprocess.run(check=True, timeout=60, stdin=DEVNULL, shell=False)` | Serialized, no extra confirmation; creates/replaces that report path then `os.startfile` opens it. Saved-path success remains visible if opener fails, with warning toast. [Controller tests](../../tests/test_ui_controller.py) assert exact arguments including a spaced profile path and opener failure; no real battery report generated in this audit. |
+| **Command output** | Log toggle | Includes tool commands; bounded view, no backend action. Component cleanup uses its own Cleanup details log. |
+
+Command evidence: [tests](../../tests/test_commands.py), [maintenance report](v2-maintenance-audit.md). Native subprocess tests use inert sleeping/output-only fixtures, not servicing utilities. Their successful timeout/reaping does not prove an entire Windows servicing process tree was stopped.
+
+## Apps
+
+| Button | `run_launch` target / actual call | Feedback and scope |
+| --- | --- | --- |
+| **Apps settings** | `os.startfile('ms-settings:appsfeatures')` | Opened / Continue in Windows plus Apps status; failure replaces earlier success and shows toast. |
+| **Classic programs** | `Popen([system_executable('control.exe'), 'appwiz.cpl'], shell=False)` | Same launch-only status; no app enumeration or uninstall performed by Panacea. |
+| **Startup settings** | `os.startfile('ms-settings:startupapps')` | Windows owns startup configuration; Panacea does not edit startup entries. |
+
+These shortcuts have no maintenance worker, loading sequence or Panacea cancellation/confirmation. The OS owns permissions, additional dialogs and changes. Return to Panacea keeps the last opener status, never claims uninstall/repair/configuration completed. Reopening Windows or Panacea does not resume/monitor the external operation. URI route/failure behavior has controller tests; the classic Control Panel route was source-audited. Full real installed-app and startup flows remain external gates. `run_view_optional_updates()` routes `ms-settings:windowsupdate-optionalupdates` and has route coverage, but **no current visible button calls it**.
+
+## Turbo
+
+All changes use `_request_operation` and a fresh state read on completion/rejection; they have inline consequences but no separate confirmation dialog. Unknown live settings disable their controls. Generation/pending-refresh logic prevents a pre-mutation read from overwriting the new state, retries a refresh deferred by another operation, and keeps switches disabled until the fresh read completes. The master uses a BooleanVar so a disabled native switch still displays the applied snapshot correctly. See [five refresh regressions](../../tests/test_ui_turbo_refresh.py).
+
+| Action | Actual backend parameters | Result/persistence semantics |
+| --- | --- | --- |
+| **All settings** on/off | `_master_toggle_changed` → `set_turbo(requested_bool)` | On snapshots all five originals before any mutation; unknown original refuses activation. Failure stops further activation and retains recovery data. Off attempts saved originals even after partial activation; no invented blanket defaults. |
+| **High performance** on/off | `set_power_plan(True/False)` | On uses high-performance GUID `8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c`; off restores exact saved GUID, including a custom scheme. |
+| **Visual effects preset** on/off | `set_visual_effects(False/True)` | On writes HKCU Explorer VisualEffects `VisualFXSetting=2`; off restores the saved DWORD. This stores a Windows preference, not independently toggled animation flags or a proven immediate performance change. |
+| **Pause SysMain** on/off | `set_sysmain(False/True)` → `set_service('SysMain', start=…)` | On stops the service; off restores saved running/stopped state, not unconditional start. |
+| **Pause Windows Search** on/off | `set_wsearch(False/True)` for `WSearch` | Same exact-state contract; indexing may be unavailable while paused. |
+| **Pause Print Spooler** on/off | `set_spooler(False/True)` for `Spooler` | Same exact-state contract; UI explicitly warns printing is unavailable while active. |
+| **Restore saved settings** | `_restore_saved_turbo` → `set_turbo(False)` | Enabled when saved originals exist, independently of an Unknown/inactive master. Failed restores remain retryable. |
+| **Refresh state** | `_load_turbo_states` → `_read_turbo_states()` + `get_saved_settings()` | Queries power, visual preference, three services, master and originals. Individual service/preset readings are inverted to express the Turbo action. Saved count, no saved changes and unavailable storage are distinct. No mutations. |
+
+Snapshots use `%LOCALAPPDATA%\Panacea\turbo-state.json`, protected file operations, thread/process transaction locking and flush before mutation. Live readback verifies changes; successful restoration removes only the recovered key. App recreation reloads originals, including partial activation/restore records; there is no automatic restore on app close. Off with no saved original is a no-op, not a request to impose a new default. Current service/power/registry queries may fail due to access or unavailable system facilities; Unknown is deliberate. Same-state displays are observations, not proof of Panacea ownership.
+
+Evidence: [performance tests](../../tests/test_performance.py), [state/update audit](v2-state-update-audit.md), saved-partial/unknown native [fixtures](v2-ui-states.md). Native file/mutex and output-only subprocess fixtures were exercised, but actual host power, registry and service mutations, reboot/interruption recovery and real performance effects were not.
+
+## Resurrection
+
+**Start sequence** → `run_god_mode` confirms the ten-step operation, permanent cache/Temp/Recycle Bin deletion, networking impact and possible restart. It refuses duplicate active work before clearing cancellation, resets phase labels, then runs `_run_resurrection_sequence` under the shared maintenance group. The actual Windows system volume comes from `system_executable('cmd.exe')` plus validated drive parsing, not an assumed C:.
+
+| Phase (visible label) | Actual call | Stop/result rule |
+| --- | --- | --- |
+| Restore point | `create_restore_point('Panacea Resurrection restore point')` | Critical: requires a newly verified request-specific checkpoint before cleanup. Failure stops with one attempted phase. |
+| Browser caches | `clean_browser_caches()` | Explicit Chrome/Edge/Firefox cache roots only. Skipped/errors mean Failed / partial; no live profile deletion used for verification. |
+| Temporary files | `clean_temp_files(progress_callback=log_god_msg)` | Same protected cleanup/count semantics as Cleanup. |
+| Recycle Bin | `empty_recycle_bin()` | Permanent all-drive emptying; covered by sequence confirmation, no second native prompt. |
+| DNS cache | `run_command_stream('ipconfig /flushdns', 'DNS flush', callback)` | Checked result; unknown completion stops later phases. |
+| Network reset | `run_command_stream('netsh winsock reset', 'Network reset', callback)` | Checked result; restart may be needed. |
+| Optimize drive | `analyze_optimize_drive(system_drive, progress_callback=log_god_msg)` | `defrag.exe <system-volume:> /O`; unknown completion stops later phases. |
+| Disk scan | `run_command_stream('chkdsk <system-volume:> /scan /perf', 'Disk health scan', callback)` | Exit 0/1 succeeds (1 reports repaired errors); 2/3 fail. No `/f` restart-scheduling prompt. |
+| Image health | `run_command_stream('DISM /Online /Cleanup-Image /CheckHealth', 'Image health', callback)` | Effective `/NoRestart` appended; health check only. |
+| System files | `run_command_stream('sfc /scannow', 'System file scan', callback)` | Checked completion, not an assumed successful repair. |
+
+Each phase posts Running only when attempted; completion drives progress and its own status. Noncritical ordinary failure permits subsequent steps and yields Partial. Unknown command completion stops subsequent phases regardless of critical flag. Unattempted phases become Not run. Full progress means ten phases finished, not ten successes. `_finish_resurrection` retains a structured result in memory and shows Completed/Partial/Failed/Cancelled with attempted/total counts; details stay available across section navigation.
+
+**Cancel after current step** → `_cancel_resurrect` sets an event, disables/relabels the cancel control, and logs that the current command must finish. `run_sequence` checks between steps; cancellation neither kills the current servicing process nor rolls back prior deletions/settings. Close uses this same stop-between-steps mechanism plus deferred close. A verified restore point is a prerequisite, not a guarantee that permanently deleted data can be recovered; Panacea offers no automatic sequence rollback or restart/resume.
+
+Evidence: [operations tests](../../tests/test_operations.py), controller sequence/failed-checkpoint/cancellation/system-drive/unknown-completion tests, and [five native synthetic phase states](v2-ui-states.md). No real end-to-end Resurrection, reboot-required recovery or restore rollback was executed on the host.
+
+## Panacea updater and shared shell actions
+
+| Action | Actual route | Feedback / constraints / evidence |
+| --- | --- | --- |
+| Startup / **Check updates** / **Retry check** | `_check_app_update` → `UpdateClient(GITHUB_REPO, VERSION).check()` in `app-update` group | Checking; verified newer stable version; verified no newer version; or explicit failure/retry. Concurrent checks suppressed. Read-only release check does not block maintenance. [Updater tests](../../tests/test_updater.py), controller concurrency test. |
+| **Release notes** | `_show_release_notes` → `webbrowser.open(release.release_url)` | Opens validated release URL. No external browser navigation/completion tracking; browser return value is not presented as update success. Real browser failure behavior not separately tested. |
+| **Defer** | `_defer_update` hides actions and changes status | No download/install or permanent preference; a later check/startup can offer the update again. Source-audited. |
+| **Download / install**, source launch | `_auto_update` opens release page when `sys.frozen` is false | No self-install of source Python; explicit controller regression. |
+| **Download / install**, packaged | Confirms → `client.download(release, new_temp_directory, progress)` → `start_self_update(staged, Path(sys.executable), release, client)` | Locks maintenance/check/install while active; byte-progress → verifying → preparing. Exact size, SHA-256 and PE validation before helper/install. Source/unsafe installation directories refused by backend. [Updater/install tests](../../tests/test_update_install.py). |
+| Installation status / readiness | `_update_prepared` / `_poll_update_job` → `job.poll()` in separate group, 750 ms polling | Keeps old UI open until ready; failure leaves UI open and offers Retry install/manual notes. Ready closes old UI after helper/new-app handshake. Close refused during install. Backup/marker/token/hash/rollback paths are fixture-tested, not a real running-EXE migration. |
+| **Retry install** | `_update_failed` re-enables controls and preserves manual fallback | Failure toast and update-bar reason; empty owned download directory removal only. A verified staged EXE can remain after preparation failure; no broad deletion sweep. |
+| Close during download | `_on_close` → shutdown and `_update_cancel`; progress callback declines continuation | No dedicated Cancel download button. Backend chunk-cancellation and partial-file cleanup tested; hard app termination during download is not a guaranteed cleanup boundary. |
+| Footer copyright/author link | Click → `webbrowser.open('https://falker47.github.io/')` | Launch-only external navigation; no maintenance effect, no tracked browser result. Source audit only. |
+
+The HTTPS checksum asset is integrity evidence, not Authenticode. Protected helper creation, replacement/backup/rollback, new-version readiness and retry have mocked launch/network and isolated PE-shaped file tests; fixture EXEs are not executed. Pending/ambiguous recovery records are preserved rather than swept. Some hard interruptions can require manual inspection. Readiness confirms startup acknowledgement, not subsequent application health. App restart does not blindly resume a pending download/install; backend validation controls subsequent recovery. See [state/update audit](v2-state-update-audit.md) and [independent review](v2-independent-review.md).
+
+## Remaining external verification
+
+Real destructive/privileged Windows operations remain gated to an explicitly authorized disposable environment: live Temp/browser/Recycle Bin cleanup, defrag/TRIM, SFC/DISM/CHKDSK, DNS/Winsock changes, protection/checkpoint behavior, Turbo activation/restoration across interruption/reboot, complete Resurrection and packaged old-to-new migration including image locks/crash/rollback. External Apps/Windows Settings utilities require separate end-to-end interaction checks; Panacea only verifies their launch boundary. Effective Windows DPI, packaged visual behavior and final build/CI/release identity belong to coordinator evidence, not this source inventory.
+
+No V2 publication, tag movement, merge, real-host maintenance or new release claim is implied by this audit.

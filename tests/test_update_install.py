@@ -213,7 +213,7 @@ def test_self_update_refuses_source_interpreter(files, monkeypatch):
 
 def test_helper_rechecks_authoritative_checksum_before_install(files, monkeypatch, helper_security):
     staged, target, digest = files
-    workspace = target.parent / "panacea-update-" / "safe"
+    workspace = target.parent / "panacea-update-fixture"
     workspace.mkdir(parents=True)
     (workspace / "staged.exe").write_bytes(executable(b"tampered"))
     (workspace / "job.json").write_text(json.dumps({"target": str(target), "version": "1.49.0"}))
@@ -234,6 +234,7 @@ def test_helper_rechecks_authoritative_checksum_before_install(files, monkeypatc
     assert code == 1
     assert target.read_bytes() == executable(b"old")
     assert json.loads((workspace / "status.json").read_text())["status"] == "failed"
+    assert "SHA-256" in json.loads((workspace / "status.json").read_text())["message"]
 
 
 def test_helper_detects_process_exit_before_readiness_and_restores_backup(files, monkeypatch, helper_security):
@@ -536,3 +537,83 @@ def test_older_helper_never_waits_on_or_deletes_a_later_update_marker(files, mon
     assert target.read_bytes() == executable(b"later")
     assert later[0].backup.read_bytes() == executable(b"new")
     assert json.loads(update_install.readiness_path(target).read_text())["token"] == later[0].readiness_token
+
+
+def test_failed_marker_flush_preserves_old_executable_and_allows_retry(files, monkeypatch):
+    staged, target, digest = files
+    original = update_install.os.fsync
+    calls = 0
+    def full_disk(descriptor):
+        nonlocal calls
+        calls += 1
+        if calls == 2:  # Candidate is durable; writing the initial marker fails.
+            raise OSError('fixture disk full')
+        return original(descriptor)
+    monkeypatch.setattr(update_install.os, 'fsync', full_disk)
+    result = update_install.install_verified(staged, target, digest,
+                                            lambda path, token: pytest.fail('must not launch'))
+    assert not result.success
+    assert target.read_bytes() == executable(b'old')
+    assert not update_install.readiness_path(target).exists()
+    assert sorted(path.name for path in target.parent.iterdir()) == ['Panacea.exe', 'staged.exe']
+    monkeypatch.setattr(update_install.os, 'fsync', original)
+    assert update_install.install_verified(staged, target, digest, lambda path, token: None).success
+
+
+def test_exclusive_json_collision_is_not_removed_on_failure(files):
+    _, target, _ = files
+    marker = update_install.readiness_path(target)
+    marker.write_bytes(b'preexisting operation')
+    with pytest.raises(FileExistsError):
+        update_install._write_json(marker, {'fixture': True}, exclusive=True)
+    assert marker.read_bytes() == b'preexisting operation'
+
+
+def test_rollback_with_locked_marker_reports_restoration_and_allows_later_retry(files, monkeypatch):
+    staged, target, digest = files
+    marker = update_install.readiness_path(target)
+    original = Path.unlink
+    def locked(path, *args, **kwargs):
+        if path == marker:
+            raise PermissionError('marker cleanup locked')
+        return original(path, *args, **kwargs)
+    def fail_launch(path, token):
+        raise OSError('fixture launch denied')
+    monkeypatch.setattr(Path, 'unlink', locked)
+    result = update_install.install_verified(staged, target, digest, fail_launch)
+    assert not result.success
+    assert result.rolled_back
+    assert result.backup is None
+    assert target.read_bytes() == executable(b'old')
+    assert marker.exists()
+    monkeypatch.setattr(Path, 'unlink', original)
+    retried = update_install.install_verified(staged, target, digest, lambda path, token: None)
+    assert retried.success, retried.error
+    assert retried.backup.read_bytes() == executable(b'old')
+
+
+def test_missing_backup_without_restored_original_never_discards_pending_marker(files):
+    staged, target, digest = files
+    first = update_install.install_verified(staged, target, digest, lambda path, token: None)
+    marker = update_install.readiness_path(target)
+    pending = marker.read_bytes()
+    first.backup.unlink()
+    second = update_install.install_verified(staged, target, digest,
+                                            lambda path, token: pytest.fail('must not launch'))
+    assert not second.success
+    assert target.read_bytes() == executable(b'new')
+    assert marker.read_bytes() == pending
+
+
+def test_identical_old_and_new_bytes_do_not_prove_rollback_after_backup_loss(files):
+    staged, target, _ = files
+    staged.write_bytes(target.read_bytes())
+    digest = hashlib.sha256(staged.read_bytes()).hexdigest()
+    first = update_install.install_verified(staged, target, digest, lambda path, token: None)
+    marker = update_install.readiness_path(target)
+    pending = marker.read_bytes()
+    first.backup.unlink()
+    second = update_install.install_verified(staged, target, digest,
+                                            lambda path, token: pytest.fail('must not launch'))
+    assert not second.success
+    assert marker.read_bytes() == pending

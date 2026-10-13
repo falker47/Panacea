@@ -1,0 +1,18 @@
+{
+  "size": 96,
+  "sharp": "0.35.5",
+  "librsvg": "2.63.2",
+  "files": {
+    "png/layout-dashboard.png": "1d6917c4c5a4e5abf05d25ce8281d34a23f84e6e41a2449cfc95bf654e750fce",
+    "png/brush-cleaning.png": "3c72f3b159015d7847372295d8b4852e6b2c1454545c1a24a9ff06750994a9b2",
+    "png/hard-drive.png": "6a8ce61312961a2fc53204142782e890f2b1dd73dd778672ba40229f954d53d2",
+    "png/wrench.png": "20b6f4d0824080c591619657bfa06c72c10ccc6e5df716cf1b0f2f3acebfa64b",
+    "png/layout-grid.png": "3afe763e9098c7a5f5f8180a9a333032e9528b0baf301b51c8978ceb1db567ea",
+    "png/zap.png": "0862839131bcf4b662dfc6f88d8e98253bf20702609500c8d53ee211e82e709d",
+    "png/cpu.png": "5dbe31855ffa161fe309eb59f4e9c29cb3a31ab8929d8df4ccfbe72f52fe031b",
+    "png/memory-stick.png": "6481b275c72d13edd27ab79a09b3337d63e8908851b839f5d5b57d273db53067",
+    "png/file-search.png": "c7dc1fefee6aece5148c6ed9c4d7a761c4df3ba78c2f0e995e1b74ff5e999b95",
+    "png/shield-plus.png": "a43ef329e80fbfdaec220b82be20a55ebe929dada47c1ccb4d663c28faba5c36",
+    "png/refresh-cw.png": "e946b85e2c16db0559a58e89600964fc0788d3be7693647a8836be4666a50e68"
+  }
+}

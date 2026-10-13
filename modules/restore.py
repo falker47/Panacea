@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import uuid
 from modules.commands import system_executable
 from modules.logger import Logger
 
@@ -13,8 +14,10 @@ class RestoreManager:
 
     def _run_powershell(self, script, timeout=30):
         return subprocess.run([system_executable('powershell.exe'), '-NoProfile', '-NonInteractive',
-                               '-Command', "$ErrorActionPreference='Stop'; " + script],
-                              shell=False, capture_output=True, text=True, timeout=timeout,
+                               '-Command', "$ErrorActionPreference='Stop'; "
+                               '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); ' + script],
+                              shell=False, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8',
+                              errors='replace', timeout=timeout,
                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
 
     def ensure_restore_enabled(self, drive='C:\\'):
@@ -64,13 +67,37 @@ class RestoreManager:
         except Exception:
             return None
 
+    def _find_created_restore_point(self, before, description):
+        """Verify this request's exact identity, not another application's point."""
+        try:
+            result = self._run_powershell(
+                'Get-ComputerRestorePoint | '
+                f'Where-Object {{ $_.SequenceNumber -gt {before} }} | '
+                'Select-Object SequenceNumber, Description | ConvertTo-Json -Compress', timeout=15)
+            if result.returncode or not result.stdout.strip():
+                return None
+            points = json.loads(result.stdout)
+            if isinstance(points, dict):
+                points = [points]
+            if not isinstance(points, list):
+                return None
+            matches = [point['SequenceNumber'] for point in points if isinstance(point, dict)
+                       and type(point.get('SequenceNumber')) is int
+                       and point['SequenceNumber'] > before and point.get('Description') == description]
+            return max(matches, default=None)
+        except Exception:
+            return None
+
     def create_restore_point(self, description='Panacea Auto-Restore'):
         if not isinstance(description, str) or not description.strip() or len(description) > 256 or any(ord(char) < 32 for char in description):
             return False, 'Invalid restore point description.'
         before = self._get_latest_restore_point_seq()
         if before is None:
             return False, 'System Restore state could not be verified. Check protection and administrator access.'
-        safe_description = description.replace("'", "''")
+        # A per-request identity prevents a concurrent installer checkpoint from
+        # satisfying our prerequisite when Windows throttles this request.
+        unique_description = description[:220] + ' [' + uuid.uuid4().hex + ']'
+        safe_description = unique_description.replace("'", "''")
         try:
             result = self._run_powershell(
                 f"Checkpoint-Computer -Description '{safe_description}' -RestorePointType 'MODIFY_SETTINGS'", timeout=60)
@@ -78,7 +105,7 @@ class RestoreManager:
                 message = (result.stderr or '').strip()
                 self.logger.log(f'Restore point creation failed: {message}', 'ERROR')
                 return False, f'Restore point creation failed: {message[:160]}'
-            after = self._get_latest_restore_point_seq()
+            after = self._find_created_restore_point(before, unique_description)
             if after is None or after <= before:
                 message = 'No new restore point could be verified. Windows may have throttled creation or protection is unavailable.'
                 self.logger.log(message, 'WARNING')

@@ -1,5 +1,6 @@
 """Updater tests use fake HTTP streams; no network or executable launch."""
 import hashlib
+import http.client
 import io
 import json
 import struct
@@ -225,3 +226,32 @@ def test_malformed_pe_coff_and_optional_headers_are_rejected(tmp_path, offset, v
     with pytest.raises(updater.UpdateVerificationError):
         client.download(client.check(), tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize('stage', ['manifest', 'checksum', 'executable'])
+def test_truncated_http_response_is_a_network_failure_and_leaves_no_download(tmp_path, stage):
+    client = updater.UpdateClient(REPO, '1.47', opener=fake_opener())
+    release = client.check()
+    original = fake_opener()
+    def interrupted(request, timeout):
+        response = original(request, timeout)
+        suffix = {'manifest': '/releases/latest', 'checksum': '.sha256', 'executable': '.exe'}[stage]
+        if request.full_url.endswith(suffix):
+            def read(size=-1):
+                raise http.client.IncompleteRead(b'partial', 64)
+            response.read = read
+        return response
+    client._open = interrupted
+    with pytest.raises(updater.UpdateNetworkError):
+        if stage == 'manifest':
+            client.check()
+        else:
+            client.download(release, tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_invalid_http_status_is_classified_as_network_failure():
+    def broken(request, timeout):
+        raise http.client.BadStatusLine('broken HTTP response')
+    with pytest.raises(updater.UpdateNetworkError):
+        updater.UpdateClient(REPO, '1.47', opener=broken).check()

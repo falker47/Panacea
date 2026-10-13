@@ -19,6 +19,7 @@ from modules.logger import Logger
 from modules.system_monitor import SystemMonitor
 from modules.restore import RestoreManager
 from modules.performance import PerformanceManager
+from modules.maintenance_guard import MaintenanceGuard
 from modules.ui_dispatch import UiDispatcher, WorkerController
 from modules.utils import resource_path
 from version import VERSION, GITHUB_REPO
@@ -65,6 +66,9 @@ class PanaceaApp(ctk.CTk):
         self._drive_values = []
         self._turbo_states = {}
         self._turbo_master = None
+        self._turbo_saved = None
+        self._resurrection_states = {}
+        self._resurrection_rows = {}
         self.last_resurrection_result = None
         try:
             self.logger = Logger()
@@ -73,6 +77,8 @@ class PanaceaApp(ctk.CTk):
         self.cleanup_mgr, self.disk_opt = CleanupManager(), DiskOptimizer()
         self.cmd_runner, self.monitor = CommandRunner(), SystemMonitor()
         self.restore_mgr, self.perf_mgr = RestoreManager(), PerformanceManager()
+        self.maintenance_guard = MaintenanceGuard()
+        self._maintenance_uncertain = self.maintenance_guard.is_blocked()
         try:
             self.iconbitmap(resource_path('assets/panacea_icon.ico'))
         except Exception:
@@ -94,6 +100,9 @@ class PanaceaApp(ctk.CTk):
         self._built_frames = set()
         self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
         self.operation_label.grid(row=2, column=1, sticky='ew', padx=22, pady=(2, 10))
+        self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
+        if self._maintenance_uncertain:
+            self.operation_label.configure(text=self.maintenance_guard.last_error, text_color=COL_WARNING)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
         for index, name in enumerate(self.frames, 1):
             self.bind(f'<Control-Key-{index}>', lambda event, n=name: self.select_frame(n))
@@ -123,7 +132,7 @@ class PanaceaApp(ctk.CTk):
         button.bind('<space>', lambda event: button.invoke())
         if maintenance:
             self._maintenance_controls.append(button)
-            if self.workers.busy() or self._update_downloading or self._update_installing:
+            if self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain'):
                 button.configure(state='disabled')
         return button
 
@@ -131,10 +140,15 @@ class PanaceaApp(ctk.CTk):
         parent.grid_columnconfigure(0, weight=1)
         frame = ctk.CTkFrame(parent, fg_color='transparent')
         frame.grid(row=0, column=0, sticky='ew', padx=22, pady=(10, 8) if compact else (15, 10))
-        ctk.CTkLabel(frame, text=title, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
-        label = ctk.CTkLabel(frame, text=detail, height=22 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
+        ctk.CTkLabel(frame, text=title, height=24, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
+        label = ctk.CTkLabel(frame, text=detail, height=18 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
         label.pack(fill='x', pady=(1, 0))
         frame.bind('<Configure>', lambda event: label.configure(wraplength=max(250, event.width - 10)))
+
+    def _keyboard_switch(self, switch):
+        switch._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
+        switch.bind('<Return>', lambda event: switch.toggle())
+        switch.bind('<space>', lambda event: switch.toggle())
 
     def _card(self, parent):
         return ctk.CTkFrame(parent, fg_color=SURFACE, border_width=1, border_color=BORDER, corner_radius=8)
@@ -145,8 +159,8 @@ class PanaceaApp(ctk.CTk):
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
             idle = make_icon(name, '#a5b5cd', 96)
             active = make_icon(name, COL_GOLD, 96)
-            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(20, 20))
-            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(20, 20))
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(24, 24))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(24, 24))
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
@@ -159,6 +173,7 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame = ctk.CTkFrame(self, width=190, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(9, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
@@ -226,6 +241,7 @@ class PanaceaApp(ctk.CTk):
         outer.grid_rowconfigure(0, weight=1)
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
+        frame.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(frame, text='Dashboard', font=self._font(22, True), anchor='w').grid(
             row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
@@ -269,7 +285,7 @@ class PanaceaApp(ctk.CTk):
         for card, title, icon_name in (
             (self.card_cpu, 'CPU', 'cpu'),
             (self.card_ram, 'Memory', 'memory'),
-            (self.card_disk, 'System drive · C:', 'drive'),
+            (self.card_disk, 'System drive', 'drive'),
         ):
             heading = ctk.CTkFrame(card, fg_color='transparent')
             heading.pack(fill='x', padx=12, pady=(7, 1))
@@ -365,142 +381,202 @@ class PanaceaApp(ctk.CTk):
                 for label in items
             ])
 
+    def _section_body(self, frame, title, detail):
+        self._header(frame, title, detail, compact=True)
+        frame.grid_rowconfigure(1, weight=1)
+        body = ctk.CTkScrollableFrame(frame, fg_color=BG, corner_radius=0)
+        body.grid(row=1, column=0, sticky='nsew', padx=14, pady=(0, 8))
+        body.grid_columnconfigure(0, weight=1)
+        return body
+
+    def _section_log(self, parent, attribute, title='Activity details'):
+        panel = self._card(parent)
+        panel.pack(fill='x', pady=(4, 0))
+        log = self._create_log_textbox(panel, height=160)
+        def toggle():
+            if log.winfo_manager():
+                log.pack_forget()
+                button.configure(text=f'+ {title}')
+            else:
+                log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+                button.configure(text=f'− {title}')
+        button = self._button(panel, f'+ {title}', toggle, secondary=True, anchor='w', height=26)
+        button.pack(fill='x', padx=6, pady=4)
+        setattr(self, attribute, log)
+        self._flush_section_log(attribute)
+        return log
+
+    def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
+        row = ctk.CTkFrame(parent, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=4)
+        row.grid_columnconfigure(1, weight=1)
+        if icon:
+            ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(row=0, column=0, rowspan=2, padx=(0, 10))
+        ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew')
+        description = ctk.CTkLabel(row, text=detail, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+        description.grid(row=1, column=1, sticky='ew')
+        button = self._button(row, label, command, secondary=True, maintenance=maintenance, width=112)
+        button.grid(row=0, column=2, rowspan=2, padx=(12, 0))
+        row.bind('<Configure>', lambda event: description.configure(
+            wraplength=max(100, event.width / description._get_widget_scaling() - (170 if icon else 130))))
+        return button
+
     def _setup_cleaning_frame(self):
-        frame = self.frame_cleaning
-        self._header(frame, 'Cleanup', 'Preview temporary files before permanently deleting them. Locked or protected files are skipped.')
-        frame.grid_rowconfigure(3, weight=1)
-        card = self._card(frame)
-        card.grid(row=1, column=0, sticky='ew', padx=22, pady=(0, 12))
-        card.grid_columnconfigure((0, 1), weight=1)
-        self.preview_label = ctk.CTkLabel(card, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12))
-        self.preview_label.grid(row=0, column=0, sticky='ew', padx=14, pady=12)
-        self._button(card, 'Preview temporary files', self.run_preview_temp, secondary=True, maintenance=True).grid(row=0, column=1, sticky='ew', padx=14, pady=12)
-        self.btn_clean_temp = self._button(card, 'Delete temporary files', self.run_clean_temp, maintenance=True)
-        self.btn_clean_temp.grid(row=1, column=0, sticky='ew', padx=14, pady=(0, 10))
-        self.btn_empty_bin = self._button(card, 'Empty Recycle Bin', self.run_empty_recycle, secondary=True, maintenance=True)
-        self.btn_empty_bin.grid(row=1, column=1, sticky='ew', padx=14, pady=(0, 10))
-        self._button(card, 'Windows Disk Cleanup', self.run_cleanmgr, secondary=True).grid(row=2, column=0, sticky='ew', padx=14, pady=(0, 12))
-        self._button(card, 'Clean component store', self.run_deep_clean, secondary=True, maintenance=True).grid(row=2, column=1, sticky='ew', padx=14, pady=(0, 12))
-        ctk.CTkLabel(frame, text='Cleanup log', anchor='w', font=self._font(12, True)).grid(row=2, column=0, sticky='w', padx=22)
-        self.clean_log = self._create_log_textbox(frame)
-        self.clean_log.grid(row=3, column=0, sticky='nsew', padx=22, pady=(5, 12))
-        self._flush_section_log('clean_log')
+        body = self._section_body(self.frame_cleaning, 'Cleanup', 'Inspect first. Locked and protected files stay untouched.')
+        preview = self._card(body)
+        preview.pack(fill='x', pady=(0, 8))
+        self._action_row(preview, 'Temporary files', 'A preview does not delete anything.', 'Preview', self.run_preview_temp, maintenance=True, icon='clean')
+        self.preview_label = ctk.CTkLabel(preview, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12), justify='left', wraplength=650)
+        self.preview_label.pack(fill='x', padx=14, pady=(0, 12))
+        preview.bind('<Configure>', lambda event: self.preview_label.configure(wraplength=max(160, event.width / self.preview_label._get_widget_scaling() - 28)))
+        actions = self._card(body)
+        actions.pack(fill='x')
+        self.btn_clean_temp = self._action_row(actions, 'Delete temporary files', 'Permanent deletion · confirmation required', 'Delete files', self.run_clean_temp, maintenance=True)
+        self.btn_empty_bin = self._action_row(actions, 'Recycle Bin', 'Permanently empty all items · confirmation required', 'Empty bin', self.run_empty_recycle, maintenance=True)
+        self._action_row(actions, 'Component store', 'Windows removes superseded components.', 'Clean store', self.run_deep_clean, maintenance=True)
+        self._action_row(actions, 'Windows Disk Cleanup', 'Choose categories in the Windows utility.', 'Open utility', self.run_cleanmgr)
+        self._section_log(body, 'clean_log', 'Cleanup details')
 
     def _setup_disk_frame(self):
-        frame = self.frame_disk
-        self._header(frame, 'Disk', 'Windows chooses defragmentation or TRIM for the selected drive. Review the result in the log.')
-        frame.grid_rowconfigure(3, weight=1)
-        card = self._card(frame)
-        card.grid(row=1, column=0, sticky='ew', padx=22, pady=(0, 12))
-        ctk.CTkLabel(card, text='Drive', font=self._font(12)).pack(side='left', padx=14, pady=14)
-        self.selected_drive = tk.StringVar(value='Loading…')
-        self.drive_menu = ctk.CTkOptionMenu(card, variable=self.selected_drive, values=['Loading…'], width=90, fg_color=SURFACE_ALT, button_color='#2e639f', font=self._font(12))
-        self.drive_menu.pack(side='left', padx=(0, 8), pady=14)
-        self._button(card, 'Refresh', self.refresh_drives, secondary=True, width=80).pack(side='left', pady=14)
-        self._button(card, 'Optimize drive', self.run_optimize_drive, maintenance=True, width=120).pack(side='right', padx=14, pady=14)
-        self._button(frame, 'Open Windows drive optimization', self.run_dfrgui, secondary=True).grid(row=2, column=0, sticky='w', padx=22, pady=(0, 10))
-        self.disk_log = self._create_log_textbox(frame)
-        self.disk_log.grid(row=3, column=0, sticky='nsew', padx=22, pady=(0, 12))
-        self._set_drives([{'letter': value} for value in self._drive_values])
-        self._flush_section_log('disk_log')
-
-    def _setup_tools_frame(self):
-        frame = self.frame_tools
-        self._header(frame, 'Tools', 'Run a specific repair or diagnostic. Each operation asks for confirmation and records its result.')
-        frame.grid_rowconfigure(1, weight=3)
-        frame.grid_rowconfigure(3, weight=2)
-        container = ctk.CTkScrollableFrame(frame, fg_color=BG)
-        container.grid(row=1, column=0, sticky='nsew', padx=16, pady=(0, 8))
-        groups = [('System integrity', [('System file scan', 'Checks protected Windows files.', 'sfc /scannow', 'SFC scan'), ('Image health check', 'Checks the Windows component image.', 'DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check'), ('Repair Windows image', 'Repairs the Windows image; may use Windows Update.', 'DISM /Online /Cleanup-Image /RestoreHealth', 'DISM repair')]), ('Network', [('Flush DNS cache', 'Clears cached DNS records.', 'ipconfig /flushdns', 'DNS flush'), ('Reset Winsock', 'Resets network configuration. A restart may be needed.', 'netsh winsock reset', 'Network reset')])]
-        for title, entries in groups:
-            card = self._card(container)
-            card.pack(fill='x', pady=(0, 8))
-            ctk.CTkLabel(card, text=title, font=self._font(13, True)).pack(anchor='w', padx=14, pady=(10, 4))
-            for text, detail, command, name in entries:
-                self._add_tool_btn(card, text, detail, command, name)
-        row = ctk.CTkFrame(container, fg_color='transparent')
-        row.pack(fill='x')
-        self._button(row, 'Create restore point', self.run_create_restore, secondary=True, maintenance=True).pack(side='left', padx=(0, 8), pady=4)
-        self._button(row, 'Battery report', self.run_battery_report, secondary=True, maintenance=True).pack(side='left', pady=4)
-        ctk.CTkLabel(frame, text='Execution log', font=self._font(12, True), anchor='w').grid(row=2, column=0, sticky='w', padx=22)
-        self.tools_log = self._create_log_textbox(frame, height=120)
-        self.tools_log.grid(row=3, column=0, sticky='nsew', padx=22, pady=(5, 12))
-        self._flush_section_log('tools_log')
-
-    def _add_tool_btn(self, parent, text, desc, cmd, name):
-        row = ctk.CTkFrame(parent, fg_color='transparent')
-        row.pack(fill='x', padx=14, pady=(0, 8))
-        row.grid_columnconfigure(0, weight=1)
-        label = ctk.CTkLabel(row, text=desc, text_color=MUTED, font=self._font(11), anchor='w', justify='left', wraplength=390)
-        label.grid(row=0, column=0, sticky='ew', padx=(0, 10))
-        self._button(row, text, lambda: self.run_cmd(cmd, name), maintenance=True, width=155).grid(row=0, column=1)
-        row.bind('<Configure>', lambda event: label.configure(wraplength=max(130, event.width - 175)))
-
-    def _setup_apps_frame(self):
-        frame = self.frame_apps
-        self._header(frame, 'Apps', 'Review installed software and startup entries using Windows settings.')
-        body = ctk.CTkScrollableFrame(frame, fg_color=BG)
-        body.grid(row=1, column=0, sticky='nsew', padx=16, pady=(0, 12))
-        frame.grid_rowconfigure(1, weight=1)
-        for title, desc, actions in [('Installed apps', 'Review and uninstall applications you no longer need.', [('Open Apps settings', 'ms-settings:appsfeatures'), ('Classic Programs and Features', 'appwiz.cpl')]), ('Startup apps', 'Review which applications start when you sign in.', [('Open Startup settings', 'ms-settings:startupapps')])]:
-            card = self._card(body)
-            card.pack(fill='x', pady=(0, 12))
-            ctk.CTkLabel(card, text=title, font=self._font(16, True)).pack(anchor='w', padx=16, pady=(14, 2))
-            ctk.CTkLabel(card, text=desc, font=self._font(12), text_color=MUTED).pack(anchor='w', padx=16, pady=(0, 12))
-            for text, uri in actions:
-                self._button(card, text, lambda u=uri, t=text: self.run_launch(u, t), secondary=True).pack(fill='x', padx=16, pady=(0, 12))
-
-    def _setup_turbo_frame(self):
-        frame = self.frame_turbo
-        self._header(frame, 'Turbo', 'Temporary performance settings. Turning a setting off restores its saved original state.')
-        frame.grid_rowconfigure(1, weight=1)
-        container = ctk.CTkScrollableFrame(frame, fg_color=BG)
-        container.grid(row=1, column=0, sticky='nsew', padx=16, pady=(0, 12))
-        self.turbo_vars, self.turbo_switches = {}, {}
-        master = self._card(container)
-        master.pack(fill='x', pady=(0, 10))
-        ctk.CTkLabel(master, text='All Turbo settings', font=self._font(14, True)).pack(side='left', padx=14, pady=14)
-        self.master_switch = ctk.CTkSwitch(master, text='Loading…', state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_BLUE)
-        self.master_switch.pack(side='right', padx=14, pady=14)
-        config = [('power', 'High performance power plan', 'Can increase power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Reduce visual effects', 'Reduce Windows animation and appearance effects.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Pause application preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Pause background search indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while this setting is active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
-        for key, title, desc, on_fn, off_fn in config:
-            card = self._card(container)
-            card.pack(fill='x', pady=4)
-            card.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(card, text=title, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew', padx=14, pady=(10, 0))
-            detail = ctk.CTkLabel(card, text=desc, text_color=MUTED, font=self._font(11), anchor='w', wraplength=430, justify='left')
-            detail.grid(row=1, column=0, sticky='ew', padx=14, pady=(0, 10))
-            var = tk.BooleanVar(value=False)
-            switch = ctk.CTkSwitch(card, text='Unknown', variable=var, state='disabled', font=self._font(11), width=110, progress_color=COL_BLUE, command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
-            switch.grid(row=0, column=1, rowspan=2, padx=14)
-            self.turbo_vars[key], self.turbo_switches[key] = var, switch
-            card.bind('<Configure>', lambda event, label=detail: label.configure(wraplength=max(150, event.width - 170)))
-        self._button(container, 'Refresh actual state', self._load_turbo_states, secondary=True).pack(anchor='w', pady=10)
-        if self._turbo_states:
-            self._apply_turbo_states((self._turbo_states, self._turbo_master))
-
-    def _setup_resurrect_frame(self):
-        frame = self.frame_resurrect
-        self._header(frame, 'Resurrection', 'A guided maintenance sequence with a verified restore point and a result for every completed step.')
-        frame.grid_rowconfigure(2, weight=1)
-        card = self._card(frame)
-        card.grid(row=1, column=0, sticky='ew', padx=22, pady=(0, 12))
-        warning = ctk.CTkLabel(card, text='Permanently deletes browser caches, temporary files and the Recycle Bin; resets network settings.\nSave your work first. Cancellation takes effect between commands.', text_color=MUTED, font=self._font(12), anchor='w', justify='left', wraplength=650)
-        warning.pack(fill='x', padx=14, pady=(12, 8))
-        card.bind('<Configure>', lambda event: warning.configure(wraplength=max(300, event.width - 28)))
-        self.progress_bar = ctk.CTkProgressBar(card, height=9, progress_color=COL_BLUE, fg_color=BORDER)
-        self.progress_bar.set(0)
-        self.progress_bar.pack(fill='x', padx=14, pady=(0, 6))
-        self.lbl_status = ctk.CTkLabel(card, text='Ready · 10 steps', font=self._font(12, True), anchor='w', wraplength=650, justify='left')
-        self.lbl_status.pack(fill='x', padx=14)
+        body = self._section_body(self.frame_disk, 'Disk', 'Optimize a local drive with the method selected by Windows.')
+        card = self._card(body)
+        card.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(card, fg_color='transparent')
         row.pack(fill='x', padx=14, pady=12)
-        self.btn_resurrect_start = self._button(row, 'Start maintenance sequence', self.run_god_mode, maintenance=True)
-        self.btn_resurrect_start.pack(side='left')
-        self.btn_resurrect_cancel = self._button(row, 'Cancel after current step', self._cancel_resurrect, secondary=True)
-        self.god_log = self._create_log_textbox(frame)
-        self.god_log.grid(row=2, column=0, sticky='nsew', padx=22, pady=(0, 12))
-        self._flush_section_log('god_log')
+        ctk.CTkLabel(row, text='', image=self.icons_active['disk'], width=28).pack(side='left', padx=(0, 8))
+        self.selected_drive = tk.StringVar(value='Loading…')
+        self.drive_menu = ctk.CTkOptionMenu(row, variable=self.selected_drive, values=['Loading…'], command=self._drive_selected, width=112, fg_color=SURFACE_ALT, button_color=BORDER, font=self._font(13))
+        self.drive_menu.pack(side='left')
+        self.drive_menu._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
+        self.drive_menu.bind('<Down>', lambda event: self._cycle_drive(1))
+        self.drive_menu.bind('<Up>', lambda event: self._cycle_drive(-1))
+        self._button(row, 'Refresh', self.refresh_drives, secondary=True, width=85).pack(side='right')
+        self.drive_detail = ctk.CTkLabel(card, text='Reading local drives…', anchor='w', justify='left', font=self._font(13), text_color=MUTED, wraplength=650)
+        self.drive_detail.pack(fill='x', padx=14, pady=(0, 10))
+        self.drive_capacity = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
+        self.drive_capacity.set(0)
+        self.drive_capacity.pack(fill='x', padx=14, pady=(0, 14))
+        self.btn_optimize_drive = self._action_row(card, 'Optimize selected drive', 'Windows chooses TRIM or defragmentation. May take several minutes.', 'Optimize', self.run_optimize_drive, maintenance=True)
+        windows = self._card(body)
+        windows.pack(fill='x')
+        self._action_row(windows, 'Windows drive optimization', 'View schedules and drive health in Windows.', 'Open utility', self.run_dfrgui)
+        self._section_log(body, 'disk_log', 'Optimization output')
+        self._set_drives(self.__dict__.get('_drive_info', [{'letter': value} for value in self._drive_values]))
+
+    def _setup_tools_frame(self):
+        body = self._section_body(self.frame_tools, 'Tools', 'Choose one diagnostic or repair. Changes require confirmation.')
+        for title, entries in [
+            ('WINDOWS INTEGRITY', [('System file scan', 'Verify and repair protected files.', 'sfc /scannow', 'SFC scan'), ('Image health', 'Check the component image for recorded corruption.', 'DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check'), ('Repair image', 'Repair corruption; may use Windows Update.', 'DISM /Online /Cleanup-Image /RestoreHealth', 'DISM repair')]),
+            ('NETWORK', [('Flush DNS', 'Clear cached DNS records.', 'ipconfig /flushdns', 'DNS flush'), ('Reset Winsock', 'May interrupt connections and require a restart.', 'netsh winsock reset', 'Network reset')])]:
+            ctk.CTkLabel(body, text=title, height=18, text_color=COL_GOLD, font=self._font(10, True), anchor='w').pack(fill='x', pady=(4, 3), padx=2)
+            card = self._card(body)
+            card.pack(fill='x', pady=(0, 4))
+            for text, detail, command, name in entries:
+                self._add_tool_btn(card, text, detail, command, name)
+        row = ctk.CTkFrame(body, fg_color='transparent')
+        row.pack(fill='x', pady=(6, 0))
+        self._button(row, 'Restore point', self.run_create_restore, secondary=True, maintenance=True).pack(side='left', padx=(0, 8))
+        self._button(row, 'Battery report', self.run_battery_report, secondary=True, maintenance=True).pack(side='left')
+        self._section_log(body, 'tools_log', 'Command output')
+
+    def _add_tool_btn(self, parent, text, desc, cmd, name):
+        return self._action_row(parent, text, desc, 'Run', lambda: self.run_cmd(cmd, name), maintenance=True)
+
+    def _setup_apps_frame(self):
+        body = self._section_body(self.frame_apps, 'Apps', 'Manage software and startup behavior in Windows.')
+        for title, detail, actions, icon in [
+            ('Installed apps', 'Review storage use, repair or uninstall apps.', [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps'),
+            ('Startup apps', 'Choose what runs when you sign in.', [('Startup settings', 'ms-settings:startupapps')], 'turbo')]:
+            card = self._card(body)
+            card.pack(fill='x', pady=(0, 10))
+            heading = ctk.CTkFrame(card, fg_color='transparent')
+            heading.pack(fill='x', padx=16, pady=(14, 4))
+            ctk.CTkLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
+            ctk.CTkLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
+            ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
+            row = ctk.CTkFrame(card, fg_color='transparent')
+            row.pack(fill='x', padx=16, pady=(0, 14))
+            for text, uri in actions:
+                self._button(row, text, lambda u=uri, t=text: self.run_launch(u, t), secondary=True, width=150).pack(side='left', padx=(0, 8))
+        self.apps_status = ctk.CTkLabel(body, text='Windows handles app changes. Return here when finished.', font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
+        self.apps_status.pack(fill='x', padx=2, pady=5)
+
+    def _setup_turbo_frame(self):
+        body = self._section_body(self.frame_turbo, 'Turbo', 'Original settings are saved before changes and restored when turned off.')
+        self.turbo_vars, self.turbo_switches = {}, {}
+        master = self._card(body)
+        master.pack(fill='x', pady=(0, 8))
+        row = ctk.CTkFrame(master, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=(10, 5))
+        ctk.CTkLabel(row, text='All settings', font=self._font(15, True)).pack(side='left')
+        self.master_var = tk.BooleanVar(value=False)
+        self.master_switch = ctk.CTkSwitch(row, text='Loading…', variable=self.master_var, state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_GOLD)
+        self.master_switch.pack(side='right')
+        self._keyboard_switch(self.master_switch)
+        self.turbo_saved_label = ctk.CTkLabel(master, text='Reading saved originals…', height=18, font=self._font(11), text_color=MUTED, anchor='w', wraplength=600)
+        self.turbo_saved_label.pack(fill='x', padx=14, pady=(0, 8))
+        actions = ctk.CTkFrame(master, fg_color='transparent')
+        actions.pack(fill='x', padx=14, pady=(0, 10))
+        self.btn_restore_turbo = self._button(actions, 'Restore saved settings', self._restore_saved_turbo, secondary=True, maintenance=True)
+        self.btn_restore_turbo.pack(side='left')
+        self._button(actions, 'Refresh state', self._load_turbo_states, secondary=True, width=112).pack(side='right')
+        card = self._card(body)
+        card.pack(fill='x')
+        config = [('power', 'High performance', 'More power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Visual effects preset', 'Save the Windows performance preference.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Pause application preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Pause background indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
+        for key, title, desc, on_fn, off_fn in config:
+            row = ctk.CTkFrame(card, fg_color='transparent')
+            row.pack(fill='x', padx=14, pady=5)
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew')
+            detail = ctk.CTkLabel(row, text=desc, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+            detail.grid(row=1, column=0, sticky='ew')
+            var = tk.BooleanVar(value=False)
+            switch = ctk.CTkSwitch(row, text='Unknown', variable=var, state='disabled', font=self._font(11), width=125, progress_color=COL_GOLD, command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
+            switch.grid(row=0, column=1, rowspan=2, padx=(12, 0))
+            self._keyboard_switch(switch)
+            self.turbo_vars[key], self.turbo_switches[key] = var, switch
+            row.bind('<Configure>', lambda event, label=detail: label.configure(wraplength=max(120, event.width / label._get_widget_scaling() - 150)))
+        if self._turbo_states:
+            self._apply_turbo_states((self._turbo_states, self._turbo_master))
+        self._apply_saved_turbo(self.__dict__.get('_turbo_saved'))
+
+    RESURRECTION_STEPS = ('Restore point', 'Browser caches', 'Temporary files', 'Recycle Bin', 'DNS cache',
+                          'Network reset', 'Drive optimization', 'Disk health scan', 'Windows image health', 'System file scan')
+
+    def _setup_resurrect_frame(self):
+        body = self._section_body(self.frame_resurrect, 'Resurrection', 'Ten maintenance steps. A verified restore point is required to continue.')
+        card = self._card(body)
+        card.pack(fill='x', pady=(0, 8))
+        warning = ctk.CTkLabel(card, text='Permanently deletes caches, temporary files and the Recycle Bin; resets networking.\nSave your work. Cancellation stops between commands; deleted files cannot be restored.', text_color=COL_WARNING, font=self._font(11), anchor='w', justify='left', wraplength=650)
+        warning.pack(fill='x', padx=14, pady=(10, 5))
+        card.bind('<Configure>', lambda event: warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 28)))
+        self.progress_bar = ctk.CTkProgressBar(card, height=7, progress_color=COL_GOLD, fg_color=BORDER)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(fill='x', padx=14, pady=(5, 8))
+        row = ctk.CTkFrame(card, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=(0, 12))
+        self.lbl_status = ctk.CTkLabel(row, text='Ready · No steps run', height=20, font=self._font(12, True), anchor='w')
+        self.lbl_status.pack(side='left', padx=(0, 12))
+        self.btn_resurrect_start = self._button(row, 'Start sequence', self.run_god_mode, maintenance=True)
+        self.btn_resurrect_start.pack(side='right')
+        self.btn_resurrect_cancel = self._button(row, 'Cancel after step', self._cancel_resurrect, secondary=True)
+        timeline = ctk.CTkFrame(body, fg_color='transparent')
+        timeline.pack(fill='x')
+        timeline.grid_columnconfigure((0, 1), weight=1, uniform='phases')
+        self._resurrection_rows = {}
+        for index, name in enumerate(self.RESURRECTION_STEPS):
+            phase = self._card(timeline)
+            phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=3)
+            phase.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(11, True), width=24).grid(row=0, column=0, padx=(6, 4), pady=4)
+            display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
+            ctk.CTkLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
+            status = ctk.CTkLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
+            status.grid(row=0, column=2, padx=(4, 10))
+            self._resurrection_rows[name] = status
+        self._section_log(body, 'god_log', 'Full sequence output')
+        for name, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
+            self._set_resurrection_step(name, state, detail)
 
     def _create_log_textbox(self, parent, height=150):
         log = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(family='Consolas', size=12), fg_color='#121820', text_color=TEXT, border_width=1, border_color=BORDER, corner_radius=6, wrap='word')
@@ -551,17 +627,28 @@ class PanaceaApp(ctk.CTk):
         if self._shutdown.is_set():
             return
         self.dispatcher.drain(100)
-        self.after(30, self._drain_callbacks)
+        if not self._shutdown.is_set():
+            self.after(30, self._drain_callbacks)
 
     def _set_maintenance_state(self, busy):
+        busy = busy or self.__dict__.get('_maintenance_uncertain', False)
         for button in self._maintenance_controls:
             button.configure(state='disabled' if busy else 'normal')
         for key, switch in self.__dict__.get('turbo_switches', {}).items():
-            switch.configure(state='disabled' if busy or self._turbo_states.get(key) is None else 'normal')
+            switch.configure(state='disabled' if busy or self.__dict__.get('_turbo_refreshing') or self._turbo_states.get(key) is None else 'normal')
         if 'master_switch' in self.__dict__:
-            self.master_switch.configure(state='disabled' if busy or self._turbo_master is None else 'normal')
+            self.master_switch.configure(state='disabled' if busy or self.__dict__.get('_turbo_refreshing') or self._turbo_master is None else 'normal')
+        if 'btn_restore_turbo' in self.__dict__:
+            self.btn_restore_turbo.configure(state='normal' if not busy and self.__dict__.get('_turbo_saved') else 'disabled')
+        if 'btn_optimize_drive' in self.__dict__:
+            self._drive_selected()
 
     def _request_operation(self, name, work, on_success=None, on_done=None):
+        if self.__dict__.get('_maintenance_uncertain'):
+            guard = self.__dict__.get('maintenance_guard')
+            message = guard.last_error if guard is not None else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.'
+            self._show_toast('Command state unknown', message, 'warning')
+            return False
         if self._update_installing or self._update_downloading or self.workers.busy():
             self._show_toast('Operation in progress', 'Wait for the current operation to finish.', 'warning')
             return False
@@ -569,12 +656,43 @@ class PanaceaApp(ctk.CTk):
             self._set_maintenance_state(False)
             if on_done:
                 on_done()
+            elif self.__dict__.get('_turbo_refresh_pending'):
+                self._load_turbo_states()
+            if self.__dict__.get('_close_when_idle'):
+                self._on_close()
         def error(exc):
             self.operation_label.configure(text=f'Failed · {name}: {exc}', text_color=COL_RED)
             self._show_toast(f'{name} failed', str(exc), 'error')
             if name == 'Temporary file preview':
                 self._set_preview_status('Scan failed · see status below', COL_RED)
-        started = self.workers.start(name, work, on_success=on_success, on_error=error, on_done=done)
+            if name == 'Resurrection':
+                for step, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
+                    if state == 'running':
+                        self._set_resurrection_step(step, 'failed', str(exc))
+                self.lbl_status.configure(text='Failed · See sequence output', text_color=COL_RED)
+            show_uncertainty()
+        def completion_unknown():
+            return any(getattr(manager, 'completion_unknown', False) is True for manager in (self.cmd_runner, self.disk_opt))
+        def guarded_work():
+            try:
+                return work()
+            finally:
+                guard = self.__dict__.get('maintenance_guard')
+                if completion_unknown() and guard is not None:
+                    guard.mark_unknown()
+        def show_uncertainty():
+            if completion_unknown():
+                self._maintenance_uncertain = True
+                guard = self.__dict__.get('maintenance_guard')
+                message = guard.last_error if guard is not None else 'Command completion unknown · Restart Windows before further maintenance'
+                self.operation_label.configure(text=f'Stopped · {message}', text_color=COL_WARNING)
+        def delivered(result):
+            if completion_unknown():
+                self._maintenance_uncertain = True
+            if on_success:
+                on_success(result)
+            show_uncertainty()
+        started = self.workers.start(name, guarded_work, on_success=delivered, on_error=error, on_done=done)
         if started:
             self._set_maintenance_state(True)
             self.operation_label.configure(text=f'Running · {name}', text_color=MUTED)
@@ -596,21 +714,33 @@ class PanaceaApp(ctk.CTk):
         self.workers.start('hardware', self.monitor.sample_metadata, group='hardware', on_success=self._update_metadata_gui, on_done=lambda: self.after(120000, self._load_metadata))
 
     def _update_fast_gui(self, sample):
-        total_ram, available_ram, ram_percent = sample['ram']
-        total_disk, free_disk, disk_percent = sample['disk']
         self.dash_uptime_val.configure(text=f"Uptime: {sample['uptime']}")
-        self.dash_cpu_val.configure(text=f"{sample['cpu']:.1f}%")
-        self.cpu_graph.add_value(sample['cpu'])
-        self.ram_graph.add_value(ram_percent)
-        self.dash_ram_val.configure(text=f'{total_ram - available_ram:.1f} GB used / {total_ram:.1f} GB')
-        self.dash_ram_perc.configure(text=f'{ram_percent:.1f}%', text_color=COL_WARNING if ram_percent >= 90 else TEXT)
-        self.dash_disk_bar.set(max(0, min(1, disk_percent / 100)))
-        disk_color = COL_RED if disk_percent >= 95 else COL_WARNING if disk_percent >= 85 else COL_GOLD
-        self.dash_disk_bar.configure(progress_color=disk_color)
-        self.dash_disk_state.configure(text='Low free space' if disk_percent >= 90 else 'Storage healthy',
-                                       text_color=disk_color if disk_percent >= 85 else MUTED)
-        self.dash_disk_val.configure(text=f'{free_disk:.1f} GB free / {total_disk:.1f} GB')
-        self.dash_disk_perc.configure(text=f'{disk_percent:.1f}% used', text_color=disk_color if disk_percent >= 85 else TEXT)
+        cpu = sample['cpu']
+        self.dash_cpu_val.configure(text='—' if cpu is None else f'{cpu:.1f}%')
+        if cpu is not None:
+            self.cpu_graph.add_value(cpu)
+        if sample['ram'] is None:
+            self.dash_ram_perc.configure(text='—', text_color=MUTED)
+            self.dash_ram_val.configure(text='Memory unavailable')
+        else:
+            total_ram, available_ram, ram_percent = sample['ram']
+            self.ram_graph.add_value(ram_percent)
+            self.dash_ram_val.configure(text=f'{total_ram - available_ram:.1f} GB used / {total_ram:.1f} GB')
+            self.dash_ram_perc.configure(text=f'{ram_percent:.1f}%', text_color=COL_WARNING if ram_percent >= 90 else TEXT)
+        if sample['disk'] is None:
+            self.dash_disk_bar.set(0)
+            self.dash_disk_bar.configure(progress_color=MUTED)
+            self.dash_disk_state.configure(text='Unavailable', text_color=COL_WARNING)
+            self.dash_disk_val.configure(text='Drive information unavailable')
+            self.dash_disk_perc.configure(text='—', text_color=MUTED)
+        else:
+            total_disk, free_disk, disk_percent = sample['disk']
+            self.dash_disk_bar.set(max(0, min(1, disk_percent / 100)))
+            disk_color = COL_RED if disk_percent >= 95 else COL_WARNING if disk_percent >= 85 else COL_GOLD
+            self.dash_disk_bar.configure(progress_color=disk_color)
+            self.dash_disk_state.configure(text='Low free space' if disk_percent >= 90 else 'Space available', text_color=disk_color if disk_percent >= 85 else MUTED)
+            self.dash_disk_val.configure(text=f'{free_disk:.1f} GB free / {total_disk:.1f} GB')
+            self.dash_disk_perc.configure(text=f'{disk_percent:.1f}% used', text_color=disk_color if disk_percent >= 85 else TEXT)
         percent, power = sample['battery']
         self.dash_battery.configure(text=f'Power: {power}' if percent is None else f'Battery: {percent}% · {power}')
 
@@ -626,12 +756,18 @@ class PanaceaApp(ctk.CTk):
         self.workers.start('windows-updates', self.monitor.get_windows_update_status, group='windows-updates', on_success=lambda result: self._update_updates_gui(*result), on_error=lambda exc: self._update_updates_gui(-1, -1, 'Check failed'))
 
     def _update_updates_gui(self, mandatory, optional, status):
-        self.lbl_update_status.configure(text=str(status), text_color=COL_SUCCESS if mandatory == optional == 0 else COL_WARNING if mandatory > 0 else MUTED)
+        self.lbl_update_status.configure(text=str(status), text_color=COL_SUCCESS if mandatory == optional == 0 else COL_WARNING if mandatory > 0 or optional > 0 else MUTED)
 
     def refresh_drives(self):
-        self.workers.start('drive-list', self.disk_opt.get_drive_info, group='drive-list', on_success=self._set_drives, on_error=lambda exc: self.log_disk_msg(f'Drive query failed: {exc}'))
+        def failed(exc):
+            self._set_drives([])
+            self.log_disk_msg(f'Drive query failed: {exc}')
+            if 'drive_detail' in self.__dict__:
+                self.drive_detail.configure(text=f'Drive information unavailable: {exc}', text_color=COL_WARNING)
+        self.workers.start('drive-list', self.disk_opt.get_drive_info, group='drive-list', on_success=self._set_drives, on_error=failed)
 
     def _set_drives(self, drives):
+        self._drive_info = list(drives)
         values = [str(drive['letter']) for drive in drives]
         self._drive_values = values
         if 'drive_menu' not in self.__dict__:
@@ -639,6 +775,33 @@ class PanaceaApp(ctk.CTk):
         self.drive_menu.configure(values=values or ['No drives'])
         if self.selected_drive.get() not in values:
             self.selected_drive.set(values[0] if values else 'No drives')
+        self.drive_menu.configure(state='normal' if values else 'disabled')
+        self._drive_selected()
+
+    def _drive_selected(self, value=None):
+        selected = value or self.selected_drive.get()
+        info = next((row for row in self.__dict__.get('_drive_info', ()) if row['letter'] == selected), None)
+        available = info is not None and info.get('available', True)
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
+        self.btn_optimize_drive.configure(state='normal' if available and not busy else 'disabled')
+        if not available:
+            text = 'No available local drive' if info is None else f"{selected} · Unavailable: {info.get('error', 'Cannot read drive')}"
+        elif info.get('total_bytes'):
+            text = f"{selected} · {info.get('type', 'Local')} drive · {info['free_bytes'] / 1024**3:.1f} GB free / {info['total_bytes'] / 1024**3:.1f} GB"
+        else:
+            text = f'{selected} · Capacity unavailable'
+        self.drive_detail.configure(text=text, text_color=MUTED if available else COL_WARNING)
+        if 'drive_capacity' in self.__dict__:
+            self.drive_capacity.set(max(0, min(1, (info.get('used_percent') or 0) / 100)) if info else 0)
+
+    def _cycle_drive(self, direction):
+        if self.drive_menu.cget('state') == 'disabled' or not self._drive_values:
+            return
+        current = self.selected_drive.get()
+        index = self._drive_values.index(current) if current in self._drive_values else 0
+        value = self._drive_values[(index + direction) % len(self._drive_values)]
+        self.selected_drive.set(value)
+        self._drive_selected(value)
 
     def _set_preview_status(self, message, color=MUTED):
         """Keep the same preview result visible from Dashboard and Cleanup."""
@@ -646,9 +809,7 @@ class PanaceaApp(ctk.CTk):
         for name in ('dash_preview_status', 'preview_label'):
             widget = self.__dict__.get(name)
             if widget is not None:
-                settings = {'text': self._preview_summary}
-                if name == 'dash_preview_status':
-                    settings['text_color'] = color
+                settings = {'text': self._preview_summary, 'text_color': color}
                 widget.configure(**settings)
 
     def run_preview_temp(self):
@@ -696,17 +857,19 @@ class PanaceaApp(ctk.CTk):
 
     def run_cleanmgr(self):
         try:
-            self.cleanup_mgr.open_disk_cleanup()
+            if self.cleanup_mgr.open_disk_cleanup() is not True:
+                raise RuntimeError('Windows Disk Cleanup could not be opened.')
+            self.operation_label.configure(text='Opened · Windows Disk Cleanup', text_color=MUTED)
         except Exception as exc:
             self._show_toast('Disk Cleanup', str(exc), 'error')
 
     def run_deep_clean(self):
-        self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup')
+        self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=self.log_msg)
 
     def run_optimize_drive(self):
         letter = self.selected_drive.get()
         import re
-        if not re.fullmatch(r'[A-Za-z]:?', letter):
+        if not re.fullmatch(r'[A-Za-z]:', letter) or letter not in self._drive_values:
             self._show_toast('Select a drive', 'Choose a valid drive letter.', 'warning')
             return
         if messagebox.askyesno('Optimize drive', f'Run Windows optimization on {letter}?\nThis operation can take several minutes.', parent=self):
@@ -714,19 +877,22 @@ class PanaceaApp(ctk.CTk):
 
     def run_dfrgui(self):
         try:
-            self.disk_opt.open_optimize_gui()
+            if self.disk_opt.open_optimize_gui() is not True:
+                raise RuntimeError('Windows drive optimization could not be opened.')
+            self.operation_label.configure(text='Opened · Windows drive optimization', text_color=MUTED)
         except Exception as exc:
             self._show_toast('Drive optimization', str(exc), 'error')
 
-    def run_cmd(self, cmd, desc):
+    def run_cmd(self, cmd, desc, *, log=None):
+        log = log or self.log_tools_msg
         detail = 'Network connections may be interrupted and a restart may be needed.' if 'winsock' in cmd.lower() else 'The operation can take several minutes. Save your work first.'
         if not messagebox.askyesno(desc, f'Run {desc}?\n{detail}', parent=self):
             return
         def work():
-            self.log_tools_msg(f'> {desc}')
-            success = self.cmd_runner.run_command_stream(cmd, desc, self.log_tools_msg)
-            self.log_tools_msg(f'{desc}: {"completed" if success is True else "failed"}')
-            return success is True, 'See the execution log for details.'
+            log(f'> {desc}')
+            success = self.cmd_runner.run_command_stream(cmd, desc, log)
+            log(f'{desc}: {"completed" if success is True else "failed"}')
+            return success is True, 'Restart required · see command output.' if getattr(self.cmd_runner, 'restart_required', False) else 'See command output for details.'
         self._request_operation(desc, work, lambda result: self._show_result(desc, result))
 
     def run_launch(self, target, desc):
@@ -738,16 +904,28 @@ class PanaceaApp(ctk.CTk):
                 subprocess.Popen([system_executable('control.exe'), 'appwiz.cpl'], shell=False)
             else:
                 raise ValueError('Unsupported Windows settings destination')
+            self.operation_label.configure(text=f'Opened · {desc} · Continue in Windows', text_color=MUTED)
+            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                self.apps_status.configure(text=f'Opened {desc} · Changes are managed in Windows.', text_color=MUTED)
         except Exception as exc:
+            self.operation_label.configure(text=f'Failed · {desc}: {exc}', text_color=COL_WARNING)
+            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                self.apps_status.configure(text=f'{desc} unavailable: {exc}', text_color=COL_WARNING)
             self._show_toast(desc, str(exc), 'error')
 
     def run_battery_report(self):
         path = Path(os.environ.get('USERPROFILE', str(Path.home()))) / 'battery_report.html'
         def report():
             from modules.commands import system_executable
-            subprocess.run([system_executable('powercfg.exe'), '/batteryreport', '/output', str(path)], shell=False, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), capture_output=True, timeout=60)
+            subprocess.run([system_executable('powercfg.exe'), '/batteryreport', '/output', str(path)], stdin=subprocess.DEVNULL, shell=False, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), capture_output=True, timeout=60)
             return path
-        self._request_operation('Battery report', report, lambda result: (os.startfile(str(result)), self.operation_label.configure(text=f'Completed · Battery report saved to {result}', text_color=COL_SUCCESS)))
+        def saved(result):
+            self.operation_label.configure(text=f'Completed · Battery report saved to {result}', text_color=COL_SUCCESS)
+            try:
+                os.startfile(str(result))
+            except OSError as exc:
+                self._show_toast('Report saved', f'{result}\nCould not open the report: {exc}', 'warning')
+        self._request_operation('Battery report', report, saved)
 
     def run_create_restore(self):
         if messagebox.askyesno('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):
@@ -775,20 +953,72 @@ class PanaceaApp(ctk.CTk):
         return states, read(self.perf_mgr.is_turbo_active)
 
     def _load_turbo_states(self):
-        self.workers.start('turbo-state', self._read_turbo_states, group='turbo-state', on_success=self._apply_turbo_states)
+        generation = self.__dict__.get('_turbo_generation', 0) + 1
+        self._turbo_generation = generation
+        self._turbo_refresh_pending = True
+        self._turbo_refreshing = True
+        for switch in self.__dict__.get('turbo_switches', {}).values():
+            switch.configure(state='disabled')
+        if 'master_switch' in self.__dict__:
+            self.master_switch.configure(state='disabled')
+        if 'btn_restore_turbo' in self.__dict__:
+            self.btn_restore_turbo.configure(state='disabled')
+        if self.workers.busy():
+            return
+        if self.workers.busy('turbo-state'):
+            return
+        self._turbo_refresh_pending = False
+        def read():
+            states = self._read_turbo_states()
+            return states, self.perf_mgr.get_saved_settings()
+        def apply(result):
+            if self.workers.busy() or generation != self._turbo_generation:
+                self._turbo_refresh_pending = True
+                return  # A late read must not overwrite an in-flight mutation.
+            self._apply_turbo_states(result[0])
+            self._apply_saved_turbo(result[1])
+        def failed(exc):
+            if generation == self._turbo_generation:
+                states = {key: None for key in ('power', 'visual', 'sysmain', 'wsearch', 'spooler')}
+                self._apply_turbo_states((states, None))
+                self._apply_saved_turbo(None)
+        def done():
+            if self._turbo_refresh_pending:
+                self._load_turbo_states()
+            else:
+                self._turbo_refreshing = False
+                self._set_maintenance_state(self.workers.busy() or self._update_downloading or self._update_installing)
+        self.workers.start('turbo-state', read, group='turbo-state', on_success=apply,
+                           on_error=failed, on_done=done)
+
+    def _apply_saved_turbo(self, saved):
+        self._turbo_saved = saved
+        if 'btn_restore_turbo' not in self.__dict__:
+            return
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
+        text = 'Saved originals unavailable · retry Refresh state' if saved is None else f'{len(saved)} original settings saved · available for restoration' if saved else 'No saved changes · switches show the current Windows state'
+        self.turbo_saved_label.configure(text=text, text_color=COL_WARNING if saved is None else MUTED)
+        self.btn_restore_turbo.configure(state='normal' if saved and not busy else 'disabled')
+
+    def _restore_saved_turbo(self):
+        self._request_operation('Restore Turbo settings', lambda: self.perf_mgr.set_turbo(False),
+                                lambda result: self._show_result('Restore Turbo settings', result), self._load_turbo_states)
 
     def _apply_turbo_states(self, result):
         states, master = result
         self._turbo_states, self._turbo_master = states, master
         if 'turbo_switches' not in self.__dict__:
             return
-        busy = self.workers.busy() or self._update_downloading or self._update_installing
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
         for key, state in states.items():
             if state is not None:
                 self.turbo_vars[key].set(state)
             self.turbo_switches[key].configure(text='Unknown' if state is None else 'Active' if state else 'Inactive', state='disabled' if busy or state is None else 'normal')
         if master is not None:
-            self.master_switch.select() if master else self.master_switch.deselect()
+            if 'master_var' in self.__dict__:
+                self.master_var.set(master)
+            else:
+                self.master_switch.select() if master else self.master_switch.deselect()
         self.master_switch.configure(text='Unknown' if master is None else 'Active' if master else 'Inactive', state='disabled' if busy or master is None else 'normal')
 
     def _turbo_toggle_changed(self, key, on_fn, off_fn):
@@ -810,8 +1040,34 @@ class PanaceaApp(ctk.CTk):
         self.progress_bar.set(progress)
         self.lbl_status.configure(text=text, text_color=MUTED)
 
+    def _set_resurrection_step(self, name, state, detail=''):
+        self.__dict__.setdefault('_resurrection_states', {})[name] = (state, detail)
+        label = self.__dict__.get('_resurrection_rows', {}).get(name)
+        if label is not None:
+            color = {'completed': COL_SUCCESS, 'failed': COL_RED, 'running': COL_GOLD}.get(state, MUTED)
+            label.configure(text={'pending': 'Not started', 'running': 'Running…', 'completed': 'Completed',
+                                  'failed': 'Failed / partial', 'not run': 'Not run'}.get(state, state), text_color=color)
+
+    def _finish_resurrection(self, result):
+        self.last_resurrection_result = result
+        attempted = {row['name']: row for row in result['steps']}
+        for name in self.RESURRECTION_STEPS:
+            row = attempted.get(name)
+            self._set_resurrection_step(name, 'completed' if row and row['success'] else 'failed' if row else 'not run', row['message'] if row else '')
+        text = f"{result['status'].capitalize()} · {len(result['steps'])}/{result['total']} steps finished"
+        color = COL_SUCCESS if result['status'] == 'completed' else COL_WARNING if result['status'] in ('partial', 'cancelled') else COL_RED
+        self.lbl_status.configure(text=text, text_color=color)
+        self.operation_label.configure(text=text, text_color=color)
+        self.log_god_msg(text, 'head')
+        if result.get('error'):
+            self.log_god_msg(result['error'], 'err')
+
     def _run_resurrection_sequence(self):
         from modules.operations import OperationStep, run_sequence
+        from modules.commands import validate_drive, system_executable
+        import ntpath
+        system_drive = validate_drive(ntpath.splitdrive(system_executable('cmd.exe'))[0])
+        uncertain = False
         log = self.log_god_msg
         def cleanup(fn, **kwargs):
             count, size = fn(**kwargs)
@@ -819,24 +1075,45 @@ class PanaceaApp(ctk.CTk):
             errors, skipped = getattr(detail, 'errors', []), getattr(detail, 'skipped', [])
             return not errors and not skipped, f'{count} files · {size / 1048576:.1f} MB freed · {len(skipped)} skipped · {len(errors)} errors'
         def command(cmd, name):
-            return self.cmd_runner.run_command_stream(cmd, name, lambda msg: log(msg)) is True, 'See command output above.'
+            nonlocal uncertain
+            success = self.cmd_runner.run_command_stream(cmd, name, lambda msg: log(msg)) is True
+            if getattr(self.cmd_runner, 'completion_unknown', False) is True:
+                uncertain = True
+                return False, 'Command completion unknown · sequence stopped; restart Windows before retrying.'
+            return success, 'Restart required.' if getattr(self.cmd_runner, 'restart_required', False) else 'See command output.'
+        def optimize():
+            nonlocal uncertain
+            success = self.disk_opt.analyze_optimize_drive(system_drive, progress_callback=log) is True
+            if getattr(self.disk_opt, 'completion_unknown', False) is True:
+                uncertain = True
+                return False, 'Drive command completion unknown · sequence stopped; restart Windows before retrying.'
+            return success, 'See drive output.'
         steps = [OperationStep('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Resurrection restore point'), True),
                  OperationStep('Browser caches', lambda: cleanup(self.cleanup_mgr.clean_browser_caches)),
                  OperationStep('Temporary files', lambda: cleanup(self.cleanup_mgr.clean_temp_files, progress_callback=log)),
                  OperationStep('Recycle Bin', self.cleanup_mgr.empty_recycle_bin),
                  OperationStep('DNS cache', lambda: command('ipconfig /flushdns', 'DNS flush')),
                  OperationStep('Network reset', lambda: command('netsh winsock reset', 'Network reset')),
-                 OperationStep('Drive optimization', lambda: (self.disk_opt.analyze_optimize_drive('C:', progress_callback=log) is True, 'See drive output above.')),
-                 OperationStep('Disk health scan', lambda: command('chkdsk C: /scan /perf', 'Disk health scan')),
+                 OperationStep('Drive optimization', optimize),
+                 OperationStep('Disk health scan', lambda: command(f'chkdsk {system_drive} /scan /perf', 'Disk health scan')),
                  OperationStep('Windows image health', lambda: command('DISM /Online /Cleanup-Image /CheckHealth', 'Image health')),
                  OperationStep('System file scan', lambda: command('sfc /scannow', 'System file scan'))]
+        def tracked(step):
+            def action():
+                self.dispatcher.post(self._set_resurrection_step, step.name, 'running', critical=True)
+                return step.action()
+            return OperationStep(step.name, action, step.critical)
+        steps = [tracked(step) for step in steps]
         def progress(completed, total, result):
             log(f'{"Completed" if result.success else "Failed / partial"}: {result.name} · {result.message}', 'info' if result.success else 'err')
             self.dispatcher.post(self._resurrection_progress, completed / total, f'{completed}/{total} finished · {result.name}', critical=True)
-        result = run_sequence(steps, cancel=lambda: self._shutdown.is_set() or self._resurrect_cancel.is_set(), progress=progress)
+            self.dispatcher.post(self._set_resurrection_step, result.name, 'completed' if result.success else 'failed', result.message, critical=True)
+        result = run_sequence(steps, cancel=lambda: uncertain or self._shutdown.is_set() or self._resurrect_cancel.is_set(), progress=progress)
+        if uncertain:
+            result.status = 'partial' if any(row.success for row in result.steps) else 'failed'
         if result.steps and not result.steps[0].success:
             log('Stopped before cleanup: a new restore point could not be verified. Enable System Protection in Windows and retry.', 'err')
-        return {'status': result.status, 'steps': [{'name': row.name, 'success': row.success, 'message': row.message} for row in result.steps], 'total': len(steps)}
+        return {'status': result.status, 'steps': [{'name': row.name, 'success': row.success, 'message': row.message} for row in result.steps], 'total': len(steps), 'error': result.error}
 
     def run_god_mode(self):
         if self._update_installing or self._update_downloading or self.workers.busy():
@@ -845,20 +1122,12 @@ class PanaceaApp(ctk.CTk):
         if not messagebox.askyesno('Confirm Resurrection', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
             return
         self._resurrect_cancel.clear()
-        def finished(result):
-            self.last_resurrection_result = result
-            text = f"{result['status'].capitalize()} · {len(result['steps'])}/{result['total']} steps finished"
-            failures = [row['name'] for row in result['steps'] if not row['success']]
-            if failures:
-                text += ' · Failed: ' + ', '.join(failures)
-            color = COL_SUCCESS if result['status'] == 'completed' else COL_WARNING if result['status'] in ('partial', 'cancelled') else COL_RED
-            self.lbl_status.configure(text=text, text_color=color)
-            self.operation_label.configure(text=text, text_color=color)
-            self.log_god_msg(text, 'head')
         def done():
             self.btn_resurrect_cancel.pack_forget()
-            self.btn_resurrect_start.configure(text='Start maintenance sequence')
-        if self._request_operation('Resurrection', self._run_resurrection_sequence, finished, done):
+            self.btn_resurrect_start.configure(text='Start sequence')
+        if self._request_operation('Resurrection', self._run_resurrection_sequence, self._finish_resurrection, done):
+            for name in self.RESURRECTION_STEPS:
+                self._set_resurrection_step(name, 'pending')
             self.btn_resurrect_start.configure(text='Maintenance running…')
             self.btn_resurrect_cancel.configure(state='normal', text='Cancel after current step')
             self.btn_resurrect_cancel.pack(side='left', padx=10)
@@ -1022,7 +1291,10 @@ class PanaceaApp(ctk.CTk):
         if self._update_installing:
             self._show_toast('Update installation in progress', 'Wait for installation to finish before closing Panacea.', 'warning')
             return
-        if self.workers.busy() and not messagebox.askyesno('Maintenance in progress', 'Close Panacea?\nResurrection will stop before its next step. A running command may finish in the background.', parent=self):
+        if self.workers.busy():
+            self._close_when_idle = True
+            self._resurrect_cancel.set()
+            self.operation_label.configure(text='Closing after the current operation · No further sequence steps will start', text_color=COL_WARNING)
             return
         self._shutdown.set()
         self._resurrect_cancel.set()

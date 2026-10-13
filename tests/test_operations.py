@@ -75,3 +75,19 @@ def test_progress_exception_stops_before_next_command():
     assert len(result.steps) == 1
     assert 'UI callback unavailable' in result.error
     assert touched == []
+
+
+def test_cancellation_check_failure_preserves_completed_steps_and_stops_sequence():
+    executed = []
+    def cancellation():
+        if executed:
+            raise RuntimeError('Cancellation state unavailable')
+        return False
+    result = operations.run_sequence([
+        operations.OperationStep('First', lambda: executed.append('first') or True),
+        operations.OperationStep('Next', lambda: executed.append('next') or True),
+    ], cancel=cancellation)
+    assert result.status == 'partial'
+    assert executed == ['first']
+    assert len(result.steps) == 1 and result.steps[0].success
+    assert 'Cancellation state unavailable' in result.error

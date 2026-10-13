@@ -18,6 +18,32 @@ CUSTOM_GUID = '12345678-1111-2222-3333-123456789abc'
 REAL_RUN_CMD = performance.PerformanceManager._run_cmd
 
 
+def test_turbo_command_runs_with_invalid_windowed_app_stdin(monkeypatch):
+    import ctypes
+    from ctypes import wintypes
+
+    real_run = subprocess.run
+    def fixture_run(args, **kwargs):
+        # Exercise native startup with production flags, never run powercfg/sc.
+        return real_run([sys.executable, '-c', "print('fixture-only')"], **kwargs)
+    monkeypatch.setattr(performance.subprocess, 'run', fixture_run)
+    subject = performance.PerformanceManager.__new__(performance.PerformanceManager)
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetStdHandle.argtypes = [wintypes.DWORD]
+    kernel.GetStdHandle.restype = wintypes.HANDLE
+    kernel.SetStdHandle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+    kernel.SetStdHandle.restype = wintypes.BOOL
+    stdin_id = wintypes.DWORD(-10)
+    original = kernel.GetStdHandle(stdin_id)
+    try:
+        assert kernel.SetStdHandle(stdin_id, wintypes.HANDLE(-1))
+        success, message = REAL_RUN_CMD(subject, ['powercfg', '/getactivescheme'])
+        assert success, message
+        assert message.strip() == 'fixture-only'
+    finally:
+        assert kernel.SetStdHandle(stdin_id, original)
+
+
 @pytest.fixture
 def environment(tmp_path, monkeypatch):
     monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
@@ -450,3 +476,69 @@ def test_exclusive_temp_collision_preserves_foreign_file_and_previous_snapshot(e
     assert machine['WSearch'] is True
     assert subject.state_path.read_bytes() == snapshot
     assert foreign.read_bytes() == b'foreign'
+
+
+def test_restore_skips_unknown_settings_without_saved_originals(environment, monkeypatch):
+    machine, calls, _ = environment
+    subject = performance.PerformanceManager()
+    assert subject.set_power_plan(True)[0]
+    original = subject._run_cmd
+    monkeypatch.setattr(subject, '_run_cmd', lambda args, **kwargs: (False, 'unavailable')
+                        if args[:2] == ['sc', 'query'] else original(args, **kwargs))
+    monkeypatch.setattr(subject, '_get_visual_value', lambda: None)
+    calls.clear()
+    result = subject.set_turbo(False)
+    assert result[0], result[1]
+    assert machine['power'] == CUSTOM_GUID
+    assert json.loads(subject.state_path.read_text())['original'] == {}
+
+
+def test_saved_settings_survive_partial_activation_and_restart(environment, monkeypatch):
+    machine, _, _ = environment
+    subject = performance.PerformanceManager()
+    monkeypatch.setattr(subject, '_set_visual_value', lambda value: (False, 'write denied'))
+    assert not subject.set_turbo(True)[0]
+    assert machine['power'] == subject.POWER_HIGH_PERF
+    restarted = performance.PerformanceManager()
+    assert restarted.is_turbo_active() is False
+    assert set(restarted.get_saved_settings()) == {'power', 'visual', 'SysMain', 'WSearch', 'Spooler'}
+    assert restarted.set_turbo(False)[0]
+    assert restarted.get_saved_settings() == ()
+    assert machine == {'power': CUSTOM_GUID, 'SysMain': False, 'WSearch': True, 'Spooler': True, 'visual': 3}
+
+
+def test_unreadable_recovery_state_is_distinct_from_no_saved_changes(environment):
+    _, _, location = environment
+    subject = performance.PerformanceManager()
+    assert subject.get_saved_settings() == ()
+    subject.state_path.parent.mkdir()
+    subject.state_path.write_text('{incomplete', encoding='utf-8')
+    assert subject.get_saved_settings() is None
+
+
+def test_partial_restore_retains_only_failed_setting_for_restart(environment, monkeypatch):
+    machine, _, _ = environment
+    subject = performance.PerformanceManager()
+    assert subject.set_turbo(True)[0]
+    monkeypatch.setattr(subject, '_set_visual_value', lambda value: (False, 'write denied'))
+    assert not subject.set_turbo(False)[0]
+    assert subject.get_saved_settings() == ('visual',)
+    assert machine == {'power': CUSTOM_GUID, 'SysMain': False, 'WSearch': True, 'Spooler': True, 'visual': 2}
+    restarted = performance.PerformanceManager()
+    assert restarted.set_turbo(False)[0]
+    assert machine['visual'] == 3
+
+
+def test_restore_record_save_failure_is_retryable_after_restart(environment, monkeypatch):
+    machine, _, _ = environment
+    subject = performance.PerformanceManager()
+    assert subject.set_power_plan(True)[0]
+    def fail_save():
+        raise OSError('fixture disk full')
+    monkeypatch.setattr(subject, '_save_state', fail_save)
+    assert not subject.set_power_plan(False)[0]
+    assert machine['power'] == CUSTOM_GUID
+    restarted = performance.PerformanceManager()
+    assert restarted.get_saved_settings() == ('power',)
+    assert restarted.set_power_plan(False)[0]
+    assert restarted.get_saved_settings() == ()

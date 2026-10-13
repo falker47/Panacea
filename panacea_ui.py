@@ -92,7 +92,7 @@ class PanaceaApp(ctk.CTk):
                                  'Apps': self._setup_apps_frame, 'Turbo': self._setup_turbo_frame,
                                  'Resurrect': self._setup_resurrect_frame}
         self._built_frames = set()
-        self.operation_label = ctk.CTkLabel(self, text='Ready · No maintenance operation running', text_color=MUTED, anchor='w', font=self._font(11))
+        self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
         self.operation_label.grid(row=2, column=1, sticky='ew', padx=22, pady=(2, 10))
         self.protocol('WM_DELETE_WINDOW', self._on_close)
         for index, name in enumerate(self.frames, 1):
@@ -225,61 +225,146 @@ class PanaceaApp(ctk.CTk):
         outer.grid_rowconfigure(0, weight=1)
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
-        self._header(frame, 'Dashboard', 'Live resource usage and shortcuts to maintenance tools.', compact=True)
-        body = ctk.CTkFrame(frame, fg_color='transparent')
-        body.grid(row=2, column=0, padx=22, pady=(0, 10), sticky='ew')
-        body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
+        self._header(frame, 'Dashboard', 'Live system overview.', compact=True)
+
+        # A compact system summary, with a separate truthful Windows Update status.
         info = self._card(frame)
-        info.grid(row=1, column=0, padx=22, pady=(0, 10), sticky='ew')
-        info.grid_columnconfigure(0, weight=1)
-        self.dash_os = ctk.CTkLabel(info, text='Loading system details…', height=22, anchor='w', font=self._font(12))
-        self.dash_os.grid(row=0, column=0, sticky='ew', padx=14, pady=(8, 0))
-        self.dash_uptime_val = ctk.CTkLabel(info, text='Uptime: —', anchor='w', text_color=MUTED, font=self._font(11))
-        self.dash_uptime_val.grid(row=1, column=0, sticky='ew', padx=14, pady=(0, 10))
-        self.lbl_update_status = ctk.CTkLabel(info, text='Windows Update: checking…', height=22, anchor='e', text_color=MUTED, font=self._font(11))
-        self.lbl_update_status.grid(row=0, column=1, padx=14, pady=(8, 0))
-        self._button(info, 'Windows Update', self.run_windows_update, secondary=True, width=125).grid(row=1, column=1, padx=14, pady=(0, 8))
+        info.grid(row=1, column=0, padx=18, pady=(0, 9), sticky='ew')
+        info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
+        system = ctk.CTkFrame(info, fg_color='transparent')
+        system.grid(row=0, column=0, sticky='nsew', padx=(14, 7), pady=10)
+        self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', anchor='w',
+                                    font=self._font(15, True), text_color=TEXT)
+        self.dash_os.pack(anchor='w')
+        self.dash_uptime_val = ctk.CTkLabel(system, text='Uptime: —', anchor='w',
+                                            font=self._font(11), text_color=MUTED)
+        self.dash_uptime_val.pack(anchor='w', pady=(3, 0))
+        updates = ctk.CTkFrame(info, fg_color=SURFACE_ALT, corner_radius=8)
+        updates.grid(row=0, column=1, sticky='nsew', padx=(7, 10), pady=7)
+        updates.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(updates, text='', image=self.action_icons['updates'], width=28).grid(
+            row=0, column=0, rowspan=2, padx=(10, 3))
+        ctk.CTkLabel(updates, text='Windows Update', text_color=TEXT, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
+        self.lbl_update_status = ctk.CTkLabel(updates, text='Checking…', font=self._font(10),
+                                              text_color=MUTED, anchor='w', wraplength=210)
+        self.lbl_update_status.grid(row=1, column=1, sticky='nw', pady=(0, 7))
+        self._button(updates, 'View', self.run_windows_update, secondary=True, width=58).grid(
+            row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
+
+        body = ctk.CTkFrame(frame, fg_color='transparent')
+        body.grid(row=2, column=0, padx=18, pady=(0, 9), sticky='ew')
+        body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
-        for col, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
-            card.grid(row=0, column=col, padx=(0, 6) if col == 0 else (6, 0) if col == 2 else 6, sticky='nsew')
-        for card, title in [(self.card_cpu, 'CPU'), (self.card_ram, 'Memory'), (self.card_disk, 'System drive · C:')]:
-            ctk.CTkLabel(card, text=title, font=self._font(13, True), anchor='w').pack(fill='x', padx=14, pady=(10, 3))
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(24, True), anchor='w')
-        self.dash_cpu_val.pack(fill='x', padx=14)
-        self.cpu_graph = LiveGraph(self.card_cpu, width=180, height=48, line_color=COL_BLUE)
-        self.cpu_graph.pack(fill='x', padx=14, pady=5)
-        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…', text_color=MUTED, font=self._font(10), wraplength=220, justify='left')
-        self.dash_cpu_name.pack(fill='x', padx=14, pady=(0, 8))
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(24, True), anchor='w')
-        self.dash_ram_perc.pack(fill='x', padx=14)
-        self.ram_graph = LiveGraph(self.card_ram, width=180, height=48, line_color=COL_BLUE)
-        self.ram_graph.pack(fill='x', padx=14, pady=5)
-        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED, font=self._font(11), wraplength=220)
-        self.dash_ram_val.pack(fill='x', padx=14)
-        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text='Loading memory details…', text_color=MUTED, font=self._font(10), wraplength=220)
-        self.dash_ram_info.pack(fill='x', padx=14, pady=(0, 8))
-        self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text='—', font=self._font(24, True), anchor='w')
-        self.dash_disk_perc.pack(fill='x', padx=14, pady=3)
-        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=9, progress_color=COL_BLUE, fg_color=BORDER)
+        for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
+            card.grid(row=0, column=index, padx=(0, 5) if index == 0 else
+                      (5, 0) if index == 2 else 5, sticky='nsew')
+        for card, title, icon_name in (
+            (self.card_cpu, 'CPU', 'cpu'),
+            (self.card_ram, 'Memory', 'memory'),
+            (self.card_disk, 'System drive · C:', 'drive'),
+        ):
+            heading = ctk.CTkFrame(card, fg_color='transparent')
+            heading.pack(fill='x', padx=12, pady=(9, 2))
+            ctk.CTkLabel(heading, text='', image=self.action_icons[icon_name],
+                         width=24, height=24).pack(side='left', padx=(0, 6))
+            ctk.CTkLabel(heading, text=title, font=self._font(12, True),
+                         anchor='w', text_color=TEXT).pack(side='left', fill='x')
+
+        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(25, True),
+                                         text_color=TEXT, anchor='w')
+        self.dash_cpu_val.pack(fill='x', padx=12)
+        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=49, line_color=COL_BLUE)
+        self.cpu_graph.pack(fill='x', padx=12, pady=(5, 5))
+        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…',
+                                          text_color=MUTED, font=self._font(10),
+                                          anchor='w', wraplength=185, justify='left')
+        self.dash_cpu_name.pack(fill='x', padx=12, pady=(0, 9))
+
+        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(25, True),
+                                          text_color=TEXT, anchor='w')
+        self.dash_ram_perc.pack(fill='x', padx=12)
+        self.ram_graph = LiveGraph(self.card_ram, width=175, height=49, line_color=COL_GOLD)
+        self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
+        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED,
+                                         font=self._font(11), anchor='w', wraplength=185)
+        self.dash_ram_val.pack(fill='x', padx=12)
+        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text='Loading memory details…',
+                                          text_color=MUTED, font=self._font(10),
+                                          anchor='w', wraplength=185)
+        self.dash_ram_info.pack(fill='x', padx=12, pady=(0, 9))
+
+        self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text='—', font=self._font(25, True),
+                                           text_color=TEXT, anchor='w')
+        self.dash_disk_perc.pack(fill='x', padx=12)
+        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=12, corner_radius=6,
+                                                 progress_color=COL_GOLD, fg_color='#26364b')
         self.dash_disk_bar.set(0)
-        self.dash_disk_bar.pack(fill='x', padx=14, pady=8)
-        self.dash_disk_val = ctk.CTkLabel(self.card_disk, text='Storage: —', text_color=MUTED, font=self._font(11), wraplength=220)
-        self.dash_disk_val.pack(fill='x', padx=14)
-        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text='Loading disk details…', text_color=MUTED, font=self._font(10), wraplength=220)
-        self.dash_disk_info.pack(fill='x', padx=14, pady=(2, 8))
+        self.dash_disk_bar.pack(fill='x', padx=12, pady=(12, 8))
+        self.dash_disk_val = ctk.CTkLabel(self.card_disk, text='Storage: —', text_color=MUTED,
+                                          font=self._font(11), anchor='w', wraplength=185)
+        self.dash_disk_val.pack(fill='x', padx=12)
+        self.dash_disk_state = ctk.CTkLabel(self.card_disk, text='Checking space…',
+                                            text_color=MUTED, font=self._font(10), anchor='w')
+        self.dash_disk_state.pack(fill='x', padx=12)
+        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text='Loading disk details…',
+                                           text_color=MUTED, font=self._font(10),
+                                           anchor='w', wraplength=185)
+        self.dash_disk_info.pack(fill='x', padx=12, pady=(0, 9))
+
+        # Two meaningful actions. Navigation is already in the sidebar: no redundant
+        # "Open cleanup" tile. Preview feedback remains in-place on the dashboard.
         self.card_sys = self._card(frame)
-        self.card_sys.grid(row=3, column=0, padx=22, pady=(0, 10), sticky='ew')
-        self.card_sys.grid_columnconfigure((0, 1, 2), weight=1, uniform='actions')
+        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 8), sticky='ew')
+        self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
         heading = ctk.CTkFrame(self.card_sys, fg_color='transparent')
-        heading.grid(row=0, column=0, columnspan=3, sticky='ew', padx=14, pady=(8, 4))
+        heading.grid(row=0, column=0, columnspan=2, sticky='ew', padx=12, pady=(8, 5))
         heading.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(heading, text='Quick actions', font=self._font(12, True), height=22, anchor='w').grid(row=0, column=0, sticky='ew')
-        self.dash_battery = ctk.CTkLabel(heading, text='Power: —', text_color=MUTED, font=self._font(10), height=22)
+        ctk.CTkLabel(heading, text='Quick actions', font=self._font(12, True),
+                     height=20, anchor='w').grid(row=0, column=0, sticky='w')
+        self.dash_battery = ctk.CTkLabel(heading, text='Power: —', text_color=MUTED,
+                                         font=self._font(10), height=20)
         self.dash_battery.grid(row=0, column=1, sticky='e')
-        for col, (title, action) in enumerate([('Preview temporary files', self.run_preview_temp), ('Create restore point', self.run_create_restore), ('Open cleanup', lambda: self.select_frame('Cleaning'))]):
-            self._button(self.card_sys, title, action, secondary=True, width=130).grid(row=1, column=col, sticky='ew', padx=(14, 6) if col == 0 else (6, 14) if col == 2 else 6, pady=(0, 12))
-        for card, labels in [(self.card_cpu, (self.dash_cpu_name,)), (self.card_ram, (self.dash_ram_val, self.dash_ram_info)), (self.card_disk, (self.dash_disk_val, self.dash_disk_info))]:
-            card.bind('<Configure>', lambda event, items=labels: [label.configure(wraplength=max(110, event.width / label._get_widget_scaling() - 28)) for label in items])
+        scan = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
+                            border_color=BORDER, border_width=1, corner_radius=9)
+        scan.grid(row=1, column=0, sticky='nsew', padx=(11, 5), pady=(0, 10))
+        scan.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
+            row=0, column=0, rowspan=2, padx=(9, 5))
+        ctk.CTkLabel(scan, text='Temporary files', font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
+        self.dash_preview_status = ctk.CTkLabel(
+            scan, text=self._preview_summary, text_color=MUTED, font=self._font(10),
+            anchor='w', wraplength=226, justify='left')
+        self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 9))
+        self._button(scan, 'Preview', self.run_preview_temp, secondary=True,
+                     maintenance=True, width=77).grid(
+            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+
+        restore = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
+                               border_color=BORDER, border_width=1, corner_radius=9)
+        restore.grid(row=1, column=1, sticky='nsew', padx=(5, 11), pady=(0, 10))
+        restore.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
+            row=0, column=0, rowspan=2, padx=(9, 5))
+        ctk.CTkLabel(restore, text='Restore point', font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
+        ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
+                     text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
+                     justify='left').grid(row=1, column=1, sticky='nw', pady=(0, 9))
+        self._button(restore, 'Create', self.run_create_restore, secondary=True,
+                     maintenance=True, width=77).grid(
+            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+
+        for card, labels in (
+            (self.card_cpu, (self.dash_cpu_name,)),
+            (self.card_ram, (self.dash_ram_val, self.dash_ram_info)),
+            (self.card_disk, (self.dash_disk_val, self.dash_disk_info)),
+        ):
+            card.bind('<Configure>', lambda event, items=labels: [
+                label.configure(wraplength=max(110, event.width / label._get_widget_scaling() - 24))
+                for label in items
+            ])
 
     def _setup_cleaning_frame(self):
         frame = self.frame_cleaning
@@ -288,7 +373,7 @@ class PanaceaApp(ctk.CTk):
         card = self._card(frame)
         card.grid(row=1, column=0, sticky='ew', padx=22, pady=(0, 12))
         card.grid_columnconfigure((0, 1), weight=1)
-        self.preview_label = ctk.CTkLabel(card, text='No preview yet', anchor='w', text_color=MUTED, font=self._font(12))
+        self.preview_label = ctk.CTkLabel(card, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12))
         self.preview_label.grid(row=0, column=0, sticky='ew', padx=14, pady=12)
         self._button(card, 'Preview temporary files', self.run_preview_temp, secondary=True, maintenance=True).grid(row=0, column=1, sticky='ew', padx=14, pady=12)
         self.btn_clean_temp = self._button(card, 'Delete temporary files', self.run_clean_temp, maintenance=True)
@@ -488,6 +573,8 @@ class PanaceaApp(ctk.CTk):
         def error(exc):
             self.operation_label.configure(text=f'Failed · {name}: {exc}', text_color=COL_RED)
             self._show_toast(f'{name} failed', str(exc), 'error')
+            if name == 'Temporary file preview':
+                self._set_preview_status('Scan failed · see status below', COL_RED)
         started = self.workers.start(name, work, on_success=on_success, on_error=error, on_done=done)
         if started:
             self._set_maintenance_state(True)
@@ -517,10 +604,14 @@ class PanaceaApp(ctk.CTk):
         self.cpu_graph.add_value(sample['cpu'])
         self.ram_graph.add_value(ram_percent)
         self.dash_ram_val.configure(text=f'{total_ram - available_ram:.1f} GB used / {total_ram:.1f} GB')
-        self.dash_ram_perc.configure(text=f'{ram_percent:.1f}%')
+        self.dash_ram_perc.configure(text=f'{ram_percent:.1f}%', text_color=COL_WARNING if ram_percent >= 90 else TEXT)
         self.dash_disk_bar.set(max(0, min(1, disk_percent / 100)))
+        disk_color = COL_RED if disk_percent >= 95 else COL_WARNING if disk_percent >= 85 else COL_GOLD
+        self.dash_disk_bar.configure(progress_color=disk_color)
+        self.dash_disk_state.configure(text='Low free space' if disk_percent >= 90 else 'Storage healthy',
+                                       text_color=disk_color if disk_percent >= 85 else MUTED)
         self.dash_disk_val.configure(text=f'{free_disk:.1f} GB free / {total_disk:.1f} GB')
-        self.dash_disk_perc.configure(text=f'{disk_percent:.1f}% used')
+        self.dash_disk_perc.configure(text=f'{disk_percent:.1f}% used', text_color=disk_color if disk_percent >= 85 else TEXT)
         percent, power = sample['battery']
         self.dash_battery.configure(text=f'Power: {power}' if percent is None else f'Battery: {percent}% · {power}')
 
@@ -534,7 +625,7 @@ class PanaceaApp(ctk.CTk):
         self.workers.start('windows-updates', self.monitor.get_windows_update_status, group='windows-updates', on_success=lambda result: self._update_updates_gui(*result), on_error=lambda exc: self._update_updates_gui(-1, -1, 'Check failed'))
 
     def _update_updates_gui(self, mandatory, optional, status):
-        self.lbl_update_status.configure(text=f'Windows Update: {status}', text_color=COL_SUCCESS if mandatory == optional == 0 else MUTED)
+        self.lbl_update_status.configure(text=str(status), text_color=COL_SUCCESS if mandatory == optional == 0 else COL_WARNING if mandatory > 0 else MUTED)
 
     def refresh_drives(self):
         self.workers.start('drive-list', self.disk_opt.get_drive_info, group='drive-list', on_success=self._set_drives, on_error=lambda exc: self.log_disk_msg(f'Drive query failed: {exc}'))
@@ -548,18 +639,38 @@ class PanaceaApp(ctk.CTk):
         if self.selected_drive.get() not in values:
             self.selected_drive.set(values[0] if values else 'No drives')
 
+    def _set_preview_status(self, message, color=MUTED):
+        """Keep the same preview result visible from Dashboard and Cleanup."""
+        self._preview_summary = str(message)
+        for name in ('dash_preview_status', 'preview_label'):
+            widget = self.__dict__.get(name)
+            if widget is not None:
+                settings = {'text': self._preview_summary}
+                if name == 'dash_preview_status':
+                    settings['text_color'] = color
+                widget.configure(**settings)
+
     def run_preview_temp(self):
+        previous = getattr(self, '_preview_summary', 'Not scanned yet')
+        self._set_preview_status('Scanning temporary files… No files changed', COL_GOLD)
         def show(result):
             count, size = result
-            self.select_frame('Cleaning')
             details = self.cleanup_mgr.last_result
             errors, skipped = getattr(details, 'errors', []), getattr(details, 'skipped', [])
             partial = bool(errors or skipped)
-            self.preview_label.configure(text=f'{count:,} files · {size / 1048576:.1f} MB eligible · {len(skipped)} skipped · {len(errors)} errors')
-            self.operation_label.configure(text=f'{"Partial" if partial else "Completed"} · Temporary file preview', text_color=COL_WARNING if partial else COL_SUCCESS)
+            summary = f'{count:,} files · {size / 1048576:.1f} MB eligible'
+            if partial:
+                summary += f' · {len(skipped)} skipped · {len(errors)} errors'
+            self._set_preview_status(summary, COL_WARNING if partial else COL_SUCCESS)
+            self.operation_label.configure(
+                text=f'{"Partial" if partial else "Completed"} · Temporary file preview',
+                text_color=COL_WARNING if partial else COL_SUCCESS)
             for error in errors[:10]:
                 self.log_msg(str(error))
-        self._request_operation('Temporary file preview', self.cleanup_mgr.preview_temp_files, show)
+        started = self._request_operation(
+            'Temporary file preview', self.cleanup_mgr.preview_temp_files, show)
+        if started is False:
+            self._set_preview_status(previous)
 
     def _cleanup_result(self, fn, *args, **kwargs):
         count, freed = fn(*args, **kwargs)
@@ -944,7 +1055,7 @@ class LiveGraph(ctk.CTkFrame):
         self.points = [0.0] * 60
         self.canvas.bind('<Configure>', self._resized)
         self._draw_grid()
-        self.fill_id = self.canvas.create_polygon(0, 0, fill='#223b57', outline='')
+        self.fill_id = self.canvas.create_polygon(0, 0, fill='#3b342b' if line_color == COL_GOLD else '#24364c', outline='')
         self.line_id = self.canvas.create_line(0, 0, 0, 0, fill=line_color, width=2, smooth=True)
 
     def _resized(self, event):

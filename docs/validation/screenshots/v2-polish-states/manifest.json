@@ -1,0 +1,1078 @@
+{
+  "fixture_only": true,
+  "case_count": 21,
+  "source_sha256": {
+    "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+    "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+    "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+    "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+    "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+    "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+  },
+  "all_passed": true,
+  "captures": [
+    {
+      "case": "cleanup-loading",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-loading",
+        "section": "Cleaning",
+        "state": "loading",
+        "description": "Pending inert analysis; controls disabled and output open.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:40.629234+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Scanning temporary files\u2026 No files deleted",
+          "operation": "Running \u00b7 Temporary file analysis",
+          "delete_enabled": "disabled",
+          "output_open": true,
+          "diagnostics": [],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "5b1144b9b039fd34102eaf29d47723ab6b8e1549bf47553eb5eb9e8edb57ac15",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-success",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-success",
+        "section": "Cleaning",
+        "state": "success",
+        "description": "Synthetic successful analysis; potential recovery, no deletion.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:42.924382+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Analysis completed \u2014 No files deleted\n24 candidates \u00b7 about 3.0 MB recoverable\n0 skipped \u00b7 0 errors",
+          "operation": "Analysis completed \u2014 No files deleted",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "cbc14295fc9cd64399aab1f997489e6a2b66cd00182973dff9f666881b79bf82",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-partial",
+        "section": "Cleaning",
+        "state": "partial",
+        "description": "Synthetic analysis with separate skipped and error counts.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:45.070692+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Analysis partial \u2014 No files deleted\n24 candidates \u00b7 about 3.0 MB recoverable\n1 skipped \u00b7 1 errors",
+          "operation": "Analysis partial \u2014 No files deleted",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [
+            "Analysis partial \u2014 No files deleted",
+            "24 candidates \u00b7 about 3.0 MB recoverable",
+            "1 skipped \u00b7 1 errors",
+            "Object identity could not be verified: 1",
+            "SKIPPED \u00b7 Fixture only: protected entry",
+            "ERROR \u00b7 Fixture only: one unreadable cache entry"
+          ],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "21364a1b0149eaa1315b7a4b4ef94f7cb2d20e1fc347a8154935660e9d15562b",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-error",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-error",
+        "section": "Cleaning",
+        "state": "error",
+        "description": "Synthetic analysis exception and visible no-deletion feedback.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:47.314426+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Analysis failed \u2014 No files deleted\n0 candidates \u00b7 about 0.0 MB recoverable\n0 skipped \u00b7 1 errors",
+          "operation": "Analysis failed \u2014 No files deleted",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [
+            "Analysis failed \u2014 No files deleted",
+            "0 candidates \u00b7 about 0.0 MB recoverable",
+            "0 skipped \u00b7 1 errors",
+            "ERROR \u00b7 Fixture only: temporary folder is unavailable"
+          ],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "e81224063ce9f8920d25bc62de95521f08f13f18a052167e890f62c8592db67d",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-direct-completed",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-direct-completed",
+        "section": "Cleaning",
+        "state": "success",
+        "description": "Simulated Clean now without prior analysis.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:49.447962+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Cleanup completed\n12 files deleted \u00b7 2.0 MB freed\n0 skipped \u00b7 0 errors",
+          "operation": "Cleanup completed",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "167b91128ec5518e8e5a3bee061be79338af58811f73679d12614bc95b39c3f6",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-direct-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-direct-partial",
+        "section": "Cleaning",
+        "state": "partial",
+        "description": "Simulated cleanup with actual fixture counts and unresolved entries.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:51.680700+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Cleanup partial\n12 files deleted \u00b7 2.0 MB freed\n1 skipped \u00b7 1 errors",
+          "operation": "Cleanup partial",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [
+            "Cleanup partial",
+            "12 files deleted \u00b7 2.0 MB freed",
+            "1 skipped \u00b7 1 errors",
+            "Object identity could not be verified: 1",
+            "SKIPPED \u00b7 Fixture only: protected entry",
+            "ERROR \u00b7 Fixture only: one unreadable cache entry"
+          ],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "2f36a17584c841c35da8d7595418ef0125a60db21bab73ceb62fe62177fd994c",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-output-closed",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-output-closed",
+        "section": "Cleaning",
+        "state": "closed output",
+        "description": "Manual output close survives subsequent fixture messages.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:53.904179+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Analysis completed \u2014 No files deleted\n24 candidates \u00b7 about 3.0 MB recoverable\n0 skipped \u00b7 0 errors",
+          "operation": "Analysis completed \u2014 No files deleted",
+          "delete_enabled": "normal",
+          "output_open": false,
+          "diagnostics": [],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "b52485526abfd5173470c0aafba1909197ab70d1dfb360c09bcfbfa77244ebd7",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "cleanup-output-reopened",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-output-reopened",
+        "section": "Cleaning",
+        "state": "reopened output",
+        "description": "Next explicit analysis reopens the manually closed output.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:56.188084+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "summary": "Analysis completed \u2014 No files deleted\n24 candidates \u00b7 about 3.0 MB recoverable\n0 skipped \u00b7 0 errors",
+          "operation": "Analysis completed \u2014 No files deleted",
+          "delete_enabled": "normal",
+          "output_open": true,
+          "diagnostics": [],
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "d32bf1a53ea89fb9354395e1ab0875805dec112b2cb937b0d9aa4da1b90b67e3",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "disk-unavailable",
+      "exit_code": 0,
+      "record": {
+        "case": "disk-unavailable",
+        "section": "Disk",
+        "state": "unavailable",
+        "description": "Synthetic offline volume; optimization disabled.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:30:58.369138+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "drive_detail": "Z: \u00b7 Unavailable: Fixture only: volume offline",
+          "optimize_enabled": "disabled",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "31b7795f5e92516a25e67dae89f97a10d85451aca594425f9c76b3794c4b4184",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "disk-output-running",
+      "exit_code": 0,
+      "record": {
+        "case": "disk-output-running",
+        "section": "Disk",
+        "state": "running",
+        "description": "Inert drive operation held at fixture stage 2/3; output visible.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:00.603193+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "operation": "Running \u00b7 Drive optimization",
+          "output_open": true,
+          "output": "UI fixture only: 1/3 - accepted inert operation\nUI fixture only: 2/3 - awaiting simulated completion\n\n",
+          "fixture_stage": 2,
+          "fixture_total": 3,
+          "backend_arguments": {
+            "drive": "Z:"
+          },
+          "maintenance_busy": true,
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "fd79b996648389b0111ff5c2c3619368c393e756caec8c26c111991552bdb5e4",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "disk-output-completed",
+      "exit_code": 0,
+      "record": {
+        "case": "disk-output-completed",
+        "section": "Disk",
+        "state": "success",
+        "description": "Inert drive operation completed at fixture stage 3/3; output retained.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:02.862474+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "operation": "Completed \u00b7 Drive optimization: See optimization output for details.",
+          "output_open": true,
+          "output": "UI fixture only: 1/3 - accepted inert operation\nUI fixture only: 2/3 - awaiting simulated completion\nUI fixture only: 3/3 - completed; no Windows operation executed\nDrive optimization: completed \u00b7 See optimization output for details.\n\n",
+          "fixture_stage": 3,
+          "fixture_total": 3,
+          "backend_arguments": {
+            "drive": "Z:"
+          },
+          "maintenance_busy": false,
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "26040c7ff67e48385b56c9cebfd65b50da9100077bada336e648c82773cb108d",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "tools-output-running",
+      "exit_code": 0,
+      "record": {
+        "case": "tools-output-running",
+        "section": "Tools",
+        "state": "running",
+        "description": "Inert command held at fixture stage 2/3; output visible.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:05.229291+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "operation": "Running \u00b7 DISM health check",
+          "output_open": true,
+          "output": "> DISM health check\nUI fixture only: 1/3 - accepted inert operation\nUI fixture only: 2/3 - awaiting simulated completion\n\n",
+          "fixture_stage": 2,
+          "fixture_total": 3,
+          "backend_arguments": {
+            "command": "DISM /Online /Cleanup-Image /CheckHealth",
+            "description": "DISM health check"
+          },
+          "maintenance_busy": true,
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "3f61d4c0e05fff6247dc4db33b783cca465cef53223729f739ca5a0d5f63823a",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "tools-output-completed",
+      "exit_code": 0,
+      "record": {
+        "case": "tools-output-completed",
+        "section": "Tools",
+        "state": "success",
+        "description": "Inert command completed at fixture stage 3/3; output retained.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:07.969118+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "operation": "Completed \u00b7 DISM health check: See command output for details.",
+          "output_open": true,
+          "output": "> DISM health check\nUI fixture only: 1/3 - accepted inert operation\nUI fixture only: 2/3 - awaiting simulated completion\nUI fixture only: 3/3 - completed; no Windows operation executed\nDISM health check: completed\n\n",
+          "fixture_stage": 3,
+          "fixture_total": 3,
+          "backend_arguments": {
+            "command": "DISM /Online /Cleanup-Image /CheckHealth",
+            "description": "DISM health check"
+          },
+          "maintenance_busy": false,
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "ce36869ca0e9704c82bfbda559f2827201448a4c42e2199d8922133b476f0960",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "turbo-unknown",
+      "exit_code": 0,
+      "record": {
+        "case": "turbo-unknown",
+        "section": "Turbo",
+        "state": "unavailable",
+        "description": "Unknown settings and unavailable originals.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:10.253897+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "live_settings": {
+            "power": null,
+            "visual": null,
+            "sysmain": null,
+            "wsearch": null,
+            "spooler": null
+          },
+          "saved_originals": null,
+          "recovery_text": "Saved originals unavailable \u00b7 retry Refresh state",
+          "restore_enabled": "disabled",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "bb6de93ff3dcedb6043ef8132a0eb237df765768ba12084c65c69a04e668c99c",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "turbo-saved-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "turbo-saved-partial",
+        "section": "Turbo",
+        "state": "partial",
+        "description": "Two saved originals with incomplete live state.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:12.514227+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "live_settings": {
+            "power": true,
+            "visual": null,
+            "sysmain": false,
+            "wsearch": null,
+            "spooler": false
+          },
+          "saved_originals": [
+            "power",
+            "visual"
+          ],
+          "recovery_text": "2 original settings saved \u00b7 available for restoration",
+          "restore_enabled": "normal",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "38d643a7850a8b94ccfca861967dd07065d1b82872c6ad4f18b3f6ab9863e9d5",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "resurrection-running",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-running",
+        "section": "Resurrect",
+        "state": "running",
+        "description": "Two completed steps; third running; progress 2/10.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:14.762401+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "status": "running",
+          "attempted": 2,
+          "progress": 0.2,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "running",
+            "Recycle Bin": "pending",
+            "DNS cache": "pending",
+            "Network reset": "pending",
+            "Drive optimization": "pending",
+            "Disk health scan": "pending",
+            "Windows image health": "pending",
+            "System file scan": "pending"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Running\u2026",
+            "Recycle Bin": "Not started",
+            "DNS cache": "Not started",
+            "Network reset": "Not started",
+            "Drive optimization": "Not started",
+            "Disk health scan": "Not started",
+            "Windows image health": "Not started",
+            "System file scan": "Not started"
+          },
+          "summary": "2/10 finished \u00b7 Browser caches",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "f918584e58a5680eb350336075ef4be6ebd773cbe9e0c9e29d281225107f26cd",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "resurrection-completed",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-completed",
+        "section": "Resurrect",
+        "state": "success",
+        "description": "Ten simulated successful steps; progress 10/10.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:17.025655+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "status": "completed",
+          "attempted": 10,
+          "progress": 1.0,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "completed",
+            "Recycle Bin": "completed",
+            "DNS cache": "completed",
+            "Network reset": "completed",
+            "Drive optimization": "completed",
+            "Disk health scan": "completed",
+            "Windows image health": "completed",
+            "System file scan": "completed"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Completed",
+            "Recycle Bin": "Completed",
+            "DNS cache": "Completed",
+            "Network reset": "Completed",
+            "Drive optimization": "Completed",
+            "Disk health scan": "Completed",
+            "Windows image health": "Completed",
+            "System file scan": "Completed"
+          },
+          "summary": "Completed \u00b7 10/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "d1fbf1294065f2d3851adb23b16a7f95770c77876b916509f60c45b9e5d76861",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "resurrection-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-partial",
+        "section": "Resurrect",
+        "state": "partial",
+        "description": "Synthetic network-reset failure; all ten attempted.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:19.252118+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "status": "partial",
+          "attempted": 10,
+          "progress": 1.0,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "completed",
+            "Recycle Bin": "completed",
+            "DNS cache": "completed",
+            "Network reset": "failed",
+            "Drive optimization": "completed",
+            "Disk health scan": "completed",
+            "Windows image health": "completed",
+            "System file scan": "completed"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Completed",
+            "Recycle Bin": "Completed",
+            "DNS cache": "Completed",
+            "Network reset": "Failed / partial",
+            "Drive optimization": "Completed",
+            "Disk health scan": "Completed",
+            "Windows image health": "Completed",
+            "System file scan": "Completed"
+          },
+          "summary": "Partial \u00b7 10/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "cc565207a97a351d7898c48e234e1b93c9b9d2f8b41d74c6d83094bbd78680e5",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "resurrection-failed",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-failed",
+        "section": "Resurrect",
+        "state": "error",
+        "description": "Synthetic restore-point failure; nine steps not run.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:21.335809+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "status": "failed",
+          "attempted": 1,
+          "progress": 0.1,
+          "phases": {
+            "Restore point": "failed",
+            "Browser caches": "not run",
+            "Temporary files": "not run",
+            "Recycle Bin": "not run",
+            "DNS cache": "not run",
+            "Network reset": "not run",
+            "Drive optimization": "not run",
+            "Disk health scan": "not run",
+            "Windows image health": "not run",
+            "System file scan": "not run"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Failed / partial",
+            "Browser caches": "Not run",
+            "Temporary files": "Not run",
+            "Recycle Bin": "Not run",
+            "DNS cache": "Not run",
+            "Network reset": "Not run",
+            "Drive optimization": "Not run",
+            "Disk health scan": "Not run",
+            "Windows image health": "Not run",
+            "System file scan": "Not run"
+          },
+          "summary": "Failed \u00b7 1/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "fe178ef4079519b5c3fdffe24dac22dae393f8792e44938cc6e1d52cd2c9d1b0",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "resurrection-cancelled",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-cancelled",
+        "section": "Resurrect",
+        "state": "cancelled",
+        "description": "Cancellation after two steps; eight not run.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:23.420328+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "status": "cancelled",
+          "attempted": 2,
+          "progress": 0.2,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "not run",
+            "Recycle Bin": "not run",
+            "DNS cache": "not run",
+            "Network reset": "not run",
+            "Drive optimization": "not run",
+            "Disk health scan": "not run",
+            "Windows image health": "not run",
+            "System file scan": "not run"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Not run",
+            "Recycle Bin": "Not run",
+            "DNS cache": "Not run",
+            "Network reset": "Not run",
+            "Drive optimization": "Not run",
+            "Disk health scan": "Not run",
+            "Windows image health": "Not run",
+            "System file scan": "Not run"
+          },
+          "summary": "Cancelled \u00b7 2/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "f6d16a795f752b722c9a542d48326fa2a9a2d0901ce41b5d712a2c562928df82",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "dashboard-unavailable",
+      "exit_code": 0,
+      "record": {
+        "case": "dashboard-unavailable",
+        "section": "Dashboard",
+        "state": "unavailable",
+        "description": "All synthetic resource samples unavailable.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T22:31:25.156322+00:00",
+        "widget_scale": 1.5,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+        },
+        "observed": {
+          "cpu": "\u2014",
+          "memory": "Memory unavailable",
+          "disk": "Unavailable",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "31e0010f03a83ee2b68c428cc52442510f60d4fef774a6088c5d4c595da68541",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

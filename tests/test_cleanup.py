@@ -179,6 +179,7 @@ def test_multiply_linked_file_preserves_outside_sentinel(manager, tmp_path):
     assert sentinel.read_bytes() == b'keep'
     assert (temp / 'linked-file').exists()
     assert subject.last_result.skipped
+    assert subject.last_result.skipped_counts == {'hard_link': 1}
 
 
 def test_directory_rename_is_blocked_while_files_are_deleted(manager, monkeypatch):
@@ -335,6 +336,7 @@ def test_unverifiable_final_path_fails_closed(manager, monkeypatch, returned_len
     assert subject.clean_temp_files() == (0, 0)
     assert sentinel.read_bytes() == b'keep'
     assert subject.last_result.skipped
+    assert subject.last_result.skipped_counts == {'identity_unverified': 1}
 
 
 def test_case_sensitive_directory_refused_before_case_folded_binding(manager):
@@ -354,6 +356,7 @@ def test_case_sensitive_directory_refused_before_case_folded_binding(manager):
     assert subject.clean_temp_files() == (0, 0)
     assert (temp / 'Keep.txt').read_bytes() == b'keep'
     assert any('Case-sensitive' in item for item in subject.last_result.skipped)
+    assert subject.last_result.skipped_counts == {'case_sensitive': 1}
 
 
 def test_ordinary_mixed_case_names_remain_supported(manager):

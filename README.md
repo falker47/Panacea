@@ -8,6 +8,7 @@ Panacea is a Windows desktop utility that groups common maintenance, repair and 
 The current codebase is the **2.0.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
 
 See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
+The [final polish report](docs/validation/v2-polish-report.md) records the latest candidate, optional analysis, direct cleanup and visible operation output.
 
 ## What it does
 
@@ -25,6 +26,19 @@ See the [V2 validation report](docs/validation/v2-release-report.md) for the sev
 - exposes DISM component-store cleanup through the UI.
 
 Locked/in-use files are skipped. Cleanup is irreversible once files or Recycle Bin contents are deleted.
+
+**Analyze** is optional and read-only: it reports candidates and potential recovery,
+with an explicit “No files deleted” result. **Clean now** asks for confirmation and
+checks/deletes eligible files in one traversal, without a required preliminary
+scan. An earlier analysis never authorizes deletion and filesystem changes can
+change the result. **View reasons** retains all original skipped/error details;
+the live output summarizes reasons proven by the backend. Byte totals describe
+the logical size of eligible/deleted files, not a measured drive free-space delta.
+Windows Disk Cleanup's **Open utility** only opens the external Windows tool.
+
+Cleanup, optimization, command and Resurrection output opens at an accepted
+explicit start and remains available after completion and navigation. Closing a
+panel during execution is respected until the next explicit operation.
 
 Cleanup accepts the conventional local-user Temp and explicit browser cache roots, verifies opened Windows objects and refuses junctions, hardlinks and unverifiable paths. Protected cleanup and Turbo snapshot storage require native identity/case-sensitivity support (Windows 10 version 1803 or newer, or Windows 11); unsupported filesystems and queries fail closed. Redirected or unconventional user storage may require using Windows' own tools.
 

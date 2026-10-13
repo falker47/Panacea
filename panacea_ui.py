@@ -12,7 +12,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
 from modules.ui_icons import make_icon
-from modules.cleanup import CleanupManager
+from modules.cleanup import CleanupManager, CleanupResult
 from modules.disk import DiskOptimizer
 from modules.commands import CommandRunner
 from modules.logger import Logger
@@ -62,7 +62,7 @@ class PanaceaApp(ctk.CTk):
         self._maintenance_controls = []
         self._fonts = {}
         self._pending_logs = {}
-        self._preview_summary = 'Not scanned yet · No files changed'
+        self._preview_summary = 'Analysis optional · No files deleted'
         self._drive_values = []
         self._turbo_states = {}
         self._turbo_master = None
@@ -164,7 +164,8 @@ class PanaceaApp(ctk.CTk):
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
-            self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(22, 22))
+            size = 40 if name in ('scan', 'restore', 'updates') else 22
+            self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
         self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(51, 51))
@@ -177,9 +178,13 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame.grid_rowconfigure(9, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, rowspan=2, padx=(0, 8))
-        ctk.CTkLabel(brand, text='Panacea', font=self._font(21, True), text_color=TEXT, anchor='w').grid(row=0, column=1, sticky='sw', pady=(3, 0))
-        ctk.CTkLabel(brand, text='SYSTEM MAINTENANCE', font=self._font(8), text_color=COL_GOLD, anchor='w').grid(row=1, column=1, sticky='nw', pady=(0, 2))
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, padx=(0, 8))
+        lettering = ctk.CTkFrame(brand, fg_color='transparent')
+        lettering.grid(row=0, column=1, sticky='w')
+        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=25, font=self._font(21, True), text_color=TEXT, anchor='w')
+        self.brand_title.pack(anchor='w')
+        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(8), text_color=COL_GOLD, anchor='w')
+        self.brand_tagline.pack(anchor='w')
         self.nav_buttons = {}
         names = [('Dashboard', 'dashboard', 'Dashboard'), ('Cleaning', 'clean', 'Cleanup'),
                  ('Disk', 'disk', 'Disk'), ('Tools', 'tools', 'Tools'),
@@ -192,11 +197,14 @@ class PanaceaApp(ctk.CTk):
             button.grid(row=row, column=0, padx=10, pady=3, sticky='ew')
             self.nav_buttons[name] = button
         ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=10, column=0, sticky='ew', padx=17, pady=(10, 6))
-        ctk.CTkLabel(self.sidebar_frame, text=f'v{VERSION}', text_color=MUTED,
-                     font=self._font(11), anchor='w').grid(row=11, column=0, sticky='w', padx=17)
-        footer = ctk.CTkLabel(self.sidebar_frame, text=f'© {datetime.now().year} M. Falconi',
-                              text_color=MUTED, font=self._font(10), cursor='hand2')
-        footer.grid(row=12, column=0, sticky='w', padx=17, pady=(0, 13))
+        self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
+        self.sidebar_footer.grid(row=11, column=0, sticky='ew', padx=14, pady=(0, 10))
+        self.sidebar_footer.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
+                     font=self._font(10), anchor='w').grid(row=0, column=0, sticky='w')
+        footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} M. Falconi',
+                              height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
+        footer.grid(row=0, column=1, sticky='e')
         footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
 
     def select_frame(self, name):
@@ -352,7 +360,7 @@ class PanaceaApp(ctk.CTk):
             scan, text=self._preview_summary, text_color=MUTED, font=self._font(10),
             anchor='w', wraplength=226, justify='left')
         self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 9))
-        self._button(scan, 'Preview', self.run_preview_temp, secondary=True,
+        self._button(scan, 'Analyze', self.run_preview_temp, secondary=True,
                      maintenance=True, width=77).grid(
             row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
 
@@ -364,12 +372,19 @@ class PanaceaApp(ctk.CTk):
             row=0, column=0, rowspan=2, padx=(9, 5))
         ctk.CTkLabel(restore, text='Restore point', font=self._font(12, True),
                      anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
-        ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
+        restore_detail = ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
                      text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
-                     justify='left').grid(row=1, column=1, sticky='nw', pady=(0, 9))
+                     justify='left')
+        restore_detail.grid(row=1, column=1, sticky='nw', pady=(0, 9))
         self._button(restore, 'Create', self.run_create_restore, secondary=True,
                      maintenance=True, width=77).grid(
             row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+
+        for card, label, reserved in ((scan, self.dash_preview_status, 151),
+                                      (restore, restore_detail, 151),
+                                      (updates, self.lbl_update_status, 132)):
+            card.bind('<Configure>', lambda event, item=label, space=reserved:
+                      item.configure(wraplength=max(80, event.width / item._get_widget_scaling() - space)))
 
         for card, labels in (
             (self.card_cpu, (self.dash_cpu_name,)),
@@ -394,17 +409,44 @@ class PanaceaApp(ctk.CTk):
         panel.pack(fill='x', pady=(4, 0))
         log = self._create_log_textbox(panel, height=160)
         def toggle():
-            if log.winfo_manager():
-                log.pack_forget()
-                button.configure(text=f'+ {title}')
-            else:
-                log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
-                button.configure(text=f'− {title}')
+            self._set_section_log_open(attribute, not bool(log.winfo_manager()))
         button = self._button(panel, f'+ {title}', toggle, secondary=True, anchor='w', height=26)
         button.pack(fill='x', padx=6, pady=4)
         setattr(self, attribute, log)
+        self.__dict__.setdefault('_section_logs', {})[attribute] = (log, button, title, parent)
+        self._set_section_log_open(attribute, self.__dict__.get('_section_log_open', {}).get(attribute, False))
         self._flush_section_log(attribute)
         return log
+
+    def _set_section_log_open(self, attribute, opened):
+        """UI-thread state; delivery of worker messages never changes visibility."""
+        self.__dict__.setdefault('_section_log_open', {})[attribute] = opened
+        entry = self.__dict__.get('_section_logs', {}).get(attribute)
+        if entry:
+            log, button, title, _ = entry
+            if opened:
+                log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+            else:
+                log.pack_forget()
+            button.configure(text=f'{"−" if opened else "+"} {title}')
+
+    def _open_operation_output(self, attribute):
+        self._set_section_log_open(attribute, True)
+        # Dashboard shortcuts open the working view so live output is visible.
+        section = {'clean_log': 'Cleaning', 'tools_log': 'Tools', 'disk_log': 'Disk', 'god_log': 'Resurrect'}[attribute]
+        active = self.__dict__.get('active_frame')
+        if active and active != section:
+            self.select_frame(section)
+        entry = self.__dict__.get('_section_logs', {}).get(attribute)
+        if entry and isinstance(entry[3], ctk.CTkScrollableFrame):
+            body = entry[3]
+            def reveal():
+                # CTk updates the scrollregion after packing the textbox. Flush
+                # geometry before this one-time reveal, never on streamed lines.
+                body.update_idletasks()
+                if self.__dict__.get('_section_log_open', {}).get(attribute):
+                    body._parent_canvas.yview_moveto(1.0)
+            self.after_idle(reveal)
 
     def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
         row = ctk.CTkFrame(parent, fg_color='transparent')
@@ -422,16 +464,23 @@ class PanaceaApp(ctk.CTk):
         return button
 
     def _setup_cleaning_frame(self):
-        body = self._section_body(self.frame_cleaning, 'Cleanup', 'Inspect first. Locked and protected files stay untouched.')
+        body = self._section_body(self.frame_cleaning, 'Cleanup', 'Analyze if you wish, or clean now. Locked and protected files stay untouched.')
         preview = self._card(body)
         preview.pack(fill='x', pady=(0, 8))
-        self._action_row(preview, 'Temporary files', 'A preview does not delete anything.', 'Preview', self.run_preview_temp, maintenance=True, icon='clean')
+        preview.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(preview, text='', image=self.icons_active['clean'], width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
+        ctk.CTkLabel(preview, text='Temporary files', height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew', pady=(12, 0))
+        ctk.CTkLabel(preview, text='Optional analysis · does not delete files', height=16, font=self._font(11), text_color=MUTED, anchor='w').grid(row=1, column=1, sticky='ew')
         self.preview_label = ctk.CTkLabel(preview, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12), justify='left', wraplength=650)
-        self.preview_label.pack(fill='x', padx=14, pady=(0, 12))
-        preview.bind('<Configure>', lambda event: self.preview_label.configure(wraplength=max(160, event.width / self.preview_label._get_widget_scaling() - 28)))
+        self.preview_label.grid(row=2, column=1, sticky='ew', pady=(5, 0))
+        self._button(preview, 'Analyze', self.run_preview_temp, secondary=True, maintenance=True, width=112).grid(row=0, column=2, rowspan=4, padx=(12, 14), pady=12)
+        self.cleanup_reasons_button = self._button(preview, 'View reasons', self._show_cleanup_diagnostics, secondary=True, width=112, height=24)
+        self.cleanup_reasons_button.grid(row=3, column=1, sticky='w', pady=(3, 12))
+        self.cleanup_reasons_button.configure(state='normal' if self.__dict__.get('_cleanup_diagnostics') else 'disabled')
+        preview.bind('<Configure>', lambda event: self.preview_label.configure(wraplength=max(100, event.width / self.preview_label._get_widget_scaling() - 210)))
         actions = self._card(body)
         actions.pack(fill='x')
-        self.btn_clean_temp = self._action_row(actions, 'Delete temporary files', 'Permanent deletion · confirmation required', 'Delete files', self.run_clean_temp, maintenance=True)
+        self.btn_clean_temp = self._action_row(actions, 'Delete temporary files', 'No analysis required · permanent deletion after confirmation', 'Clean now', self.run_clean_temp, maintenance=True)
         self.btn_empty_bin = self._action_row(actions, 'Recycle Bin', 'Permanently empty all items · confirmation required', 'Empty bin', self.run_empty_recycle, maintenance=True)
         self._action_row(actions, 'Component store', 'Windows removes superseded components.', 'Clean store', self.run_deep_clean, maintenance=True)
         self._action_row(actions, 'Windows Disk Cleanup', 'Choose categories in the Windows utility.', 'Open utility', self.run_cleanmgr)
@@ -643,7 +692,7 @@ class PanaceaApp(ctk.CTk):
         if 'btn_optimize_drive' in self.__dict__:
             self._drive_selected()
 
-    def _request_operation(self, name, work, on_success=None, on_done=None):
+    def _request_operation(self, name, work, on_success=None, on_done=None, *, output=None, on_error=None):
         if self.__dict__.get('_maintenance_uncertain'):
             guard = self.__dict__.get('maintenance_guard')
             message = guard.last_error if guard is not None else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.'
@@ -663,8 +712,10 @@ class PanaceaApp(ctk.CTk):
         def error(exc):
             self.operation_label.configure(text=f'Failed · {name}: {exc}', text_color=COL_RED)
             self._show_toast(f'{name} failed', str(exc), 'error')
-            if name == 'Temporary file preview':
-                self._set_preview_status('Scan failed · see status below', COL_RED)
+            if output:
+                self._log_section(output, f'{name} failed: {exc}', 'err')
+            if on_error:
+                on_error(exc)
             if name == 'Resurrection':
                 for step, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
                     if state == 'running':
@@ -694,6 +745,8 @@ class PanaceaApp(ctk.CTk):
             show_uncertainty()
         started = self.workers.start(name, guarded_work, on_success=delivered, on_error=error, on_done=done)
         if started:
+            if output:
+                self._open_operation_output(output)
             self._set_maintenance_state(True)
             self.operation_label.configure(text=f'Running · {name}', text_color=MUTED)
         return started
@@ -702,6 +755,10 @@ class PanaceaApp(ctk.CTk):
         success, message = result
         self.operation_label.configure(text=f'{"Completed" if success else "Failed / partial"} · {name}: {message}', text_color=COL_SUCCESS if success else COL_WARNING)
         self._show_toast(name, message, 'success' if success else 'warning')
+
+    def _show_logged_result(self, name, result, output):
+        self._log_section(output, f'{name}: {"completed" if result[0] else "failed / partial"} · {result[1]}')
+        self._show_result(name, result)
 
     def update_dashboard(self):
         if self._shutdown.is_set():
@@ -814,57 +871,109 @@ class PanaceaApp(ctk.CTk):
 
     def run_preview_temp(self):
         previous = getattr(self, '_preview_summary', 'Not scanned yet')
-        self._set_preview_status('Scanning temporary files… No files changed', COL_GOLD)
+        before = self.cleanup_mgr.last_result
+        self._set_preview_status('Scanning temporary files… No files deleted', COL_GOLD)
         def show(result):
             count, size = result
-            details = self.cleanup_mgr.last_result
-            errors, skipped = getattr(details, 'errors', []), getattr(details, 'skipped', [])
-            partial = bool(errors or skipped)
-            summary = f'{count:,} files · {size / 1048576:.1f} MB eligible'
-            if partial:
-                summary += f' · {len(skipped)} skipped · {len(errors)} errors'
-            self._set_preview_status(summary, COL_WARNING if partial else COL_SUCCESS)
-            self.operation_label.configure(
-                text=f'{"Partial" if partial else "Completed"} · Temporary file preview',
-                text_color=COL_WARNING if partial else COL_SUCCESS)
-            for error in errors[:10]:
-                self.log_msg(str(error))
+            self._show_temp_result(count, size, self.cleanup_mgr.last_result, preview=True)
         started = self._request_operation(
-            'Temporary file preview', self.cleanup_mgr.preview_temp_files, show)
+            'Temporary file analysis', lambda: self.cleanup_mgr.preview_temp_files(progress_callback=self.log_msg), show,
+            output='clean_log', on_error=lambda exc: self._show_temp_failure(exc, before, preview=True))
         if started is False:
             self._set_preview_status(previous)
 
-    def _cleanup_result(self, fn, *args, **kwargs):
-        count, freed = fn(*args, **kwargs)
-        result = self.cleanup_mgr.last_result
-        errors, skipped = getattr(result, 'errors', []), getattr(result, 'skipped', [])
-        details = f'{count:,} files deleted · {freed / 1048576:.1f} MB freed'
-        if skipped or errors:
-            details += f' · {len(skipped)} skipped · {len(errors)} errors'
-        for error in errors[:10]:
-            self.log_msg(str(error))
-        return not errors and not skipped, details
+    def _show_temp_result(self, count, size, result, *, preview, state=None):
+        skipped = tuple(str(item) for item in getattr(result, 'skipped', ()))
+        errors = tuple(str(item) for item in getattr(result, 'errors', ()))
+        partial = bool(skipped or errors)
+        state = state or ('failed' if errors and not count else 'partial' if partial else 'completed')
+        title = f'{"Analysis" if preview else "Cleanup"} {state}'
+        if preview:
+            title += ' — No files deleted'
+        amount = f'{size / 1024**3:.2f} GB' if size >= 1024**3 else f'{size / 1024**2:.1f} MB'
+        totals = f'{count:,} candidates · about {amount} recoverable' if preview else f'{count:,} files deleted · {amount} freed'
+        issues = f'{len(skipped):,} skipped · {len(errors):,} errors'
+        color = COL_RED if state == 'failed' else COL_WARNING if partial else COL_SUCCESS
+        self._set_preview_status(f'{title}\n{totals}\n{issues}', color)
+        self.operation_label.configure(text=title, text_color=color)
+        labels = {'locked': 'In use (Windows sharing/lock violation)',
+                  'access_denied': 'Access denied by Windows', 'disappeared': 'No longer present',
+                  'reparse_point': 'Reparse points refused', 'hard_link': 'Hard links refused',
+                  'case_sensitive': 'Case-sensitive directories refused',
+                  'identity_unverified': 'Object identity could not be verified',
+                  'unapproved_root': 'Outside authorized paths',
+                  'unsupported_path': 'Unsupported path format', 'ambiguous_path': 'Ambiguous path refused',
+                  'unsupported_platform': 'Windows handle protection unavailable',
+                  'not_directory': 'Expected directory unavailable', 'not_regular': 'Nonregular objects refused',
+                  'location_unavailable': 'Temporary location could not be verified',
+                  'filesystem_error': 'Other filesystem errors', 'unexpected_error': 'Other recorded errors',
+                  'progress_callback': 'Progress reporting error', 'unknown': 'Other recorded reasons'}
+        counts = getattr(result, 'skipped_counts', {})
+        groups = [f'{labels.get(reason, reason)}: {value:,}' for reason, value in counts.items()]
+        # Snapshot all original records: the bounded live log is not the diagnostic archive.
+        self._cleanup_diagnostics = tuple([title, totals, issues, *groups,
+            *(f'SKIPPED · {item}' for item in skipped), *(f'ERROR · {item}' for item in errors)]) if partial else ()
+        button = self.__dict__.get('cleanup_reasons_button')
+        if button is not None:
+            button.configure(state='normal' if partial else 'disabled')
+        for line in (title, totals, issues, *groups):
+            self.log_msg(line)
+        if partial:
+            self.log_msg('View reasons: all original skipped/error details are available above.')
+
+    def _show_temp_failure(self, exc, before, *, preview):
+        current = self.cleanup_mgr.last_result
+        # Only a result created by this pass may supply actual progress totals.
+        result = CleanupResult(preview=preview)
+        if current is not before and getattr(current, 'preview', None) is preview:
+            result.count, result.bytes = current.count, current.bytes
+            result.skipped, result.errors = list(current.skipped), list(current.errors)
+            result.issues = list(getattr(current, 'issues', ()))
+        result.add_issue('error', None, exc)
+        self._show_temp_result(result.count, result.bytes, result, preview=preview,
+                               state='interrupted' if result.count else 'failed')
+
+    def _show_cleanup_diagnostics(self):
+        details = self.__dict__.get('_cleanup_diagnostics', ())
+        if not details:
+            return
+        dialog = ctk.CTkToplevel(self)
+        dialog.title('Temporary files · Reasons and original details')
+        dialog.geometry('820x480')
+        dialog.minsize(500, 300)
+        dialog.transient(self)
+        text = ctk.CTkTextbox(dialog, wrap='word', font=self._font(12))
+        text.pack(fill='both', expand=True, padx=12, pady=12)
+        text.insert('1.0', '\n'.join(details))
+        text.configure(state='disabled')
+        text._textbox.configure(takefocus=1)
+        dialog.bind('<Escape>', lambda event: dialog.destroy())
+        dialog.after(50, text.focus_set)
 
     def run_clean_temp(self):
-        if not messagebox.askyesno('Delete temporary files', 'Permanently delete eligible files in validated temporary folders?\nLocked and protected files will be skipped. Use Preview first to inspect the size.', parent=self):
+        if not messagebox.askyesno('Clean temporary files now', 'Permanently delete eligible files in validated temporary folders?\n\nNo analysis is required. Files are checked as they are deleted; locked and protected items are skipped. Results may differ from an earlier analysis.\n\nDeletion cannot be undone through the Recycle Bin.', parent=self):
             return
-        self._request_operation('Temporary file cleanup', lambda: self._cleanup_result(self.cleanup_mgr.clean_temp_files, progress_callback=self.log_msg), lambda result: self._show_result('Temporary file cleanup', result))
+        before = self.cleanup_mgr.last_result
+        self._request_operation('Temporary file cleanup',
+            lambda: self.cleanup_mgr.clean_temp_files(progress_callback=self.log_msg),
+            lambda result: self._show_temp_result(*result, self.cleanup_mgr.last_result, preview=False), output='clean_log',
+            on_error=lambda exc: self._show_temp_failure(exc, before, preview=False))
 
     def run_empty_recycle(self):
         if not messagebox.askyesno('Empty Recycle Bin', 'Permanently delete every item in the Recycle Bin?\nThese items cannot be recovered through the Recycle Bin.', parent=self):
             return
-        self._request_operation('Empty Recycle Bin', self.cleanup_mgr.empty_recycle_bin, lambda result: self._show_result('Recycle Bin', result))
+        self._request_operation('Empty Recycle Bin', self.cleanup_mgr.empty_recycle_bin, lambda result: self._show_logged_result('Recycle Bin', result, 'clean_log'), output='clean_log')
 
     def run_cleanmgr(self):
         try:
             if self.cleanup_mgr.open_disk_cleanup() is not True:
                 raise RuntimeError('Windows Disk Cleanup could not be opened.')
-            self.operation_label.configure(text='Opened · Windows Disk Cleanup', text_color=MUTED)
+            self.operation_label.configure(text='Opened · Windows Disk Cleanup · Continue in Windows', text_color=MUTED)
         except Exception as exc:
             self._show_toast('Disk Cleanup', str(exc), 'error')
 
     def run_deep_clean(self):
-        self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=self.log_msg)
+        self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=self.log_msg, output='clean_log')
 
     def run_optimize_drive(self):
         letter = self.selected_drive.get()
@@ -873,7 +982,7 @@ class PanaceaApp(ctk.CTk):
             self._show_toast('Select a drive', 'Choose a valid drive letter.', 'warning')
             return
         if messagebox.askyesno('Optimize drive', f'Run Windows optimization on {letter}?\nThis operation can take several minutes.', parent=self):
-            self._request_operation('Drive optimization', lambda: self.disk_opt.analyze_optimize_drive(letter, progress_callback=self.log_disk_msg), lambda success: self._show_result('Drive optimization', (success is True, 'See the disk log for details.')))
+            self._request_operation('Drive optimization', lambda: self.disk_opt.analyze_optimize_drive(letter, progress_callback=self.log_disk_msg), lambda success: self._show_logged_result('Drive optimization', (success is True, 'See optimization output for details.'), 'disk_log'), output='disk_log')
 
     def run_dfrgui(self):
         try:
@@ -883,7 +992,7 @@ class PanaceaApp(ctk.CTk):
         except Exception as exc:
             self._show_toast('Drive optimization', str(exc), 'error')
 
-    def run_cmd(self, cmd, desc, *, log=None):
+    def run_cmd(self, cmd, desc, *, log=None, output='tools_log'):
         log = log or self.log_tools_msg
         detail = 'Network connections may be interrupted and a restart may be needed.' if 'winsock' in cmd.lower() else 'The operation can take several minutes. Save your work first.'
         if not messagebox.askyesno(desc, f'Run {desc}?\n{detail}', parent=self):
@@ -893,7 +1002,7 @@ class PanaceaApp(ctk.CTk):
             success = self.cmd_runner.run_command_stream(cmd, desc, log)
             log(f'{desc}: {"completed" if success is True else "failed"}')
             return success is True, 'Restart required · see command output.' if getattr(self.cmd_runner, 'restart_required', False) else 'See command output for details.'
-        self._request_operation(desc, work, lambda result: self._show_result(desc, result))
+        self._request_operation(desc, work, lambda result: self._show_result(desc, result), output=output)
 
     def run_launch(self, target, desc):
         try:
@@ -921,15 +1030,16 @@ class PanaceaApp(ctk.CTk):
             return path
         def saved(result):
             self.operation_label.configure(text=f'Completed · Battery report saved to {result}', text_color=COL_SUCCESS)
+            self.log_tools_msg(f'Battery report saved to {result}')
             try:
                 os.startfile(str(result))
             except OSError as exc:
                 self._show_toast('Report saved', f'{result}\nCould not open the report: {exc}', 'warning')
-        self._request_operation('Battery report', report, saved)
+        self._request_operation('Battery report', report, saved, output='tools_log')
 
     def run_create_restore(self):
         if messagebox.askyesno('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):
-            self._request_operation('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Manual Point'), lambda result: self._show_result('Restore point', result))
+            self._request_operation('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Manual Point'), lambda result: self._show_logged_result('Restore point', result, 'tools_log'), output='tools_log')
 
     def run_windows_update(self):
         self.run_launch('ms-settings:windowsupdate', 'Windows Update')
@@ -1125,7 +1235,7 @@ class PanaceaApp(ctk.CTk):
         def done():
             self.btn_resurrect_cancel.pack_forget()
             self.btn_resurrect_start.configure(text='Start sequence')
-        if self._request_operation('Resurrection', self._run_resurrection_sequence, self._finish_resurrection, done):
+        if self._request_operation('Resurrection', self._run_resurrection_sequence, self._finish_resurrection, done, output='god_log'):
             for name in self.RESURRECTION_STEPS:
                 self._set_resurrection_step(name, 'pending')
             self.btn_resurrect_start.configure(text='Maintenance running…')

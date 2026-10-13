@@ -21,11 +21,19 @@ from contextlib import ExitStack
 ROOT = Path(__file__).resolve().parents[1]
 LABEL = 'SIMULATED RESULTS · UI fixture only'
 CASES = {
-    'cleanup-loading': ('Cleaning', 'loading', 'Pending inert preview; controls disabled.'),
-    'cleanup-success': ('Cleaning', 'success', 'Synthetic successful preview; no deletion.'),
-    'cleanup-partial': ('Cleaning', 'partial', 'Synthetic preview with skipped and locked entries.'),
-    'cleanup-error': ('Cleaning', 'error', 'Synthetic preview exception and visible error feedback.'),
+    'cleanup-loading': ('Cleaning', 'loading', 'Pending inert analysis; controls disabled and output open.'),
+    'cleanup-success': ('Cleaning', 'success', 'Synthetic successful analysis; potential recovery, no deletion.'),
+    'cleanup-partial': ('Cleaning', 'partial', 'Synthetic analysis with separate skipped and error counts.'),
+    'cleanup-error': ('Cleaning', 'error', 'Synthetic analysis exception and visible no-deletion feedback.'),
+    'cleanup-direct-completed': ('Cleaning', 'success', 'Simulated Clean now without prior analysis.'),
+    'cleanup-direct-partial': ('Cleaning', 'partial', 'Simulated cleanup with actual fixture counts and unresolved entries.'),
+    'cleanup-output-closed': ('Cleaning', 'closed output', 'Manual output close survives subsequent fixture messages.'),
+    'cleanup-output-reopened': ('Cleaning', 'reopened output', 'Next explicit analysis reopens the manually closed output.'),
     'disk-unavailable': ('Disk', 'unavailable', 'Synthetic offline volume; optimization disabled.'),
+    'disk-output-running': ('Disk', 'running', 'Inert drive operation held at fixture stage 2/3; output visible.'),
+    'disk-output-completed': ('Disk', 'success', 'Inert drive operation completed at fixture stage 3/3; output retained.'),
+    'tools-output-running': ('Tools', 'running', 'Inert command held at fixture stage 2/3; output visible.'),
+    'tools-output-completed': ('Tools', 'success', 'Inert command completed at fixture stage 3/3; output retained.'),
     'turbo-unknown': ('Turbo', 'unavailable', 'Unknown settings and unavailable originals.'),
     'turbo-saved-partial': ('Turbo', 'partial', 'Two saved originals with incomplete live state.'),
     'resurrection-running': ('Resurrect', 'running', 'Two completed steps; third running; progress 2/10.'),
@@ -38,6 +46,8 @@ CASES = {
 
 
 class InertManager:
+    completion_unknown = False
+
     def log(self, *args, **kwargs):
         pass
 
@@ -74,32 +84,67 @@ def fixture(ui, app, name, releases):
     if name.startswith('cleanup-'):
         gate = threading.Event()
         releases.append(gate)
-        app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[])
-        if name == 'cleanup-partial':
+        app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], skipped_counts={})
+        if name in ('cleanup-partial', 'cleanup-direct-partial'):
             app.cleanup_mgr.last_result = SimpleNamespace(
-                errors=['Fixture only: one locked cache entry'], skipped=['Fixture only: protected entry'])
-        def preview():
+                errors=['Fixture only: one unreadable cache entry'], skipped=['Fixture only: protected entry'],
+                skipped_counts={'identity_unverified': 1})
+        def preview(progress_callback=None):
+            if progress_callback:
+                progress_callback('UI fixture only: read-only candidate inspection started')
             if name == 'cleanup-loading' and not gate.wait(15):
                 raise TimeoutError('Fixture preview was not released')
             if name == 'cleanup-error':
                 raise PermissionError('Fixture only: temporary folder is unavailable')
             return 24, 3 * 1048576
+        def clean(progress_callback=None):
+            if progress_callback:
+                progress_callback('UI fixture only: simulated cleanup result; no host files changed')
+            return 12, 2 * 1048576
         app.cleanup_mgr.preview_temp_files = preview
-        app.run_preview_temp()
+        app.cleanup_mgr.clean_temp_files = clean
+        if name.startswith('cleanup-direct-'):
+            # Consent is simulated only after every backend has been replaced.
+            with patch.object(ui.messagebox, 'askyesno', lambda *args, **kwargs: True):
+                app.run_clean_temp()
+        else:
+            app.run_preview_temp()
+        closed_once = False
         def ready():
-            return app.workers.busy() if name == 'cleanup-loading' else not app.workers.busy()
+            nonlocal closed_once
+            if name == 'cleanup-loading':
+                return app.workers.busy()
+            if app.workers.busy():
+                return False
+            if name in ('cleanup-output-closed', 'cleanup-output-reopened') and not closed_once:
+                app._set_section_log_open('clean_log', False)
+                app._append_section_log('clean_log', 'UI fixture: later message respects manual close', 'info')
+                assert not app.clean_log.winfo_manager()
+                closed_once = True
+                if name == 'cleanup-output-reopened':
+                    app.run_preview_temp()
+                    return False
+            return True
         def verify():
             text = app.preview_label.cget('text')
             status = app.operation_label.cget('text')
+            combined = (text + ' ' + status).lower()
             if name == 'cleanup-loading':
-                assert 'Scanning' in text and app.btn_clean_temp.cget('state') == 'disabled'
+                assert ('analy' in combined or 'scanning' in combined) and app.btn_clean_temp.cget('state') == 'disabled'
             elif name == 'cleanup-error':
-                assert 'failed' in text.lower() and 'Failed' in status
+                assert 'failed' in combined and 'no files deleted' in combined
+            elif name.startswith('cleanup-direct-'):
+                assert '12 files deleted' in combined and '2.0 mb freed' in combined
+                assert ('cleanup partial' if name.endswith('partial') else 'cleanup completed') in combined
             else:
-                assert '24 files' in text and '3.0 MB' in text
-                assert ('Partial' if name == 'cleanup-partial' else 'Completed') in status
+                assert '24 candidates' in combined and '3.0 mb' in combined and 'recoverable' in combined
+                assert 'no files deleted' in combined
+                assert ('analysis partial' if name == 'cleanup-partial' else 'analysis completed') in combined
                 assert app.btn_clean_temp.cget('state') == 'normal'
-            return {'preview': text, 'operation': status, 'delete_enabled': app.btn_clean_temp.cget('state')}
+            output_open = bool(app.clean_log.winfo_manager())
+            assert output_open is (name != 'cleanup-output-closed')
+            return {'summary': text, 'operation': status, 'delete_enabled': app.btn_clean_temp.cget('state'),
+                    'output_open': output_open, 'diagnostics': list(app.__dict__.get('_cleanup_diagnostics', ()))}
         return ready, verify
 
     if name == 'disk-unavailable':
@@ -111,6 +156,65 @@ def fixture(ui, app, name, releases):
             assert 'Unavailable' in app.drive_detail.cget('text')
             return {'drive_detail': app.drive_detail.cget('text'), 'optimize_enabled': 'disabled'}
         return lambda: True, verify
+
+    if name.startswith(('tools-output-', 'disk-output-')):
+        running = name.endswith('-running')
+        tools_case = name.startswith('tools-')
+        attribute = 'tools_log' if tools_case else 'disk_log'
+        gate, reached = threading.Event(), threading.Event()
+        releases.append(gate)
+        routed = {}
+        stage_two = 'UI fixture only: 2/3 - awaiting simulated completion'
+        stage_three = 'UI fixture only: 3/3 - completed; no Windows operation executed'
+        def stream(callback):
+            assert callable(callback)
+            callback('UI fixture only: 1/3 - accepted inert operation')
+            callback(stage_two)
+            reached.set()
+            if running and not gate.wait(15):
+                raise TimeoutError('Fixture operation was not released')
+            callback(stage_three)
+            return True
+        if tools_case:
+            app.cmd_runner.restart_required = False
+            def command(command_text, description, callback):
+                routed.update(command=command_text, description=description)
+                return stream(callback)
+            app.cmd_runner.run_command_stream = command
+            action = lambda: app.run_cmd('DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check')
+        else:
+            app._set_drives([{'letter': 'Z:', 'type': 'Fixed', 'available': True,
+                             'total_bytes': 100 * 1024**3, 'free_bytes': 60 * 1024**3,
+                             'used_percent': 40, 'error': ''}])
+            def optimize(drive, progress_callback=None):
+                routed.update(drive=drive)
+                assert drive == 'Z:', 'The fixture may target only the fabricated drive'
+                return stream(progress_callback)
+            app.disk_opt.analyze_optimize_drive = optimize
+            action = app.run_optimize_drive
+        # Only these synthetic backends can receive the confirmed UI request.
+        with patch.object(ui.messagebox, 'askyesno', lambda *args, **kwargs: True):
+            action()
+        def ready():
+            output = getattr(app, attribute).get('1.0', 'end')
+            return (reached.is_set() and stage_two in output and app.workers.busy()
+                    if running else not app.workers.busy() and stage_three in output)
+        def verify():
+            log = getattr(app, attribute)
+            output = log.get('1.0', 'end')
+            status = app.operation_label.cget('text')
+            assert log.winfo_manager(), 'Accepted operation must open its section output'
+            assert ('Running' if running else 'Completed') in status
+            assert stage_two in output
+            assert (stage_three in output) is not running
+            if running:
+                assert all(button.cget('state') == 'disabled' for button in app._maintenance_controls)
+            if not tools_case:
+                assert app.btn_optimize_drive.cget('state') == ('disabled' if running else 'normal')
+            return {'operation': status, 'output_open': True, 'output': output,
+                    'fixture_stage': 2 if running else 3, 'fixture_total': 3,
+                    'backend_arguments': routed, 'maintenance_busy': app.workers.busy()}
+        return ready, verify
 
     if name.startswith('turbo-'):
         states = dict.fromkeys(('power', 'visual', 'sysmain', 'wsearch', 'spooler'))
@@ -160,7 +264,7 @@ def fixture(ui, app, name, releases):
             app.btn_resurrect_cancel.pack_forget()
             app.btn_resurrect_start.configure(text='Start sequence')
         assert app._request_operation('Resurrection', app._run_resurrection_sequence,
-                                      app._finish_resurrection, done)
+                                      app._finish_resurrection, done, output='god_log')
         app.btn_resurrect_start.configure(text='Maintenance running…')
         app.btn_resurrect_cancel.pack(side='left')
         expected_attempted = {'resurrection-running': 2, 'resurrection-cancelled': 2,

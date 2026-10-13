@@ -139,25 +139,24 @@ def test_preview_reports_incomplete_inspection_as_partial():
     app.preview_label = Mock()
     app.operation_label = Mock()
     app.select_frame = Mock()
-    app.cleanup_mgr.preview_temp_files = lambda: (0, 0)
+    app.cleanup_mgr.preview_temp_files = lambda **kwargs: (0, 0)
     app.cleanup_mgr.last_result = SimpleNamespace(errors=['invalid root'], skipped=[], ok=False)
-    app._request_operation = lambda name, work, show: show(work())
+    app._request_operation = lambda name, work, show, **kwargs: show(work()) or True
     app.run_preview_temp()
     status = app.operation_label.configure.call_args.kwargs['text']
     assert 'partial' in status.lower() or 'failed' in status.lower()
 
-def test_preview_results_are_visible_on_the_dashboard_without_navigation():
+def test_analysis_results_update_the_dashboard_summary():
     app = app_without_window()
     app.operation_label = Mock()
     app.dash_preview_status = Mock()
     app.select_frame = Mock()
-    app.cleanup_mgr.preview_temp_files = lambda: (12, 1572864)
+    app.cleanup_mgr.preview_temp_files = lambda **kwargs: (12, 1572864)
     app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], ok=True)
-    app._request_operation = lambda name, work, show: show(work()) or True
+    app._request_operation = lambda name, work, show, **kwargs: show(work()) or True
     app.run_preview_temp()
-    assert '12 files' in app.dash_preview_status.configure.call_args.kwargs['text']
+    assert '12 candidates' in app.dash_preview_status.configure.call_args.kwargs['text']
     assert '1.5 MB' in app.dash_preview_status.configure.call_args.kwargs['text']
-    app.select_frame.assert_not_called()
 
 
 def test_centering_preserves_requested_geometry_when_it_fits():
@@ -171,7 +170,7 @@ def test_centering_clamps_large_geometry_to_scaled_work_area():
 def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch):
     app = app_without_window()
     calls = []
-    app._request_operation = lambda name, work, done: work()
+    app._request_operation = lambda name, work, done, **kwargs: work()
     monkeypatch.setenv('USERPROFILE', r'C:\Users\A Name')
     monkeypatch.setattr(panacea_ui.subprocess, 'run', lambda args, **kwargs: calls.append((args, kwargs)))
     import modules.commands
@@ -302,6 +301,120 @@ def test_real_tk_user_resize_after_mapping_respects_minimum(monkeypatch):
 import pytest
 
 
+def _native_widgets(parent, kind):
+    for child in parent.winfo_children():
+        if isinstance(child, kind):
+            yield child
+        yield from _native_widgets(child, kind)
+
+
+def _native_bounds(widget):
+    return (widget.winfo_rootx(), widget.winfo_rooty(),
+            widget.winfo_rootx() + widget.winfo_width(),
+            widget.winfo_rooty() + widget.winfo_height())
+
+
+@pytest.mark.parametrize('width,height,scale', [
+    (1366, 768, 1.0), (1366, 768, 1.25), (1366, 768, 1.5),
+    (1920, 1080, 1.0), (1920, 1080, 1.25), (1920, 1080, 1.5),
+])
+@isolated_tk_test
+def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, height, scale):
+    import tkinter.font as tkfont
+    panacea_ui.ctk.set_widget_scaling(scale)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    problems = []
+
+    def expect(condition, message):
+        if not condition:
+            problems.append(message)
+
+    def baseline(label):
+        rendered = label._label
+        font = tkfont.Font(root=app, font=rendered.cget('font'))
+        return (rendered.winfo_rooty() + (rendered.winfo_height() - font.metrics('linespace')) / 2
+                + font.metrics('ascent'))
+
+    def inside(widget, container, name):
+        left, top, right, bottom = _native_bounds(widget)
+        bounds = _native_bounds(container)
+        expect(bounds[0] - 2 <= left < right <= bounds[2] + 2
+               and bounds[1] - 2 <= top < bottom <= bounds[3] + 2, f'{name} clipped: {(left, top, right, bottom)} vs {bounds}')
+
+    try:
+        app.update()
+        footer_insets = []
+        for window_width, window_height in ((width, height), (width - 160, height - 96), (width, height)):
+            panacea_ui.tk.Tk.maxsize(app, width, height)
+            panacea_ui.tk.Tk.geometry(app, f'{window_width}x{window_height}')
+            app.select_frame('Dashboard')
+            app.update()
+            dashboard_canvas = app.card_sys.master._parent_canvas
+            dashboard_canvas.yview_moveto(0)
+            app.update()
+            labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
+            version = next(label for label in labels if f'v{panacea_ui.VERSION}' in label.cget('text'))
+            copyright_label = next(label for label in labels if '©' in label.cget('text'))
+            expect(abs(baseline(version) - baseline(copyright_label)) <= 2 * scale, 'Footer text must share one baseline')
+            expect('\n' not in version.cget('text') + copyright_label.cget('text'), 'Footer must stay on one line')
+            sidebar = _native_bounds(app.sidebar_frame)
+            footer_left = min(_native_bounds(label)[0] for label in (version, copyright_label))
+            footer_bottom = max(_native_bounds(label)[3] for label in (version, copyright_label))
+            insets = (footer_left - sidebar[0], sidebar[3] - footer_bottom)
+            footer_insets.append(insets)
+            expect(all(0 <= inset <= 20 * scale for inset in insets), f'Footer edge insets too large: {insets}')
+            for label in (version, copyright_label):
+                inside(label, app.sidebar_frame, 'Footer')
+            title = next(label for label in labels if label.cget('text') == 'Panacea')
+            tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
+            gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
+            expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
+            expect(all(icon.cget('size') == (24, 24) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
+            for name in ('cpu', 'memory', 'drive'):
+                expect(app.action_icons[name].cget('size') == (22, 22), f'{name} metric icon was resized')
+            dashboard_labels = list(_native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel))
+            for name in ('scan', 'restore', 'updates'):
+                icon = next(label for label in dashboard_labels if label.cget('image') is app.action_icons[name])
+                image_height = int(app.tk.call('image', 'height', icon._label.cget('image')))
+                text_labels = [label for label in _native_widgets(icon.master, panacea_ui.ctk.CTkLabel) if label.cget('text')]
+                text_top = min(label._label.winfo_rooty() for label in text_labels)
+                text_bottom = max(label._label.winfo_rooty() + label._label.winfo_height() for label in text_labels)
+                expect(image_height >= 0.65 * (text_bottom - text_top), f'{name} image too small for its text group')
+                inside(icon, icon.master, name + ' icon')
+                for label in text_labels:
+                    inside(label, icon.master, name + ' text')
+                    expect(_native_bounds(icon)[2] <= _native_bounds(label)[0] + 2, name + ' icon overlaps text')
+                for button in _native_widgets(icon.master, panacea_ui.ctk.CTkButton):
+                    inside(button, icon.master, name + ' action')
+                    expect(max(_native_bounds(label)[2] for label in text_labels) <= _native_bounds(button)[0] + 2,
+                           name + ' text overlaps its action')
+            if window_height < height:
+                # Smaller than the requested display matrix: actions may scroll,
+                # but must remain reachable without disturbing the fixed footer.
+                dashboard_canvas.yview_moveto(1)
+                app.update()
+            inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
+            app.select_frame('Cleaning')
+            app.update()
+            card = app.preview_label.master
+            analyze = next(button for button in _native_widgets(card, panacea_ui.ctk.CTkButton)
+                           if button.cget('text') in ('Analyze', 'Preview'))
+            expect(analyze.cget('text') == 'Analyze', 'Cleanup analysis action should be named Analyze')
+            button_bounds, card_bounds = _native_bounds(analyze), _native_bounds(card)
+            expect(abs((button_bounds[1] + button_bounds[3]) - (card_bounds[1] + card_bounds[3])) <= 8 * scale,
+                   'Analyze is not centered across the complete result card')
+            inside(analyze, card, 'Analyze')
+            inside(card, app.frame_cleaning, 'Cleanup analysis card')
+        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1)),
+               f'Footer insets drift on resize: {footer_insets}')
+        assert not problems, '\n'.join(problems)
+    finally:
+        _destroy_real_app(app)
+        panacea_ui.ctk.set_widget_scaling(1.0)
+        panacea_ui.ctk.set_window_scaling(1.0)
+
+
 @pytest.mark.parametrize('width,height,scale', [(1366, 768, 1.5), (1020, 680, 1.0)])
 @isolated_tk_test
 def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monkeypatch, width, height, scale):
@@ -339,7 +452,7 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
                     result.extend(buttons_in(child))
             return result
         actions = buttons_in(app.card_sys)
-        assert len(actions) == 2  # Preview and restore; sidebar already opens Cleanup.
+        assert len(actions) == 2  # Analyze and restore; sidebar already opens Cleanup.
         for widget in [app.dash_cpu_val, app.dash_ram_perc, app.dash_disk_perc, *actions]:
             assert widget.winfo_rooty() >= top
             assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{widget.cget("text")} below viewport'
@@ -520,7 +633,7 @@ def test_battery_report_open_failure_preserves_saved_result(monkeypatch, tmp_pat
     app.operation_label = Mock()
     app._show_toast = Mock()
     monkeypatch.setattr(panacea_ui.os, 'startfile', Mock(side_effect=OSError('No HTML association')), raising=False)
-    app._request_operation = lambda name, work, success: success(tmp_path / 'battery_report.html')
+    app._request_operation = lambda name, work, success, **kwargs: success(tmp_path / 'battery_report.html')
     app.run_battery_report()
     text = app.operation_label.configure.call_args.kwargs['text']
     assert 'saved' in text.lower() and 'battery_report.html' in text
@@ -617,7 +730,7 @@ def test_component_cleanup_routes_command_output_to_cleanup_details(monkeypatch)
     app.log_msg = Mock()
     app.log_tools_msg = Mock()
     app._show_result = Mock()
-    app._request_operation = lambda name, work, done: done(work())
+    app._request_operation = lambda name, work, done, **kwargs: done(work())
     monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
     app.cmd_runner.run_command_stream.side_effect = lambda cmd, name, callback: callback('fixture output') or True
     app.run_deep_clean()
@@ -708,3 +821,99 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
         assert invoked == [True]
     finally:
         _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypatch):
+    panacea_ui.ctk.set_widget_scaling(1.5)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    entered, emit_late, late_sent, release = (threading.Event() for _ in range(4))
+    runs = []
+
+    def analyze(*, progress_callback):
+        runs.append(True)
+        for index in range(60):
+            progress_callback(f'Fixture analysis line {index}')
+        entered.set()
+        assert emit_late.wait(5)
+        progress_callback('Fixture late message')
+        late_sent.set()
+        assert release.wait(5)
+        return 7, 1572864
+
+    def activate(button):
+        button._canvas.focus_force()
+        app.update()
+        button._canvas.event_generate('<Return>')
+        app.update()
+
+    try:
+        app.cleanup_mgr.preview_temp_files = analyze
+        app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], skipped_counts={})
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, 1366, 768)
+        panacea_ui.tk.Tk.geometry(app, '1366x768')
+        app.select_frame('Cleaning')
+        app.update()
+        analyze_button = next(button for button in _native_widgets(app.preview_label.master, panacea_ui.ctk.CTkButton)
+                              if button.cget('text') == 'Analyze')
+        log = app.clean_log
+        toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
+        assert not log.winfo_manager()
+        activate(analyze_button)
+        assert entered.wait(3)
+        app.dispatcher.drain()
+        app.update()
+        assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
+        assert 'Fixture analysis line 59' in log.get('1.0', 'end')
+        viewport = log.master.master._parent_canvas
+        assert _native_bounds(log)[3] <= _native_bounds(viewport)[3] + 2, (
+            f'Opened output lies below the viewport: log={_native_bounds(log)}, '
+            f'viewport={_native_bounds(viewport)}, scroll={viewport.yview()}')
+        log._textbox.focus_force()
+        app.update()
+        before = log._textbox.yview()
+        log._textbox.event_generate('<Prior>')
+        app.update()
+        assert log._textbox.yview()[0] < before[0], 'Keyboard PageUp must scroll readable output'
+        reading_position = log._textbox.yview()
+        app.event_generate('<Control-Key-1>')
+        app.update()
+        assert app.active_frame == 'Dashboard'
+        app.event_generate('<Control-Key-2>')
+        app.update()
+        assert app.active_frame == 'Cleaning'
+        assert log.winfo_ismapped()
+        assert log._textbox.yview() == pytest.approx(reading_position)
+        activate(toggle)
+        assert not log.winfo_manager()
+        emit_late.set()
+        assert late_sent.wait(3)
+        app.dispatcher.drain()
+        app.update()
+        assert not log.winfo_manager(), 'Late worker output must respect a manual close'
+        release.set()
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.update()
+        assert not app.workers.busy()
+        assert not log.winfo_manager(), 'Completion must preserve manual closure'
+        assert 'Analysis completed' in app.preview_label.cget('text')
+        activate(analyze_button)
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.update()
+        assert len(runs) == 2
+        assert log.winfo_ismapped(), 'A new explicit run must reopen output and leave it open at completion'
+        app.select_frame('Dashboard')
+        app.select_frame('Cleaning')
+        app.update()
+        assert log.winfo_ismapped()
+    finally:
+        emit_late.set()
+        release.set()
+        app.workers.join(3)
+        _destroy_real_app(app)
+        panacea_ui.ctk.set_widget_scaling(1)
+        panacea_ui.ctk.set_window_scaling(1)

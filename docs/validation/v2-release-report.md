@@ -50,8 +50,10 @@ External Windows utilities are launch-only and remain managed by Windows.
 ## Verified locally
 
 - Baseline exact-source suite: **246 passed**. Final integrated suite:
-  **442 passed in 35.39 s**, no skipped tests. Native NTFS and process fixtures
-  ran outside the tool sandbox, confined to `build/tests-v2-release-final`.
+  **443 passed in 31.83 s**, no skipped tests. Native NTFS and process fixtures
+  ran outside the tool sandbox in a newly created, uniquely named temporary
+  tree. The earlier pre-checkout-regression suite passed all 442 tests in
+  `build/tests-v2-release-final` in 35.39 seconds.
 - Ruff, Python compilation, import/version checks and whitespace checks pass.
   Tests were not disabled or weakened. Failed regressions and sandbox-denied
   intermediate attempts are recorded in the scoped audits.
@@ -87,9 +89,27 @@ median mapped-window time was 4.049 seconds including one-file extraction.
 [Candidate manifest](v2-candidate-manifest.json) binds runtime/build inputs to
 the exact binary; [performance report](v2-performance.md) contains comparable
 source measurements and their limits. The expanded-details mouse-wheel
-regression also passed independently after the 442-test full run.
+regression passed independently and in the final full run.
 The PR check page is authoritative for the final commit's
 Windows CI; local evidence alone does not establish a green remote run.
+
+The first V2 CI run
+[38466066366](https://github.com/falker47/Panacea/actions/runs/38466066366)
+passed 441 tests and failed the exact-byte upstream-asset hash check. Git's
+Windows checkout converted the upstream license line endings. Vendored Lucide
+assets now explicitly disable Git text conversion; upstream hashes and the
+test assertion are unchanged. A fresh checkout with `core.autocrlf=true`
+is the regression check for this distribution-specific issue. This Git-only
+correction does not alter the already byte-correct local candidate assets.
+
+Two subsequent full-suite attempts using new workspace `build/` fixture roots
+encountered native `WinError 32` sharing violations: 423 passed / 20 failed and
+390 passed / 53 failed. The failures were in guarded filesystem fixtures; no
+test or protection was weakened. Read-only ancestor probes and three targeted
+reproductions then passed. The exact process holding the conflicting handles
+was not identified, so the cause is not attributed to a specific watcher or
+antivirus. A fresh unique system-temporary fixture root was used for the final
+full run, independently of the workspace paths: **443 passed in 31.83 s**.
 
 ## Blocked release gates
 

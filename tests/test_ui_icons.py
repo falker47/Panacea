@@ -93,6 +93,39 @@ def test_vendored_assets_match_pinned_upstream_and_render_manifests():
     assert 'The MIT License (MIT)' in license_text
 
 
+def test_vendored_assets_survive_git_checkout_with_autocrlf(tmp_path):
+    """A Windows checkout must preserve the upstream and renderer byte hashes."""
+    import os
+    import shutil
+    import subprocess
+
+    repository = tmp_path / 'repository'
+    repository.mkdir()
+    shutil.copytree(LUCIDE, repository / 'assets' / 'icons' / 'lucide')
+    attributes = ROOT / '.gitattributes'
+    if attributes.exists():
+        shutil.copyfile(attributes, repository / '.gitattributes')
+    environment = {**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull}
+
+    def git(*args):
+        subprocess.run(['git', '-C', str(repository), '-c', 'core.autocrlf=true',
+                        '-c', 'core.safecrlf=false', *args],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                       check=True, timeout=30, env=environment,
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    git('init', '--quiet')
+    git('add', '--all')
+    checkout = tmp_path / 'fresh-checkout'
+    git('checkout-index', '--all', '--prefix=' + checkout.as_posix() + '/')
+    checked_assets = checkout / 'assets' / 'icons' / 'lucide'
+    manifest = json.loads((checked_assets / 'manifest.json').read_text(encoding='utf-8'))
+    for path, metadata in manifest['files'].items():
+        assert hashlib.sha256((checked_assets / path).read_bytes()).hexdigest() == metadata['sha256']
+    # The reproducible renderer also compares this generated manifest byte-for-byte.
+    assert (checked_assets / 'rendered.json').read_bytes() == (LUCIDE / 'rendered.json').read_bytes()
+
+
 @pytest.mark.parametrize('size', [0, -1, 1.5, True])
 def test_invalid_sizes_fail_with_clear_configuration_error(size):
     with pytest.raises(ValueError, match='positive integer'):

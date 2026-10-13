@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
+from modules.ui_icons import make_icon
 from modules.cleanup import CleanupManager
 from modules.disk import DiskOptimizer
 from modules.commands import CommandRunner
@@ -22,18 +23,19 @@ from modules.ui_dispatch import UiDispatcher, WorkerController
 from modules.utils import resource_path
 from version import VERSION, GITHUB_REPO
 
-BG = '#11151c'
-SURFACE = '#1a202a'
-SURFACE_ALT = '#202936'
-BORDER = '#303b4b'
-TEXT = '#e7edf5'
-MUTED = '#a4b0c1'
-COL_BLUE = '#5799ec'
-COL_SUCCESS = '#79c7a0'
-COL_WARNING = '#e3be78'
-COL_RED = '#ed939c'
+# Palette drawn from the original Panacea/Nexus Portfolio midnight-blue and gold identity.
+BG = '#0b1525'
+SURFACE = '#142138'
+SURFACE_ALT = '#1b2b44'
+BORDER = '#2e415c'
+TEXT = '#f1f3f8'
+MUTED = '#9eafc8'
+COL_BLUE = '#76b6e2'
+COL_GOLD = '#e4c579'
+COL_SUCCESS = '#78c8a8'
+COL_WARNING = '#e4b66d'
+COL_RED = '#ee939a'
 COL_GREEN = TEXT
-COL_GOLD = COL_WARNING
 ctk.set_appearance_mode('Dark')
 ctk.set_default_color_theme('dark-blue')
 
@@ -59,6 +61,7 @@ class PanaceaApp(ctk.CTk):
         self._maintenance_controls = []
         self._fonts = {}
         self._pending_logs = {}
+        self._preview_summary = 'Not scanned yet · No files changed'
         self._drive_values = []
         self._turbo_states = {}
         self._turbo_master = None
@@ -111,10 +114,10 @@ class PanaceaApp(ctk.CTk):
         return self._fonts[key]
 
     def _button(self, parent, text, command, *, secondary=False, maintenance=False, **kwargs):
-        button = ctk.CTkButton(parent, text=text, command=command, height=32, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#2e639f', hover_color='#32445d' if secondary else '#3978bd', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else '#2e639f', **kwargs)
+        button = ctk.CTkButton(parent, text=text, command=command, height=32, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
         button.bind('<Return>', lambda event: button.invoke())
         button.bind('<FocusIn>', lambda event: button.configure(border_color=COL_BLUE))
-        button.bind('<FocusOut>', lambda event: button.configure(border_color=BORDER if secondary else '#2e639f'))
+        button.bind('<FocusOut>', lambda event: button.configure(border_color=BORDER if secondary else COL_GOLD))
         button._canvas.configure(takefocus=1)
         button.bind('<space>', lambda event: button.invoke())
         if maintenance:
@@ -136,30 +139,48 @@ class PanaceaApp(ctk.CTk):
         return ctk.CTkFrame(parent, fg_color=SURFACE, border_width=1, border_color=BORDER, corner_radius=8)
 
     def _load_icons(self):
-        self.icons = {}
+        """Load the original chalice logo and a consistent, vector-like icon system."""
+        self.icons, self.icons_active, self.action_icons = {}, {}, {}
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
-            try:
-                with Image.open(resource_path(f'assets/icons/{name}.png')) as source:
-                    img = source.copy()
-                self.icons[name] = ctk.CTkImage(light_image=img, dark_image=img, size=(19, 19))
-            except (OSError, ValueError):
-                self.icons[name] = None
+            idle = make_icon(name, '#a5b5cd', 96)
+            active = make_icon(name, COL_GOLD, 96)
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(20, 20))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(20, 20))
+        for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
+            color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
+            icon = make_icon(name, color, 96)
+            self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(22, 22))
+        with Image.open(resource_path('assets/panacea_icon.png')) as source:
+            original = source.convert('RGBA').copy()
+        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(51, 51))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=166, corner_radius=0, fg_color='#161c25')
+        self.sidebar_frame = ctk.CTkFrame(self, width=190, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
+        self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_rowconfigure(9, weight=1)
-        ctk.CTkLabel(self.sidebar_frame, text='Panacea', font=self._font(25, True), anchor='w').grid(row=0, column=0, sticky='ew', padx=18, pady=(20, 0))
-        ctk.CTkLabel(self.sidebar_frame, text='SYSTEM MAINTENANCE', font=self._font(9), text_color=MUTED).grid(row=1, column=0, padx=18, pady=(0, 18))
+        brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
+        brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, rowspan=2, padx=(0, 8))
+        ctk.CTkLabel(brand, text='Panacea', font=self._font(21, True), text_color=TEXT, anchor='w').grid(row=0, column=1, sticky='sw', pady=(3, 0))
+        ctk.CTkLabel(brand, text='SYSTEM MAINTENANCE', font=self._font(8), text_color=COL_GOLD, anchor='w').grid(row=1, column=1, sticky='nw', pady=(0, 2))
         self.nav_buttons = {}
-        names = [('Dashboard', 'dashboard', 'Dashboard'), ('Cleaning', 'clean', 'Cleanup'), ('Disk', 'disk', 'Disk'), ('Tools', 'tools', 'Tools'), ('Apps', 'apps', 'Apps'), ('Turbo', 'turbo', 'Turbo'), ('Resurrect', 'resurrect', 'Resurrection')]
-        for row, (name, icon, text) in enumerate(names, 2):
-            button = self._button(self.sidebar_frame, text, lambda n=name: self.select_frame(n), secondary=True, width=140, anchor='w', image=self.icons.get(icon), compound='left')
-            button.grid(row=row, column=0, padx=12, pady=3, sticky='ew')
+        names = [('Dashboard', 'dashboard', 'Dashboard'), ('Cleaning', 'clean', 'Cleanup'),
+                 ('Disk', 'disk', 'Disk'), ('Tools', 'tools', 'Tools'),
+                 ('Apps', 'apps', 'Apps'), ('Turbo', 'turbo', 'Turbo'),
+                 ('Resurrect', 'resurrect', 'Resurrection')]
+        for row, (name, icon, label) in enumerate(names, 2):
+            button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
+                                  secondary=True, width=163, height=38, anchor='w',
+                                  image=self.icons[icon], compound='left')
+            button.grid(row=row, column=0, padx=10, pady=3, sticky='ew')
             self.nav_buttons[name] = button
-        ctk.CTkLabel(self.sidebar_frame, text=f'v{VERSION}', text_color=MUTED, font=self._font(11)).grid(row=10, column=0, sticky='w', padx=18, pady=(12, 0))
-        footer = ctk.CTkLabel(self.sidebar_frame, text=f'© {datetime.now().year} M. Falconi', text_color=MUTED, font=self._font(10), cursor='hand2')
-        footer.grid(row=11, column=0, sticky='w', padx=18, pady=(0, 14))
+        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=10, column=0, sticky='ew', padx=17, pady=(10, 6))
+        ctk.CTkLabel(self.sidebar_frame, text=f'v{VERSION}', text_color=MUTED,
+                     font=self._font(11), anchor='w').grid(row=11, column=0, sticky='w', padx=17)
+        footer = ctk.CTkLabel(self.sidebar_frame, text=f'© {datetime.now().year} M. Falconi',
+                              text_color=MUTED, font=self._font(10), cursor='hand2')
+        footer.grid(row=12, column=0, sticky='w', padx=17, pady=(0, 13))
         footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
 
     def select_frame(self, name):
@@ -173,7 +194,15 @@ class PanaceaApp(ctk.CTk):
         self.frames[name].grid(row=1, column=1, sticky='nsew')
         self.active_frame = name
         for key, button in self.nav_buttons.items():
-            button.configure(fg_color='#294363' if key == name else 'transparent', border_color=COL_BLUE if key == name else '#161c25', text_color=TEXT if key == name else MUTED)
+            selected = key == name
+            icon_key = {'Cleaning': 'clean', 'Resurrect': 'resurrect'}.get(key, key.lower())
+            icon_set = getattr(self, 'icons_active' if selected else 'icons', None)
+            kwargs = {'fg_color': '#263a56' if selected else 'transparent',
+                      'border_color': COL_GOLD if selected else '#0e192b',
+                      'text_color': TEXT if selected else MUTED}
+            if icon_set and icon_key in icon_set:
+                kwargs['image'] = icon_set[icon_key]
+            button.configure(**kwargs)
 
     def _setup_update_bar(self):
         bar = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=42)

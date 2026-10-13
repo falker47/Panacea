@@ -619,7 +619,9 @@ class PanaceaApp(ctk.CTk):
 
     def _update_metadata_gui(self, sample):
         self.dash_os.configure(text=sample['os'])
-        self.dash_cpu_name.configure(text=sample['cpu_name'] or 'Processor details unavailable')
+        cpu_name = (sample['cpu_name'] or 'Processor details unavailable').splitlines()[0]
+        # Keep the card compact; full diagnostics still come from the Windows system.
+        self.dash_cpu_name.configure(text=cpu_name.split(' with ')[0].split(' @ ')[0])
         self.dash_ram_info.configure(text=sample['ram_info'] or 'Memory details unavailable')
         self.dash_disk_info.configure(text=sample['disk_model'] or 'Disk details unavailable')
 

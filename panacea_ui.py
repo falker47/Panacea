@@ -114,7 +114,8 @@ class PanaceaApp(ctk.CTk):
         return self._fonts[key]
 
     def _button(self, parent, text, command, *, secondary=False, maintenance=False, **kwargs):
-        button = ctk.CTkButton(parent, text=text, command=command, height=32, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
+        button_height = kwargs.pop('height', 32)
+        button = ctk.CTkButton(parent, text=text, command=command, height=button_height, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
         button.bind('<Return>', lambda event: button.invoke())
         button.bind('<FocusIn>', lambda event: button.configure(border_color=COL_BLUE))
         button.bind('<FocusOut>', lambda event: button.configure(border_color=BORDER if secondary else COL_GOLD))

@@ -152,8 +152,15 @@ def actual_install_test(args):
             verify_file(app, expected, portable.stat().st_size)
             report["checks"]["installed_exe_in_place_restart_ready"] = "PASS"
         finally:
-            if child is not None and child.poll() is None:
-                child.terminate()
+            if child is not None:
+                # PyInstaller one-file mode can spawn a separate executable
+                # process. Stop the exact probe-owned tree, not only its
+                # bootloader parent; otherwise Inno Setup cannot remove the
+                # still-running image during uninstall.
+                subprocess.run(
+                    ["taskkill", "/PID", str(child.pid), "/T", "/F"],
+                    stdin=subprocess.DEVNULL, capture_output=True,
+                    text=True, timeout=20, check=False)
                 try:
                     child.wait(timeout=10)
                 except subprocess.TimeoutExpired:
@@ -163,7 +170,9 @@ def actual_install_test(args):
         matches = list(dest.glob("unins*.exe"))
         if len(matches) != 1:
             raise RuntimeError("Expected exactly one registered Inno Setup uninstaller.")
-        run_checked([matches[0], "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+        uninstall_log = temp / ("panacea-inno-uninstall-" + uuid.uuid4().hex + ".log")
+        run_checked([matches[0], "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                     f"/LOG={uninstall_log}"])
         # Inno Setup can finish cleaning its running uninstaller asynchronously.
         # Wait for actual deletion rather than treating the process exit as proof.
         deadline = time.monotonic() + 30
@@ -172,7 +181,8 @@ def actual_install_test(args):
                 break
             time.sleep(0.25)
         if app.exists():
-            raise RuntimeError("Uninstaller exited but Panacea.exe still exists: " + str(app))
+            tail = uninstall_log.read_text(encoding="utf-8", errors="replace")[-2500:] if uninstall_log.exists() else "(no uninstaller log)"
+            raise RuntimeError("Uninstaller exited but Panacea.exe still exists: " + str(app) + " | Log: " + tail)
         if sentinel.read_text(encoding="utf-8") != "PRESERVE":
             raise RuntimeError("Uninstaller modified an unrelated sentinel.")
         verify_file(portable, expected, portable.stat().st_size)

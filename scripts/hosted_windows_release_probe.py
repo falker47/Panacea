@@ -23,9 +23,9 @@ from types import SimpleNamespace
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from modules.cleanup import CleanupManager
-from modules import update_install
-from modules.updater import parse_checksum, verify_file
+from modules.cleanup import CleanupManager  # noqa: E402
+from modules import update_install  # noqa: E402
+from modules.updater import parse_checksum, verify_file  # noqa: E402
 
 
 def digest(path: Path) -> str:

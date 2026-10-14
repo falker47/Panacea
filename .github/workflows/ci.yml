@@ -58,3 +58,52 @@ jobs:
             dist/Panacea.exe
             dist/Panacea.exe.sha256
           if-no-files-found: error
+
+  windows-isolated-integration:
+    name: Disposable Windows image/cleanup integration
+    # Never exercise privileged Windows probes for untrusted fork contributions.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: windows-smoke
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Download the exact CI-built executable
+        uses: actions/download-artifact@v4
+        with:
+          name: Panacea-Windows-candidate
+          path: build/hosted-probe/new
+
+      - name: Retrieve official v1.47 executable only into isolated runner fixture
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path build/hosted-probe/legacy | Out-Null
+          gh release download v1.47 --repo falker47/Panacea --pattern Panacea.exe --dir build/hosted-probe/legacy
+
+      - name: Guarded native fixture cleanup and packaged V1-to-V2 replacement
+        shell: pwsh
+        run: |
+          python scripts/hosted_windows_release_probe.py --candidate build/hosted-probe/new/Panacea.exe --checksum build/hosted-probe/new/Panacea.exe.sha256 --legacy build/hosted-probe/legacy/Panacea.exe --output build/hosted-probe/report.json
+
+      - name: Retain scoped results, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-disposable-Windows-integration
+          path: build/hosted-probe/report.json
+          if-no-files-found: warn

@@ -1,0 +1,30 @@
+name: Prepare authorized Panacea V2 draft (one-time)
+on:
+  push:
+    branches:
+      - release/approved-v2-draft-20261014
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-reviewed-source:
+    if: github.repository == 'falker47/Panacea'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm exact green main commit, unreleased tag and trigger existing draft workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APPROVED_SHA: '650ac2351ba9580ef300493d9b8d127b1303ff42'
+        run: |
+          set -euo pipefail
+          actual="$(gh api repos/falker47/Panacea/git/ref/heads/main --jq '.object.sha')"
+          test "$actual" = "$APPROVED_SHA"
+          if gh api repos/falker47/Panacea/releases/tags/v2.0.0 > /dev/null 2>&1; then
+            echo 'Stop: v2.0.0 release already exists'; exit 1
+          fi
+          echo 'Dispatching existing release.yml to create a DRAFT from exact approved source'
+          gh workflow run release.yml --ref main -f source_ref="$APPROVED_SHA" -f tag=v2.0.0

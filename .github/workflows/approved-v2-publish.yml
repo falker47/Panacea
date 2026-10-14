@@ -1,0 +1,61 @@
+name: Publish approved Panacea V2 (one-time)
+on:
+  push:
+    branches:
+      - release/approved-v2-publish-20261014
+
+permissions:
+  contents: write
+
+jobs:
+  verified-publication:
+    if: github.repository == 'falker47/Panacea'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    concurrency:
+      group: panacea-v2-publication
+      cancel-in-progress: false
+    steps:
+      - name: Verify exact approved draft and official asset digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          main="$(gh api repos/falker47/Panacea/git/ref/heads/main --jq '.object.sha')"
+          test "$main" = '650ac2351ba9580ef300493d9b8d127b1303ff42'
+          release="$(gh api repos/falker47/Panacea/releases/412716930)"
+          test "$(printf '%s' "$release" | jq -r '.draft')" = true
+          test "$(printf '%s' "$release" | jq -r '.prerelease')" = false
+          test "$(printf '%s' "$release" | jq -r '.tag_name')" = 'v2.0.0'
+          test "$(printf '%s' "$release" | jq -r '.target_commitish')" = '650ac2351ba9580ef300493d9b8d127b1303ff42'
+          test "$(printf '%s' "$release" | jq -r '.assets | length')" = 4
+          printf '%s' "$release" | jq -e '
+            (.assets | map({(.name): .digest}) | add) ==
+            {
+              "Panacea.exe":"sha256:3e483228dbef5fd1298777382a848aa5eb92a883c64c93873cfe03d64c79c0ed",
+              "Panacea.exe.sha256":"sha256:df2c2f86dbadf51200e6c8c7850686779322a5ca5dbd6a582a83e28fc6c91a53",
+              "PanaceaSetup.exe":"sha256:3ce5bd6ad47c45b668eefdafbcb8687d5db4742bb29e88142259c99540729b26",
+              "PanaceaSetup.exe.sha256":"sha256:b7b3fab04e89cefa3e1c65a5a36c1f1ab707f60330e494723fd6f9a82f737eb5"
+            }' > /dev/null
+          mkdir -p check-assets
+          gh release download v2.0.0 --dir check-assets --pattern 'Panacea*.exe*'
+          test "$(find check-assets -maxdepth 1 -type f | wc -l)" -eq 4
+          (cd check-assets && tr -d '\r' < Panacea.exe.sha256 | sha256sum -c -)
+          (cd check-assets && tr -d '\r' < PanaceaSetup.exe.sha256 | sha256sum -c -)
+          test "$(sha256sum check-assets/Panacea.exe | cut -d ' ' -f 1)" = '3e483228dbef5fd1298777382a848aa5eb92a883c64c93873cfe03d64c79c0ed'
+          test "$(sha256sum check-assets/PanaceaSetup.exe | cut -d ' ' -f 1)" = '3ce5bd6ad47c45b668eefdafbcb8687d5db4742bb29e88142259c99540729b26'
+          test "$(head -c 2 check-assets/Panacea.exe)" = MZ
+          test "$(head -c 2 check-assets/PanaceaSetup.exe)" = MZ
+          echo 'Exact approved V2 draft and four binary/manifest assets verified'
+
+      - name: Publish V2 stable release, latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release edit v2.0.0 --draft=false --latest
+          gh release view v2.0.0 --json isDraft,isPrerelease,tagName --jq 'select(.isDraft == false and .isPrerelease == false and .tagName == "v2.0.0")' > published.json
+          test -s published.json
+          echo "Official Panacea V2 published: https://github.com/falker47/Panacea/releases/tag/v2.0.0"

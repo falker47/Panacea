@@ -1,0 +1,75 @@
+{
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python_harness": "3.14.3",
+  "executable": "C:\\Users\\Falker\\Desktop\\Code\\Panacea\\build\\release-candidate\\Panacea.exe",
+  "sha256": "aab331fe38ecf186f5cb1d7f095871d49c4ae4dedfc4b7ffdac79f0d67397484",
+  "method": "Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.",
+  "samples": [
+    {
+      "sample": 1,
+      "mapped_window_seconds": 2.098889600019902,
+      "window": {
+        "pid": 45208,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.148325000016484,
+      "exit_code": 0
+    },
+    {
+      "sample": 2,
+      "mapped_window_seconds": 1.9192016000160947,
+      "window": {
+        "pid": 33760,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.978803900012281,
+      "exit_code": 0
+    },
+    {
+      "sample": 3,
+      "mapped_window_seconds": 1.9062540999730118,
+      "window": {
+        "pid": 39344,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.9604972999659367,
+      "exit_code": 0
+    },
+    {
+      "sample": 4,
+      "mapped_window_seconds": 1.7997497000033036,
+      "window": {
+        "pid": 30336,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.839009699993767,
+      "exit_code": 0
+    },
+    {
+      "sample": 5,
+      "mapped_window_seconds": 1.7007764999871142,
+      "window": {
+        "pid": 38440,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.7392181999748573,
+      "exit_code": 0
+    }
+  ],
+  "median_mapped_window_seconds": 1.9062540999730118
+}

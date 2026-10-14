@@ -1,0 +1,73 @@
+{
+  "views": [
+    {
+      "section": "Dashboard",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Cleaning",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Disk",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Tools",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Apps",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Turbo",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    },
+    {
+      "section": "Resurrect",
+      "pixels": [
+        1366,
+        768
+      ],
+      "widget_scale": 1.5
+    }
+  ],
+  "callback_errors": [],
+  "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+  "native_window_dpi": 96,
+  "screen_pixels": [
+    2560,
+    1440
+  ],
+  "source_sha256": {
+    "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+    "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+    "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+    "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+  }
+}

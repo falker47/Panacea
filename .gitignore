@@ -22,7 +22,7 @@ env/
 ENV/
 .venv/
 Lib/
-Scripts/
+# Keep project scripts tracked on case-insensitive Windows filesystems.
 Include/
 share/
 pyvenv.cfg

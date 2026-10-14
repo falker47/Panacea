@@ -1,120 +1,117 @@
+"""Explicit System Restore actions with sequence-number verification."""
+import json
+import os
+import re
 import subprocess
+import uuid
+from modules.commands import system_executable
 from modules.logger import Logger
 
-class RestoreManager:
-    def __init__(self):
-        self.logger = Logger()
 
-    def ensure_restore_enabled(self, drive="C:\\"):
-        """Checks if System Restore is enabled, enables it if not."""
+class RestoreManager:
+    def __init__(self, logger=None):
+        self.logger = logger if logger is not None else Logger()
+
+    def _run_powershell(self, script, timeout=30):
+        return subprocess.run([system_executable('powershell.exe'), '-NoProfile', '-NonInteractive',
+                               '-Command', "$ErrorActionPreference='Stop'; "
+                               '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); ' + script],
+                              shell=False, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8',
+                              errors='replace', timeout=timeout,
+                              creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+    def ensure_restore_enabled(self, drive='C:\\'):
+        """Enable protection only as an explicitly requested action, never during creation."""
+        if not isinstance(drive, str) or not re.fullmatch(r'[A-Za-z]:\\', drive):
+            self.logger.log('Invalid System Restore drive.', 'WARNING')
+            return False
         try:
-            self.logger.log(f"Ensuring System Restore is enabled on {drive}...")
-            subprocess.run(
-                ['powershell.exe', '-NoProfile', '-Command', f"Enable-ComputerRestore -Drive '{drive}'"],
-                capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            # We assume it worked or was already on. 
+            result = self._run_powershell(f"Enable-ComputerRestore -Drive '{drive.upper()}'")
+            if result.returncode != 0:
+                self.logger.log(f'System Restore enable failed: {result.stderr}', 'WARNING')
+                return False
             return True
-        except Exception as e:
-            self.logger.log(f"Failed to enable system restore: {e}", "WARNING")
+        except Exception as exc:
+            self.logger.log(f'System Restore enable failed: {exc}', 'WARNING')
             return False
 
     def get_last_restore_points(self, limit=3):
-        """Returns list of (date, description) tuples"""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            return []
         try:
-            p = subprocess.run(
-                ['powershell.exe', '-NoProfile', '-Command',
-                 f"Get-ComputerRestorePoint | Select-Object -Last {limit} CreationTime, Description | ConvertTo-Json"],
-                capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
-            
-            if p.returncode != 0 or not p.stdout.strip():
+            result = self._run_powershell(
+                f'Get-ComputerRestorePoint | Sort-Object SequenceNumber | '
+                f'Select-Object -Last {limit} CreationTime, Description | ConvertTo-Json')
+            if result.returncode or not result.stdout.strip():
                 return []
-                
-            import json
-            data = json.loads(p.stdout)
-            
-            # Handle single object vs list
+            data = json.loads(result.stdout)
             if isinstance(data, dict):
                 data = [data]
-                
-            points = []
-            for item in data:
-                # Convert weird PS date format if needed, or just use string
-                # PS JSON date often looks like "/Date(123456)/" or just string depending on version
-                # But 'CreationTime' usually comes out as string in JSON for this cmdlet
-                points.append(f"{item.get('CreationTime')} - {item.get('Description')}")
-                
-            return points[::-1] # Newest first
-        except Exception as e:
-            self.logger.log(f"Error listing restore points: {e}", "ERROR")
+            return [f"{item.get('CreationTime')} - {item.get('Description')}" for item in reversed(data)]
+        except Exception as exc:
+            self.logger.log(f'Error listing restore points: {exc}', 'ERROR')
             return []
 
     def _get_latest_restore_point_seq(self):
-        """Return SequenceNumber of newest restore point, or None if none/error."""
+        """0 means a successful empty query; None means unverified/unavailable."""
         try:
-            p = subprocess.run(
-                ['powershell.exe', '-NoProfile', '-Command',
-                 "Get-ComputerRestorePoint | "
-                 "Sort-Object SequenceNumber | "
-                 "Select-Object -Last 1 -ExpandProperty SequenceNumber"],
-                capture_output=True, text=True, timeout=15,
-                creationflags=subprocess.CREATE_NO_WINDOW)
-            if p.returncode != 0:
+            result = self._run_powershell('Get-ComputerRestorePoint | Sort-Object SequenceNumber | '
+                                          'Select-Object -Last 1 -ExpandProperty SequenceNumber', timeout=15)
+            if result.returncode:
                 return None
-            out = p.stdout.strip()
-            return int(out) if out else None
+            output = result.stdout.strip()
+            if not output:
+                return 0
+            sequence = int(output)
+            return sequence if sequence >= 0 else None
         except Exception:
             return None
 
-    def create_restore_point(self, description="Panacea Auto-Restore"):
-        """
-        Creates a Windows System Restore Point.
-        Requires Administrative privileges.
-
-        Windows throttles restore-point creation to one per 24h by default
-        (SystemRestorePointCreationFrequency reg value). When throttled,
-        Checkpoint-Computer exits 0 but silently does nothing, so we compare
-        the latest sequence number before/after to detect this.
-        """
-        self.logger.log(f"Attempting to create restore point: {description}")
-
-        # Enable it first just in case
-        self.ensure_restore_enabled()
-
-        seq_before = self._get_latest_restore_point_seq()
-
-        # Escape single quotes for PowerShell
-        safe_desc = description.replace("'", "''")
-        cmd = f"Checkpoint-Computer -Description '{safe_desc}' -RestorePointType 'MODIFY_SETTINGS'"
-
+    def _find_created_restore_point(self, before, description):
+        """Verify this request's exact identity, not another application's point."""
         try:
-            process = subprocess.run(
-                ['powershell.exe', '-NoProfile', '-Command', cmd],
-                capture_output=True, text=True, timeout=60,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+            result = self._run_powershell(
+                'Get-ComputerRestorePoint | '
+                f'Where-Object {{ $_.SequenceNumber -gt {before} }} | '
+                'Select-Object SequenceNumber, Description | ConvertTo-Json -Compress', timeout=15)
+            if result.returncode or not result.stdout.strip():
+                return None
+            points = json.loads(result.stdout)
+            if isinstance(points, dict):
+                points = [points]
+            if not isinstance(points, list):
+                return None
+            matches = [point['SequenceNumber'] for point in points if isinstance(point, dict)
+                       and type(point.get('SequenceNumber')) is int
+                       and point['SequenceNumber'] > before and point.get('Description') == description]
+            return max(matches, default=None)
+        except Exception:
+            return None
 
-            if process.returncode == 0:
-                seq_after = self._get_latest_restore_point_seq()
-                if (seq_before is not None and seq_after is not None
-                        and seq_after == seq_before):
-                    self.logger.log(
-                        "Restore point skipped: Windows 24h throttle "
-                        "(SystemRestorePointCreationFrequency).", "WARNING")
-                    return False, ("Skipped: a restore point was already "
-                                   "created within the last 24h (Windows limit).")
-                self.logger.log("Restore point created successfully.")
-                return True, "Restore Point created successfully."
-            else:
-                err = process.stderr.strip()
-                self.logger.log(f"Failed to create restore point: {err}", "ERROR")
-                # Common error handling
-                if "0x80042306" in err: # Shadow Copy error
-                    return False, "Failed: Shadow Copy Volume error."
-                if "Privilege" in err or "Access" in err:
-                    return False, "Failed: Run as Administrator."
-                return False, f"Error: {err[:120]}"
-
-        except Exception as e:
-            self.logger.log(f"Exception creating restore point: {e}", "ERROR")
-            return False, str(e)
+    def create_restore_point(self, description='Panacea Auto-Restore'):
+        if not isinstance(description, str) or not description.strip() or len(description) > 256 or any(ord(char) < 32 for char in description):
+            return False, 'Invalid restore point description.'
+        before = self._get_latest_restore_point_seq()
+        if before is None:
+            return False, 'System Restore state could not be verified. Check protection and administrator access.'
+        # A per-request identity prevents a concurrent installer checkpoint from
+        # satisfying our prerequisite when Windows throttles this request.
+        unique_description = description[:220] + ' [' + uuid.uuid4().hex + ']'
+        safe_description = unique_description.replace("'", "''")
+        try:
+            result = self._run_powershell(
+                f"Checkpoint-Computer -Description '{safe_description}' -RestorePointType 'MODIFY_SETTINGS'", timeout=60)
+            if result.returncode:
+                message = (result.stderr or '').strip()
+                self.logger.log(f'Restore point creation failed: {message}', 'ERROR')
+                return False, f'Restore point creation failed: {message[:160]}'
+            after = self._find_created_restore_point(before, unique_description)
+            if after is None or after <= before:
+                message = 'No new restore point could be verified. Windows may have throttled creation or protection is unavailable.'
+                self.logger.log(message, 'WARNING')
+                return False, message
+            self.logger.log(f'Restore point verified: sequence {after}.')
+            return True, f'Restore point created and verified (sequence {after}).'
+        except Exception as exc:
+            self.logger.log(f'Restore point creation failed: {exc}', 'ERROR')
+            return False, str(exc)

@@ -1,0 +1,5 @@
+# Preserve upstream hashes and byte-for-byte reproducible renderer outputs.
+assets/icons/lucide/LICENSE -text
+assets/icons/lucide/svg/*.svg -text
+assets/icons/lucide/png/*.png -text
+assets/icons/lucide/rendered.json -text

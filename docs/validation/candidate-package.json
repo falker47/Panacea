@@ -1,0 +1,18 @@
+{
+  "version": "1.49.0",
+  "size": 24206497,
+  "sha256": "6b40342a235824b4f368a4c2c8d131fa53c16385209b0317e82021c5228776d3",
+  "signature": "NotSigned",
+  "smoke_runs": 5,
+  "smoke_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "median_mapped_window_seconds": 1.8521211000042967,
+  "build_tool": "PyInstaller 6.22.3",
+  "python": "3.14.3",
+  "method": "Fresh package after monitor shutdown correction; five safe packaged launches. Raw output in release-final-packaged-startup.json; no UAC or maintenance."
+}

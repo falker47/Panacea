@@ -1,0 +1,577 @@
+{
+  "recorded_at_utc": "2026-10-12T14:55:43.699609+00:00",
+  "method": "scripts/visual_check.py, Pillow native Windows screen pixels, 8000ms initial settle and 300ms per view; no maintenance actions",
+  "source_files": {
+    "panacea_ui.py": "38e73e5664f0310617733968a6a193a4bfea6aa1658d419c48ba494cdda35ccc",
+    "modules/system_monitor.py": "906dde671fcc78ae7aea0c755ec7cb5668d29de9737235640661735232edafd4"
+  },
+  "window_scale": 1.0,
+  "widget_scales": [
+    1.0,
+    1.25,
+    1.5
+  ],
+  "actual_os_dpi_tested": false,
+  "dashboard_metadata_populated": true,
+  "inspected_png_count": 42,
+  "matrix": [
+    {
+      "directory": "docs/validation/screenshots/final-1366x768-100",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.0
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/apps.png",
+          "sha256": "b5c3f894b39d5307d6b8d04bf7ecc6710ac4b3ef22732d88b56025a8206d420b"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/cleaning.png",
+          "sha256": "07f0e031b33db481c3195b4d1b8d15b732c7a9a1638d79cc60661532f9c5b9df"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/dashboard.png",
+          "sha256": "30b617b3849f2e0394c7bfb931061e28a46700dcfff199a48229ad8a5485f13b"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/disk.png",
+          "sha256": "92312b4b30b56922974bbb8eec8f9fcdd20454f57da70d1ba546ba39a831c0eb"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/resurrect.png",
+          "sha256": "a166ab8a970dedcf36d2bfa97f47dc7e55ff199adb7973d4162eac19383fdfa4"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/tools.png",
+          "sha256": "976ff6dda050452760195747368d650a5dfa220a9bdafa061afc9d918903ab7a"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-100/turbo.png",
+          "sha256": "7639a00886c7045b7ba5e3abfb47550d292f3064dc7df6dddc92a183878ce4dc"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/final-1366x768-125",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.25
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/apps.png",
+          "sha256": "80fef922296ee2006af2dee69b265922d7958b27707eeee53314d59344318883"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/cleaning.png",
+          "sha256": "a4dc5a01a71ce9e587daf74a4cdac61adf0767d8db4714906091e478a9d15701"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/dashboard.png",
+          "sha256": "b1872c9adba5173fd1d14a1166f8ca7456b6b5517b458c608bb9892ef088d7d0"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/disk.png",
+          "sha256": "caf594a6414d295214a60d3a98eef2cbfad9a25066a6adb01999efa4c76d6401"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/resurrect.png",
+          "sha256": "92c5fafabf5df4cb3d4ed20351c2ae649f7e36ce7d496ac4db4e62fcb817536e"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/tools.png",
+          "sha256": "075d99d66094fa920671973a402654baebe33836f9e191295a90a77b2bd9237a"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-125/turbo.png",
+          "sha256": "5a94a1a58721fec69f2d89463288057a1d26b74bf59f9515e2cd638756e2ade2"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/final-1366x768-150",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1366,
+            768
+          ],
+          "widget_scale": 1.5
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/apps.png",
+          "sha256": "f7b779b212e4f1287e85204c7b4d1b28cc409673c03e317d3d13ed0b13c713bc"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/cleaning.png",
+          "sha256": "69e77e90463cecc74889d7a12d246bc0c99862ed1946a5ce7b4ac032724027b1"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/dashboard.png",
+          "sha256": "4fef1bcdf74741aa93cac2bf3a209a580f37e3530600301aab2a347928838f78"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/disk.png",
+          "sha256": "286d00ff84abb8d1c1cd55f11925dd321c7b71bd0c8a6f7c84926a31e929dcb0"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/resurrect.png",
+          "sha256": "0e43d518c6006baec48e569eba3c59585371f3c28dbb4220b5439df317575909"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/tools.png",
+          "sha256": "aa840f64142fd5e4218a3cf4fd753d78832ea860ad2b77bb37c97e751e0387a1"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1366x768-150/turbo.png",
+          "sha256": "e2434781bbec70c83cbcc9e7f8bb93a5a59b750f9b7101f7bd4c93fac9269598"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/final-1920x1080-100",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.0
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/apps.png",
+          "sha256": "70731839d6195d9d3c318e27a673289cbc14ce6cf4cd3ea1cc753ab3bccd7c8c"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/cleaning.png",
+          "sha256": "c7f480744f1e3a2bdd67a018a637ad4d46e8d5ed3b43654772d3300d223c3ed0"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/dashboard.png",
+          "sha256": "6f1a1d9519961cce22f7637f08968a0d4ec76682a663e6209a3d4fdc946e3cb3"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/disk.png",
+          "sha256": "8fc0eb298bb2d84132249cc407a870ae0762239c500621d9e46441ca7cde65fe"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/resurrect.png",
+          "sha256": "b983b2bc3a60b1f66f4173feb4d7111044584ce22855ca4ba04c15a23e95aa25"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/tools.png",
+          "sha256": "952f560cffd56111db58315f832aee52e9ffcf64f9d7254216ffbc970ddde2f5"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-100/turbo.png",
+          "sha256": "0980e6548ec0ec1ba867393edbc0ed0f52988ff117d356f2812558d6e2a35486"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/final-1920x1080-125",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.25
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/apps.png",
+          "sha256": "d680f58e06665ab5c2e3fefa257cf09557d56df3f093535bc9b3b59015213828"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/cleaning.png",
+          "sha256": "5b3bc9bb65fb540b9290508895e8571c181aaf754405bc67ef3d9ba5b508fba3"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/dashboard.png",
+          "sha256": "3a60252fc8f1c6a36e433627b06afc1cca77d256dad947aed5a83c154db12f1e"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/disk.png",
+          "sha256": "9673a2390c39d850858f018fb6137eb3b226baf29119ed17164e109ca5289081"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/resurrect.png",
+          "sha256": "b5bcb00ffc9bd0e15cd2dfef61deb7b0b70105b796cb818ef68c238f2a5db693"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/tools.png",
+          "sha256": "fe6ab104a5984a48d54ff636aa83f9113cf4cb01ecdab3baace2604677b3efe6"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-125/turbo.png",
+          "sha256": "c3a9b4d014d1f8af86278d7fe5223a7b3504cf26ea0d0ed3f057e2e56cda5d03"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/final-1920x1080-150",
+      "views": [
+        {
+          "section": "Dashboard",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Cleaning",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Disk",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Tools",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Apps",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Turbo",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        },
+        {
+          "section": "Resurrect",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "widget_scale": 1.5
+        }
+      ],
+      "callback_errors": [],
+      "files": [
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/apps.png",
+          "sha256": "8412a74fb3d014c555a937a69ed818d90b645549ca22d9853ea98f96df5a03f4"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/cleaning.png",
+          "sha256": "ffea3c4ddad132dcdc606a390a4c7643c93928036aafec701b76790f56e56676"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/dashboard.png",
+          "sha256": "fd3ddae1cc80a82a7ce82985ea49ef02ae4134c40b34246f04817be3a7bb7db0"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/disk.png",
+          "sha256": "d765fc6c7877235526796351717b05dee072de179e05d9627ce114f0b39f93d0"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/resurrect.png",
+          "sha256": "d904b2833e1911fe8b040f57aa3eabf8f92f598680e302a57e5aa5ef636241dc"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/tools.png",
+          "sha256": "d307e753da44ec458133455c842af30e40f36ea80a49fe13dcf04f2bbd5202bd"
+        },
+        {
+          "path": "docs/validation/screenshots/final-1920x1080-150/turbo.png",
+          "sha256": "37bd675796ff345b3686d5e9791df20342498dfd2cd1db1f533022d41d45b009"
+        }
+      ]
+    }
+  ],
+  "layout_notes": [
+    "Dashboard CPU/RAM/disk values and all three quick actions visible in every initial viewport.",
+    "Tools network/utilities require scrolling at smaller scaled viewports; utility row can sit at pane boundary.",
+    "Lower Turbo settings require scrolling at 1366x768 with widget scale 1.25/1.5.",
+    "Windows Update status remains checking at first capture; no check-completion or update-installation result is claimed."
+  ]
+}

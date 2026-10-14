@@ -5,7 +5,11 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The current codebase is **v1.48**.
+The current codebase is the **2.0.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
+
+See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
+The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.
+The [Round 2 visual polish report](docs/validation/v2-round2-report.md) records the latest candidate, tighter Dashboard spacing, focused Resurrection layout and updated sidebar footer.
 
 ## What it does
 
@@ -24,8 +28,23 @@ The current codebase is **v1.48**.
 
 Locked/in-use files are skipped. Cleanup is irreversible once files or Recycle Bin contents are deleted.
 
+**Analyze** is optional and read-only: it reports candidates and potential recovery,
+with an explicit “No files deleted” result. **Clean now** asks for confirmation and
+checks/deletes eligible files in one traversal, without a required preliminary
+scan. An earlier analysis never authorizes deletion and filesystem changes can
+change the result. **View reasons** retains all original skipped/error details;
+the live output summarizes reasons proven by the backend. Byte totals describe
+the logical size of eligible/deleted files, not a measured drive free-space delta.
+Windows Disk Cleanup's **Open utility** only opens the external Windows tool.
+
+Cleanup, optimization, command and Resurrection output opens at an accepted
+explicit start and remains available after completion and navigation. Closing a
+panel during execution is respected until the next explicit operation.
+
+Cleanup accepts the conventional local-user Temp and explicit browser cache roots, verifies opened Windows objects and refuses junctions, hardlinks and unverifiable paths. Protected cleanup and Turbo snapshot storage require native identity/case-sensitivity support (Windows 10 version 1803 or newer, or Windows 11); unsupported filesystems and queries fail closed. Redirected or unconventional user storage may require using Windows' own tools.
+
 ### Disk optimization
-- enumerates available drive letters;
+- enumerates local fixed drives and their capacity/availability;
 - runs Windows `defrag <drive> /O`, which lets Windows choose the appropriate optimization for the media;
 - can open the native **Defragment and Optimize Drives** interface.
 
@@ -36,31 +55,31 @@ Panacea exposes commands including:
 - `DISM /Online /Cleanup-Image /RestoreHealth`;
 - `ipconfig /flushdns`;
 - `netsh winsock reset`;
-- `chkdsk C: /scan /perf` inside the multi-step maintenance protocol.
+- `chkdsk <Windows drive>: /scan /perf` inside the multi-step maintenance protocol.
 
 ### Restore points
-Panacea can enable System Restore and request a restore point through PowerShell. Windows may throttle restore-point creation; the current implementation detects the common case where `Checkpoint-Computer` exits successfully without creating a new point.
+Panacea requests a restore point through PowerShell and verifies a newer sequence with the unique description of this exact request. System Restore is not enabled implicitly. Unknown, unchanged or failed verification is reported as failure; Windows may throttle creation. Enable protection explicitly through Windows before using Resurrection if it is disabled.
 
 ### Turbo Mode
 Turbo Mode can change:
 - the active Windows power plan;
-- the current user's `VisualFXSetting` registry value;
+- the current user's `VisualFXSetting` registry preference (immediate animation changes are not claimed);
 - the running state of `SysMain`, `WSearch` and `Spooler`.
 
-These are real system changes, not just UI preferences. The controls also provide the corresponding restore path, but the app cannot guarantee that every machine or policy configuration will return to an identical prior state.
+The controls save the original power scheme, service running state and visual preference before changing them. Turning a control off restores that saved value; failures and unavailable state remain explicit. Windows policies and external changes can still prevent restoration.
 
 ### System Resurrection protocol
 The automated protocol currently sequences:
-1. restore-point attempt;
+1. verified restore point (the sequence stops if this prerequisite fails);
 2. browser-cache cleanup;
 3. temp-file and Recycle Bin cleanup;
 4. DNS/Winsock reset;
-5. `defrag /O` on `C:`;
+5. `defrag /O` on the Windows system drive;
 6. online CHKDSK scan;
 7. DISM health check;
 8. SFC scan.
 
-It is intentionally explicit here because this workflow modifies or cleans several parts of the system in one run.
+The panel retains individual step results and its completed, partial, failed or cancelled summary. Progress advances when a step finishes; cancellation stops before the next command. Browser caches, temporary files and Recycle Bin deletion are irreversible and confirmed before starting.
 
 ## Permissions and safety model
 
@@ -76,11 +95,30 @@ Using native Windows commands does **not** make every operation risk-free. Befor
 
 The project does not implement a registry cleaner or automatic driver updater. It **does** write one documented visual-effects registry setting and can stop/start selected Windows services.
 
+## Installer and future updates
+
+Download the recommended `PanaceaSetup.exe` plus its separately published SHA-256
+manifest to install Panacea as an administrator-protected per-machine application
+in `Program Files\Panacea`. Inno Setup registers the Windows uninstaller and
+creates a Start Menu shortcut, with a desktop shortcut optionally available.
+
+The installer does not touch existing portable V1 executables. Older v1.47
+users should close the app and install V2 manually, not use the unverified
+legacy in-app Install banner.
+
+The V2 updater can offer checksum-verified, user-confirmed in-place updates
+for this protected installation. Desktop/Downloads copies deliberately cannot
+perform elevated in-place replacement; portable copies stay supported with
+manual updates and keep the existing ZEROfilez stable `Panacea.exe` link.
+
+Installation does not mean automatic silent background update. The runtime
+asks for approval and must satisfy protected-file and directory checks.
+
 ## Updates
 
-The desktop app checks this repository's GitHub Releases for a newer version. For packaged builds it can download a release `.exe` and replace the current executable.
+The desktop app checks GitHub Releases in the background and offers a manual check. It selects exactly `Panacea.exe` and `Panacea.exe.sha256`, rejects downgrade and unofficial URLs, and verifies the downloaded size, SHA-256 and Windows executable header before installation.
 
-The current updater relies on HTTPS/GitHub release delivery but does **not** verify a separately published signature or release checksum before replacement. Treat release provenance as part of the trust boundary.
+Automatic installation preserves the previous binary until the new GUI acknowledges readiness and rolls back on replacement or launch failure. Elevated replacement requires a protected installation directory; portable copies in user-writable Desktop or Downloads directories use the release-page/manual download alternative. Source execution never replaces the Python interpreter. GitHub release provenance remains part of the trust boundary; checksum verification is not Authenticode signing.
 
 ## Run from source
 
@@ -101,16 +139,21 @@ python main.py
 scripts\build_exe.bat
 ```
 
-The generated executable is written to `dist\Panacea.exe`. Build outputs are not intended to be committed to the source tree; distributable binaries should be published through GitHub Releases.
+The generated executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies. Build outputs are not committed; distributable binaries belong in GitHub Releases.
+
+For an automated local build use `python scripts/build.py`. `Panacea.exe --smoke-test` opens and closes the GUI without maintenance or UAC elevation.
 
 ## Verification
 
-The repository CI runs on Windows and:
-- compiles the Python sources;
-- imports the main UI modules;
-- verifies the declared application version;
-- builds the PyInstaller executable;
-- checks that `dist\Panacea.exe` was produced.
+The repository CI runs fixture-based unit/integration tests, static checks, compilation and import smoke, builds the Windows executable, verifies its PE header and version, and runs a safe packaged GUI smoke. Tests do not clean host files, change services or power plans, or run system repairs.
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q tests
+python -m ruff check .
+```
+
+The **Prepare Windows release** workflow accepts an immutable reviewed commit SHA and an exact tag matching `version.py`. It executes the checks and attaches `Panacea.exe` plus its checksum to a **draft** GitHub Release. Stable publication is a separate human approval gate after real Windows, prior-version update/restart, rollback and security checks. See [release notes](docs/releases/2.0.0.md) and [validation evidence](docs/validation).
 
 This is a build/smoke gate, not a substitute for manual testing of elevated Windows maintenance operations on representative Windows 10/11 systems.
 

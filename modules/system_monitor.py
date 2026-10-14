@@ -4,9 +4,22 @@ import platform
 import shutil
 import subprocess
 import time
+import threading
+import logging
+import json
+import ntpath
+from modules.commands import system_executable, validate_drive
+
+
+_PS_QUERY_PREFIX = "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); "
 
 class SystemMonitor:
     def __init__(self):
+        self._query_lock = threading.Lock()
+        self._query_processes = {}
+        self._query_closed = threading.Event()
+        self._close_lock = threading.Lock()
+        self._query_reaper = None
         # Store previous CPU times for delta-based usage calculation
         self._prev_idle = 0
         self._prev_total = 0
@@ -15,19 +28,99 @@ class SystemMonitor:
         self._cache = {}
         self._cache_ttl = 120  # seconds
 
+    def _query_output(self, arguments, timeout):
+        """Own each read-only query from atomic creation through process reap."""
+        process = None
+        reap_lock = threading.Lock()
+        try:
+            # Close's UI-side Event never waits on this lock. Its cancellation
+            # thread waits until any in-flight CreateProcess is registered.
+            with self._query_lock:
+                if self._query_closed.is_set():
+                    raise RuntimeError('System monitor is closed')
+                process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           stdin=subprocess.DEVNULL, shell=False,
+                                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                self._query_processes[process] = reap_lock
+            if self._query_closed.is_set():
+                raise RuntimeError('System monitor is closed')
+            output, error = process.communicate(timeout=timeout)
+            if self._query_closed.is_set():
+                raise RuntimeError('System monitor is closed')
+            if process.returncode:
+                raise subprocess.CalledProcessError(process.returncode, arguments, output=output, stderr=error)
+            return output
+        finally:
+            if process is not None:
+                self._reap_query(process, reap_lock)
+                # Only the communicating worker closes its streams. A close
+                # reaper must not race an active Windows pipe reader.
+                if process.poll() is not None:
+                    for stream in (process.stdin, process.stdout, process.stderr):
+                        if stream is not None:
+                            try:
+                                stream.close()
+                            except OSError:
+                                logging.getLogger(__name__).exception('Cannot close owned monitor query pipe')
+
+    def _reap_query(self, process, reap_lock):
+        # Communication may finish concurrently with cancellation. Serialize
+        # cleanup per handle, never block Tk, and never target an unowned PID.
+        with reap_lock:
+            try:
+                if process.poll() is None:
+                    try:
+                        process.kill()
+                    except OSError:
+                        # It may have exited between poll and TerminateProcess.
+                        if process.poll() is None:
+                            raise
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                logging.getLogger(__name__).exception('Cannot reap owned monitor query')
+            finally:
+                with self._query_lock:
+                    self._query_processes.pop(process, None)
+
+    def close(self):
+        """Cancel only owned read-only queries without blocking the UI thread."""
+        self._query_closed.set()
+        with self._close_lock:
+            if self._query_reaper is not None:
+                return
+            def cancel_owned():
+                with self._query_lock:
+                    owned = tuple(self._query_processes.items())
+                for process, reap_lock in owned:
+                    self._reap_query(process, reap_lock)
+            # Keep interpreter shutdown alive just long enough to reap our
+            # children after Tk closes; daemon query workers alone cannot do it.
+            self._query_reaper = threading.Thread(target=cancel_owned, name='panacea-monitor-close', daemon=False)
+            self._query_reaper.start()
+
     def _cached(self, key, func):
         """Return cached result if fresh, otherwise call func and cache it."""
-        now = time.time()
+        now = time.monotonic()
         if key in self._cache:
             val, ts = self._cache[key]
             if now - ts < self._cache_ttl:
                 return val
         val = func()
-        self._cache[key] = (val, now)
+        self._cache[key] = (val, time.monotonic())
         return val
 
+    def sample_fast(self):
+        """Only native, low-latency samples; hardware metadata runs independently."""
+        return {"ram": self.get_ram_usage(), "disk": self.get_disk_usage(),
+                "cpu": self.get_cpu_usage(), "uptime": self.get_system_uptime(),
+                "battery": self.get_battery_status(), "system_drive": self.get_system_drive()}
+
+    def sample_metadata(self):
+        return {"os": self.get_os_info(), "cpu_name": self.get_cpu_info(),
+                "ram_info": self.get_ram_info(), "disk_model": self.get_disk_model()}
+
     def get_ram_usage(self):
-        """Returns (total_gb, available_gb, percent_used)"""
+        """Return (total_gb, available_gb, percent_used), or None if unavailable."""
         try:
             class MEMORYSTATUSEX(ctypes.Structure):
                 _fields_ = [
@@ -44,35 +137,35 @@ class SystemMonitor:
             
             stat = MEMORYSTATUSEX()
             stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return None
+            if stat.ullTotalPhys <= 0 or stat.ullAvailPhys > stat.ullTotalPhys:
+                return None
             
             total_gb = stat.ullTotalPhys / (1024**3)
             avail_gb = stat.ullAvailPhys / (1024**3)
             # Calculate percent as float for decimal display
-            percent = ((total_gb - avail_gb) / total_gb) * 100 if total_gb > 0 else 0
+            percent = ((total_gb - avail_gb) / total_gb) * 100
             
             return round(total_gb, 1), round(avail_gb, 1), round(percent, 1)
         except Exception:
-            return 0, 0, 0
+            return None
 
     def get_ram_info(self):
-        """Returns RAM details string like 'DDR4 @ 3200 MHz (2 Moduli)' (cached)"""
+        """Return cached configured RAM details without guessing missing values."""
         return self._cached("ram_info", self._fetch_ram_info)
 
     def _fetch_ram_info(self):
         try:
             # wmic was removed in Windows 11 24H2+; use CIM via PowerShell.
-            cmd = ['powershell', '-NoProfile', '-Command',
-                   "Get-CimInstance Win32_PhysicalMemory | "
-                   "Select-Object Speed, SMBIOSMemoryType | ConvertTo-Json -Compress"]
-            output = subprocess.check_output(
-                cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW
-            ).decode().strip()
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
+                   _PS_QUERY_PREFIX + "Get-CimInstance Win32_PhysicalMemory | "
+                   "Select-Object ConfiguredClockSpeed, SMBIOSMemoryType | ConvertTo-Json -Compress"]
+            output = self._query_output(cmd, timeout=15).decode('utf-8-sig').strip()
 
             if not output:
                 return ""
 
-            import json
             data = json.loads(output)
             # Single module: PowerShell returns an object, not an array
             if isinstance(data, dict):
@@ -80,28 +173,45 @@ class SystemMonitor:
             if not data:
                 return ""
 
-            first = data[0]
-            speed = first.get("Speed", "")
-            smbios_type = first.get("SMBIOSMemoryType", 0) or 0
-
             # SMBIOSMemoryType: 20=DDR, 21=DDR2, 24=DDR3, 26=DDR4, 34=DDR5
             type_map = {20: "DDR", 21: "DDR2", 24: "DDR3", 26: "DDR4", 34: "DDR5"}
-            ddr_type = type_map.get(int(smbios_type), "DDR")
-
-            return f"{ddr_type} @ {speed} MHz ({len(data)} Moduli)"
+            types = {type_map.get(int(module.get('SMBIOSMemoryType') or 0), 'Unknown type')
+                     for module in data}
+            speeds = {int(module.get('ConfiguredClockSpeed') or 0) for module in data}
+            memory_type = next(iter(types)) if len(types) == 1 else 'Mixed types'
+            if any(speed <= 0 for speed in speeds):
+                speed = 'Unknown speed'
+            elif len(speeds) > 1:
+                speed = 'Mixed speeds'
+            else:
+                speed = f'{next(iter(speeds))} MHz'
+            count = len(data)
+            return f"{memory_type} @ {speed} ({count} {'module' if count == 1 else 'modules'})"
         except Exception:
             return ""
 
-    def get_disk_usage(self):
-        """Returns (total_gb, free_gb, percent_used) for C:"""
+    def get_system_drive(self):
+        """Resolve the actual Windows volume through the trusted native resolver."""
         try:
-            total, used, free = shutil.disk_usage("C:\\")
+            return validate_drive(ntpath.splitdrive(system_executable('cmd.exe'))[0])
+        except (OSError, ValueError, TypeError, AttributeError):
+            return None
+
+    def get_disk_usage(self):
+        """Return system-volume capacity and usage, or None if unavailable."""
+        try:
+            drive = self.get_system_drive()
+            if drive is None:
+                return None
+            total, used, free = shutil.disk_usage(drive + '\\')
+            if total <= 0 or not 0 <= used <= total or not 0 <= free <= total:
+                return None
             total_gb = total / (1024**3)
             free_gb = free / (1024**3)
-            percent = (used / total) * 100 if total > 0 else 0
+            percent = (used / total) * 100
             return round(total_gb, 1), round(free_gb, 1), round(percent, 1)
         except Exception:
-            return 0, 0, 0
+            return None
 
     def get_disk_model(self):
         """Returns disk model string e.g. 'SSD Samsung MZVLB1T0...' (cached)"""
@@ -109,9 +219,13 @@ class SystemMonitor:
 
     def _fetch_disk_model(self):
         try:
-            cmd = ['powershell', '-NoProfile', '-Command',
-                   "Get-Partition -DriveLetter C | Get-Disk | ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
-            output = subprocess.check_output(cmd, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW).decode().strip()
+            drive = self.get_system_drive()
+            if drive is None:
+                return "Unknown Model"
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command',
+                   _PS_QUERY_PREFIX + f"Get-Partition -DriveLetter {drive[0]} | Get-Disk | "
+                   "ForEach-Object { $_.FriendlyName + '|' + $_.MediaType }"]
+            output = self._query_output(cmd, timeout=15).decode('utf-8-sig').strip()
 
             if '|' in output:
                 model_name, media_type = output.rsplit('|', 1)
@@ -132,15 +246,17 @@ class SystemMonitor:
             # Get CPU name from registry (more readable than platform.processor())
             key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
                                   r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
-            cpu_name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
-            mhz, _ = winreg.QueryValueEx(key, "~MHz")
-            winreg.CloseKey(key)
+            try:
+                cpu_name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+                mhz, _ = winreg.QueryValueEx(key, "~MHz")
+            finally:
+                winreg.CloseKey(key)
             
             cores = os.cpu_count() or 0
             
             # Format: "AMD Ryzen 7 5800X\n(8 Cores @ 3.8 GHz)"
             ghz = round(mhz / 1000, 1)
-            return f"{cpu_name.strip()}\n({cores} Cores @ {ghz} GHz)"
+            return f"{cpu_name.strip()}\n({cores} logical processors @ {ghz} GHz)"
         except Exception:
             return platform.processor()
             
@@ -155,6 +271,7 @@ class SystemMonitor:
         try:
             # GetTickCount64 returns milliseconds
             lib = ctypes.windll.kernel32
+            lib.GetTickCount64.restype = ctypes.c_uint64
             t = lib.GetTickCount64()
             t = t / 1000
             days = t // 86400
@@ -165,92 +282,108 @@ class SystemMonitor:
             return "Unknown"
 
     def get_cpu_usage(self):
-        """Returns CPU usage percent using GetSystemTimes (no subprocess overhead)."""
+        """Return native CPU delta percent, or None without a valid measurement."""
         try:
+            kernel32 = ctypes.windll.kernel32
+            groups = getattr(kernel32, 'GetActiveProcessorGroupCount', None)
+            # GetSystemTimes covers only the calling thread's primary group.
+            # Do not label a partial measurement as aggregate CPU usage.
+            if groups is not None and groups() > 1:
+                return None
             idle = ctypes.c_ulonglong()
             kernel = ctypes.c_ulonglong()
             user = ctypes.c_ulonglong()
-            ctypes.windll.kernel32.GetSystemTimes(
+            if not kernel32.GetSystemTimes(
                 ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)
-            )
+            ):
+                return None
             idle_val = idle.value
             total_val = kernel.value + user.value
 
             if self._prev_total == 0:
-                # First call — no delta yet, return 0
+                # An initial snapshot is a baseline, not a 0% usage measurement.
                 self._prev_idle = idle_val
                 self._prev_total = total_val
-                return 0.0
+                return None
 
             d_idle = idle_val - self._prev_idle
             d_total = total_val - self._prev_total
             self._prev_idle = idle_val
             self._prev_total = total_val
 
-            if d_total == 0:
-                return 0.0
+            if d_total <= 0 or not 0 <= d_idle <= d_total:
+                return None
             return round((1.0 - d_idle / d_total) * 100, 1)
         except Exception:
-            return 0.0
+            return None
 
     def get_battery_status(self):
         """Returns (percent, is_plugged_str)"""
         class SYSTEM_POWER_STATUS(ctypes.Structure):
             _fields_ = [
-                ('ACLineStatus', ctypes.c_byte),
-                ('BatteryFlag', ctypes.c_byte),
-                ('BatteryLifePercent', ctypes.c_byte),
-                ('SystemStatusFlag', ctypes.c_byte),
-                ('BatteryLifeTime', ctypes.c_ulong),
-                ('BatteryFullLifeTime', ctypes.c_ulong),
+                ('ACLineStatus', ctypes.c_ubyte),
+                ('BatteryFlag', ctypes.c_ubyte),
+                ('BatteryLifePercent', ctypes.c_ubyte),
+                ('SystemStatusFlag', ctypes.c_ubyte),
+                ('BatteryLifeTime', ctypes.c_uint32),
+                ('BatteryFullLifeTime', ctypes.c_uint32),
             ]
         status = SYSTEM_POWER_STATUS()
-        if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
-            percent = status.BatteryLifePercent
-            plugged = "Plugged In" if status.ACLineStatus == 1 else "On Battery"
-            if percent == 255: return (0, "Unknown")
-            return (percent, plugged)
-        return (0, "Unknown")
+        try:
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+                percent = status.BatteryLifePercent
+                if percent > 100 or status.BatteryFlag & 128:
+                    return (None, "Unknown")
+                plugged = {0: "On Battery", 1: "Plugged In"}.get(status.ACLineStatus, "Unknown")
+                return (percent, plugged)
+        except (AttributeError, OSError):
+            pass
+        return (None, "Unknown")
 
     def get_windows_update_status(self):
-        """Returns (mandatory_count, optional_count, status_str)"""
+        """Return (recommended, optional, status); -1 counts mean unverified.
+
+        BrowseOnly identifies optional updates. AutoSelectOnWebSites only
+        describes automatic selection and must not be called mandatory.
+        """
         try:
-            # PowerShell script to count mandatory vs optional updates
-            # AutoSelectOnWebSites = True means mandatory (security, critical), False means optional (driver, feature)
-            ps_script = """
+            ps_script = _PS_QUERY_PREFIX + """
+Set-StrictMode -Version 2.0
 $session = New-Object -ComObject Microsoft.Update.Session
 $searcher = $session.CreateUpdateSearcher()
-$result = $searcher.Search('IsInstalled=0')
-$mandatory = 0
+$result = $searcher.Search('IsInstalled=0 and IsHidden=0')
+$recommended = 0
 $optional = 0
 foreach ($update in $result.Updates) {
-    if ($update.AutoSelectOnWebSites) { $mandatory++ } else { $optional++ }
+    if ($update.IsHidden -or $update.IsInstalled) { continue }
+    if ($update.BrowseOnly) { $optional++ } else { $recommended++ }
 }
-Write-Output "$mandatory,$optional"
+[pscustomobject]@{ResultCode=[int]$result.ResultCode; Recommended=$recommended; Optional=$optional} | ConvertTo-Json -Compress
 """
-            cmd = ['powershell', '-NoProfile', '-Command', ps_script]
-            output = subprocess.check_output(cmd, creationflags=subprocess.CREATE_NO_WINDOW, timeout=45).decode().strip()
-            
-            lines = output.splitlines()
-            if not lines: return 0, 0, "Unknown"
-            
-            parts = lines[-1].split(',')
-            if len(parts) == 2:
-                mandatory = int(parts[0])
-                optional = int(parts[1])
-            else:
+            cmd = [system_executable('powershell.exe'), '-NoProfile', '-Command', ps_script]
+            output = self._query_output(cmd, timeout=45).decode('utf-8-sig').strip()
+            if not output:
+                return -1, -1, "Check unavailable"
+            result = json.loads(output)
+            if not isinstance(result, dict):
                 return -1, -1, "Parse Error"
-            
-            if mandatory == 0 and optional == 0:
-                return 0, 0, "System Up to Date"
-            elif mandatory > 0 and optional > 0:
-                return mandatory, optional, f"{mandatory} Required, {optional} Optional"
-            elif mandatory > 0:
-                return mandatory, 0, f"{mandatory} Required Updates"
+            code = result.get('ResultCode')
+            if type(code) is not int or code != 2:
+                return -1, -1, "Check incomplete" if code == 3 else "Check Failed"
+            recommended, optional = result.get('Recommended'), result.get('Optional')
+            if any(type(count) is not int or count < 0 for count in (recommended, optional)):
+                return -1, -1, "Parse Error"
+
+            if recommended == optional == 0:
+                return 0, 0, "No available updates"
+            elif recommended > 0 and optional > 0:
+                return recommended, optional, f"{recommended} recommended, {optional} optional"
+            elif recommended > 0:
+                return recommended, 0, f"{recommended} recommended updates"
             else:
-                return 0, optional, f"{optional} Optional Updates"
+                return 0, optional, f"{optional} optional updates"
                 
         except subprocess.TimeoutExpired:
-             return -1, -1, "Check Timed Out"
-        except Exception as e:
+            return -1, -1, "Check Timed Out"
+        except Exception:
             return -1, -1, "Check Failed"

@@ -1,0 +1,75 @@
+{
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python_harness": "3.14.3",
+  "executable": "C:\\Users\\Falker\\Desktop\\Code\\Panacea\\dist\\v2.0.0\\Panacea.exe",
+  "sha256": "03878f2d1ceb841f3dfe36298e548b348d908fd733c3f80b837a1656d8908e9e",
+  "method": "Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.",
+  "samples": [
+    {
+      "sample": 1,
+      "mapped_window_seconds": 4.0491454000002705,
+      "window": {
+        "pid": 39316,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 6.058634200016968,
+      "exit_code": 0
+    },
+    {
+      "sample": 2,
+      "mapped_window_seconds": 5.16215419996297,
+      "window": {
+        "pid": 32684,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 7.21603429998504,
+      "exit_code": 0
+    },
+    {
+      "sample": 3,
+      "mapped_window_seconds": 3.914428299991414,
+      "window": {
+        "pid": 5256,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 6.871442599978764,
+      "exit_code": 0
+    },
+    {
+      "sample": 4,
+      "mapped_window_seconds": 4.3481218999950215,
+      "window": {
+        "pid": 7564,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 6.245328199991491,
+      "exit_code": 0
+    },
+    {
+      "sample": 5,
+      "mapped_window_seconds": 2.5893629000056535,
+      "window": {
+        "pid": 34096,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.646034499979578,
+      "exit_code": 0
+    }
+  ],
+  "median_mapped_window_seconds": 4.0491454000002705
+}

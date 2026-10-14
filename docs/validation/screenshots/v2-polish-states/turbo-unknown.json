@@ -1,0 +1,42 @@
+{
+  "case": "turbo-unknown",
+  "section": "Turbo",
+  "state": "unavailable",
+  "description": "Unknown settings and unavailable originals.",
+  "fixture_only": true,
+  "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+  "timestamp_utc": "2026-10-13T22:31:10.253897+00:00",
+  "widget_scale": 1.5,
+  "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+  "source_sha256": {
+    "panacea_ui.py": "65e9bd9afdfced828cc1e46d1733594200829017f4505b644e76a884cff1fad0",
+    "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+    "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+    "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+    "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+    "scripts/ui_state_check.py": "ef8e547d4af5b363edf41260d98e374784886864c2d06861e27c715ef0556ed4"
+  },
+  "observed": {
+    "live_settings": {
+      "power": null,
+      "visual": null,
+      "sysmain": null,
+      "wsearch": null,
+      "spooler": null
+    },
+    "saved_originals": null,
+    "recovery_text": "Saved originals unavailable \u00b7 retry Refresh state",
+    "restore_enabled": "disabled",
+    "pixels": [
+      1366,
+      768
+    ],
+    "screen_pixels": [
+      2560,
+      1440
+    ],
+    "image_sha256": "bb6de93ff3dcedb6043ef8132a0eb237df765768ba12084c65c69a04e668c99c",
+    "native_window_dpi": 96
+  },
+  "callback_errors": []
+}

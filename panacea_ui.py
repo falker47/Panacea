@@ -1,1208 +1,1466 @@
+"""Panacea desktop. Workers post callbacks; only the Tk thread drains them."""
+import os
 import sys
-import tkinter as tk
-from tkinter import messagebox
-import customtkinter as ctk
+import subprocess
 import threading
 import webbrowser
 from datetime import datetime
-from modules.cleanup import CleanupManager
+from collections import deque
+from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox
+import customtkinter as ctk
+from PIL import Image
+from modules.ui_icons import make_icon
+from modules.cleanup import CleanupManager, CleanupResult
 from modules.disk import DiskOptimizer
 from modules.commands import CommandRunner
 from modules.logger import Logger
 from modules.system_monitor import SystemMonitor
 from modules.restore import RestoreManager
 from modules.performance import PerformanceManager
+from modules.maintenance_guard import MaintenanceGuard
+from modules.ui_dispatch import UiDispatcher, WorkerController
 from modules.utils import resource_path
-from PIL import Image
-import os
-import subprocess
-import urllib.request
-import json
 from version import VERSION, GITHUB_REPO
 
-# Color constants
-COL_GREEN = "#00FF00"
-COL_GOLD = "#FFD700"
-COL_RED = "#F44336"
-COL_BLUE = "#00BFFF"
-COL_SUCCESS = "#4CAF50"
-COL_WARNING = "#FFC107"
+# Palette drawn from the original Panacea/Nexus Portfolio midnight-blue and gold identity.
+BG = '#0b1525'
+SURFACE = '#142138'
+SURFACE_ALT = '#1b2b44'
+BORDER = '#2e415c'
+TEXT = '#f1f3f8'
+MUTED = '#9eafc8'
+COL_BLUE = '#76b6e2'
+COL_GOLD = '#e4c579'
+COL_SUCCESS = '#78c8a8'
+COL_WARNING = '#e4b66d'
+COL_RED = '#ee939a'
+COL_GREEN = TEXT
+ctk.set_appearance_mode('Dark')
+ctk.set_default_color_theme('dark-blue')
 
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("dark-blue")
 
 class PanaceaApp(ctk.CTk):
+    LOG_LINES = 500
+
     def __init__(self):
         super().__init__()
-        
-        self.title(f"Panacea System Optimizer v{VERSION}")
-
-        # Hide window until centered to avoid flash in wrong position
+        self.title(f'Panacea · System maintenance · {VERSION}')
+        self.configure(fg_color=BG)
         self.withdraw()
-        self.geometry("900x560")
-        self.after(100, self._center_and_show)
-        
-        # Set Icon at Runtime
-        try:
-            self.iconbitmap(resource_path("assets/panacea_icon.ico"))
-        except Exception:
-            pass # Fallback to default if fails for some reason
-        
-        self.logger = Logger()
-        self.cleanup_mgr = CleanupManager()
-        self.disk_opt = DiskOptimizer()
-        self.cmd_runner = CommandRunner()
-        self.monitor = SystemMonitor()
-        self.restore_mgr = RestoreManager()
-        self.perf_mgr = PerformanceManager()
-
-        # Load Icons
-        self._load_icons()
-
-        # Grid Layout
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
-        # sidebar
-        self._setup_sidebar()
-
-        # Main frames
-        self.frame_dashboard = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_cleaning = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_disk = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_tools = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_apps = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_turbo = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.frame_resurrect = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        
-
-        self._setup_dashboard_frame()
-        self._setup_cleaning_frame()
-        self._setup_disk_frame()
-        self._setup_tools_frame()
-        self._setup_apps_frame()
-        self._setup_turbo_frame()
-        self._setup_resurrect_frame()
-        
-        self._dashboard_lock = threading.Lock()
+        self.geometry('1020x680')
+        self.minsize(760, 480)
+        self.dispatcher = UiDispatcher()
+        self.workers = WorkerController(self.dispatcher)
         self._shutdown = threading.Event()
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        self.select_frame("Dashboard")
-        self.update_dashboard()
-
-        # Clean up leftover .old exe from previous update
-        self._cleanup_old_exe()
-
-        # Start update checks
-        threading.Thread(target=self._check_updates_thread, daemon=True).start()
-        threading.Thread(target=self._check_app_update, daemon=True).start()
-
-    def _create_log_textbox(self, parent, height=150):
-        """Create a styled terminal-like textbox with color tags."""
-        log = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(family="Consolas", size=11), fg_color="black", text_color=COL_GREEN)
-        log.configure(state="disabled")
-        log.tag_config("info", foreground=COL_GREEN)
-        log.tag_config("warn", foreground=COL_GOLD)
-        log.tag_config("err", foreground=COL_RED)
-        return log
-
-    def _log_to_widget(self, widget, msg, level="info"):
-        """Append a message to a log textbox widget (thread-safe)."""
-        def _do():
-            widget.configure(state="normal")
-            widget.insert(tk.END, msg + "\n", level)
-            widget.see(tk.END)
-            widget.configure(state="disabled")
+        self._resurrect_cancel = threading.Event()
+        self._update_cancel = threading.Event()
+        self._update_installing = False
+        self._update_downloading = False
+        self._release = self._update_job = self._update_dir = None
+        self._maintenance_controls = []
+        self._fonts = {}
+        self._pending_logs = {}
+        self._preview_summary = 'Analysis optional · No files deleted'
+        self._drive_values = []
+        self._turbo_states = {}
+        self._turbo_master = None
+        self._turbo_saved = None
+        self._resurrection_states = {}
+        self._resurrection_rows = {}
+        self.last_resurrection_result = None
         try:
-            self.after(0, _do)
-        except RuntimeError:
+            self.logger = Logger()
+        except (OSError, KeyError):
+            self.logger = None
+        self.cleanup_mgr, self.disk_opt = CleanupManager(), DiskOptimizer()
+        self.cmd_runner, self.monitor = CommandRunner(), SystemMonitor()
+        self.restore_mgr, self.perf_mgr = RestoreManager(), PerformanceManager()
+        self.maintenance_guard = MaintenanceGuard()
+        self._maintenance_uncertain = self.maintenance_guard.is_blocked()
+        try:
+            self.iconbitmap(resource_path('assets/panacea_icon.ico'))
+        except Exception:
             pass
+        self._load_icons()
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        self._setup_sidebar()
+        self._setup_update_bar()
+        self.frames = {}
+        for name, attr in [('Dashboard', 'dashboard'), ('Cleaning', 'cleaning'), ('Disk', 'disk'), ('Tools', 'tools'), ('Apps', 'apps'), ('Turbo', 'turbo'), ('Resurrect', 'resurrect')]:
+            frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
+            self.frames[name] = frame
+            setattr(self, f'frame_{attr}', frame)
+        self._setup_functions = {'Dashboard': self._setup_dashboard_frame, 'Cleaning': self._setup_cleaning_frame,
+                                 'Disk': self._setup_disk_frame, 'Tools': self._setup_tools_frame,
+                                 'Apps': self._setup_apps_frame, 'Turbo': self._setup_turbo_frame,
+                                 'Resurrect': self._setup_resurrect_frame}
+        self._built_frames = set()
+        self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
+        self.operation_label.grid(row=2, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
+        self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
+        if self._maintenance_uncertain:
+            self.operation_label.configure(text=self.maintenance_guard.last_error, text_color=COL_WARNING)
+        self.protocol('WM_DELETE_WINDOW', self._on_close)
+        for index, name in enumerate(self.frames, 1):
+            self.bind(f'<Control-Key-{index}>', lambda event, n=name: self.select_frame(n))
+        self.select_frame('Dashboard')
+        self.after(20, self._drain_callbacks)
+        self.after_idle(self._center_and_show)
+        self.update_dashboard()
+        self._load_metadata()
+        self.refresh_drives()
+        self._load_turbo_states()
+        self._check_updates_thread()
+        self._check_app_update()
+
+    def _font(self, size=13, bold=False):
+        key = size, bold
+        if key not in self._fonts:
+            self._fonts[key] = ctk.CTkFont(family='Segoe UI', size=size, weight='bold' if bold else 'normal')
+        return self._fonts[key]
+
+    def _button(self, parent, text, command, *, secondary=False, maintenance=False, **kwargs):
+        button_height = kwargs.pop('height', 32)
+        button = ctk.CTkButton(parent, text=text, command=command, height=button_height, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
+        button.bind('<Return>', lambda event: button.invoke())
+        button.bind('<FocusIn>', lambda event: button.configure(border_color=COL_BLUE))
+        button.bind('<FocusOut>', lambda event: button.configure(border_color=BORDER if secondary else COL_GOLD))
+        button._canvas.configure(takefocus=1)
+        button.bind('<space>', lambda event: button.invoke())
+        if maintenance:
+            self._maintenance_controls.append(button)
+            if self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain'):
+                button.configure(state='disabled')
+        return button
+
+    def _header(self, parent, title, detail, compact=False):
+        parent.grid_columnconfigure(0, weight=1)
+        frame = ctk.CTkFrame(parent, fg_color='transparent')
+        frame.grid(row=0, column=0, sticky='ew', padx=22, pady=(10, 8) if compact else (15, 10))
+        ctk.CTkLabel(frame, text=title, height=24, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
+        label = ctk.CTkLabel(frame, text=detail, height=18 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
+        label.pack(fill='x', pady=(1, 0))
+        frame.bind('<Configure>', lambda event: label.configure(wraplength=max(250, event.width - 10)))
+
+    def _keyboard_switch(self, switch):
+        switch._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
+        switch.bind('<Return>', lambda event: switch.toggle())
+        switch.bind('<space>', lambda event: switch.toggle())
+
+    def _card(self, parent):
+        return ctk.CTkFrame(parent, fg_color=SURFACE, border_width=1, border_color=BORDER, corner_radius=8)
 
     def _load_icons(self):
-        self.icons = {}
-        icon_names = ["dashboard", "clean", "disk", "tools", "apps", "turbo", "resurrect"]
-        for name in icon_names:
-            try:
-                # Assuming icons are 24x24 for sidebar
-                img = Image.open(resource_path(f"assets/icons/{name}.png"))
-                self.icons[name] = ctk.CTkImage(light_image=img, dark_image=img, size=(24, 24))
-            except Exception as e:
-                print(f"Failed to load icon {name}: {e}")
-                self.icons[name] = None
-        
-        # Load resurrect negative icon for hover effect
-        try:
-            img_neg = Image.open(resource_path("assets/panacea_icon_negative.png"))
-            self.icons["resurrect_negative"] = ctk.CTkImage(light_image=img_neg, dark_image=img_neg, size=(24, 24))
-        except Exception:
-            self.icons["resurrect_negative"] = self.icons.get("resurrect")
+        """Load the original chalice logo and a consistent, vector-like icon system."""
+        self.icons, self.icons_active, self.action_icons = {}, {}, {}
+        for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
+            idle = make_icon(name, '#a5b5cd', 96)
+            active = make_icon(name, COL_GOLD, 96)
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(24, 24))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(24, 24))
+        for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
+            color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
+            icon = make_icon(name, color, 96)
+            size = 40 if name in ('scan', 'restore', 'updates') else 22
+            self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
+        with Image.open(resource_path('assets/panacea_icon.png')) as source:
+            original = source.convert('RGBA').copy()
+        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(51, 51))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=0)
-        self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(7, weight=1)
-        
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Panacea", font=ctk.CTkFont(family="Segoe UI", size=28, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 15))
-
-        btn_pady = 5
-
-        # Color Palette — unified blue/teal theme (Base, Hover)
-        col_dash = ("#1F6AA5", "#144870")
-        self.col_clean_tuple = ("#1565C0", "#0D47A1")
-        self.col_disk_tuple = ("#00897B", "#00695C")
-        self.col_tools = ("#2E7D32", "#1B5E20")
-        self.col_apps = ("#455A64", "#37474F")
-
-        def sidebar_btn(text, icon_name, frame_name, colors, row):
-            btn = ctk.CTkButton(self.sidebar_frame, text=text, height=35, anchor="w",
-                                fg_color=colors[0], hover_color=colors[1],
-                                image=self.icons.get(icon_name), compound="left",
-                                command=lambda: self.select_frame(frame_name))
-            btn.grid(row=row, column=0, padx=20, pady=btn_pady)
-            return btn
-
-        self.sidebar_button_dashboard = sidebar_btn("Dashboard", "dashboard", "Dashboard", col_dash, 1)
-        self.sidebar_button_clean = sidebar_btn("Cleaning", "clean", "Cleaning", self.col_clean_tuple, 2)
-        self.sidebar_button_disk = sidebar_btn("Disk Opt", "disk", "Disk", self.col_disk_tuple, 3)
-        self.sidebar_button_tools = sidebar_btn("Tools", "tools", "Tools", self.col_tools, 4)
-        self.sidebar_button_apps = sidebar_btn("Apps", "apps", "Apps", self.col_apps, 5)
-        self.sidebar_button_turbo = sidebar_btn("Turbo", "turbo", "Turbo", ("#00BCD4", "#00838F"), 6)
-
-        # Resurrection Button (God Mode)
-        col_gold = "#FFD700" 
-        self.sidebar_button_god = ctk.CTkButton(self.sidebar_frame, text="RESURRECT", height=35, anchor="w", 
-                                                fg_color="transparent", 
-                                                border_width=2,
-                                                border_color=col_gold,
-                                                text_color=col_gold,
-                                                hover_color=col_gold,
-                                                image=self.icons.get("resurrect"), compound="left",
-                                                font=ctk.CTkFont(weight="bold"),
-                                                command=lambda: self.select_frame("Resurrect"))
-        self.sidebar_button_god.grid(row=7, column=0, padx=20, pady=btn_pady)
-        
-        # Color config for Resurrect Button
-        def on_enter(e):
-            self.sidebar_button_god.configure(text_color="black", border_color="black", fg_color=col_gold,
-                                              image=self.icons.get("resurrect_negative"))
-        def on_leave(e):
-            self.sidebar_button_god.configure(text_color=col_gold, border_color=col_gold, fg_color="transparent",
-                                              image=self.icons.get("resurrect"))
-
-        self.sidebar_button_god.bind("<Enter>", on_enter)
-        self.sidebar_button_god.bind("<Leave>", on_leave)
-
-        # Version label
-        self.version_label = ctk.CTkLabel(self.sidebar_frame, text=f"v{VERSION}",
-                                          font=ctk.CTkFont(size=11), text_color="gray")
-        self.version_label.grid(row=8, column=0, padx=10, pady=(10, 0), sticky="s")
-
-        # Footer
-        year = datetime.now().year
-        footer_text = f"© {year} Maurizio Falconi - falker47"
-        self.footer_label = ctk.CTkLabel(self.sidebar_frame, text=footer_text,
-                                         font=ctk.CTkFont(size=10), text_color="gray", cursor="hand2")
-        self.footer_label.grid(row=9, column=0, padx=10, pady=(2, 20), sticky="s")
-        self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://falker47.github.io/"))
+        self.sidebar_frame = ctk.CTkFrame(self, width=190, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
+        self.sidebar_frame.grid_propagate(False)
+        self.sidebar_frame.grid_columnconfigure(0, weight=1)
+        self.sidebar_frame.grid_rowconfigure(9, weight=1)
+        brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
+        brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, padx=(0, 8))
+        lettering = ctk.CTkFrame(brand, fg_color='transparent')
+        lettering.grid(row=0, column=1, sticky='w')
+        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=25, font=self._font(21, True), text_color=TEXT, anchor='w')
+        self.brand_title.pack(anchor='w')
+        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(8), text_color=COL_GOLD, anchor='w')
+        self.brand_tagline.pack(anchor='w')
+        self.nav_buttons = {}
+        names = [('Dashboard', 'dashboard', 'Dashboard'), ('Cleaning', 'clean', 'Cleanup'),
+                 ('Disk', 'disk', 'Disk'), ('Tools', 'tools', 'Tools'),
+                 ('Apps', 'apps', 'Apps'), ('Turbo', 'turbo', 'Turbo'),
+                 ('Resurrect', 'resurrect', 'Resurrection')]
+        for row, (name, icon, label) in enumerate(names, 2):
+            button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
+                                  secondary=True, width=163, height=38, anchor='w',
+                                  image=self.icons[icon], compound='left')
+            button.grid(row=row, column=0, padx=10, pady=3, sticky='ew')
+            self.nav_buttons[name] = button
+        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=10, column=0, sticky='ew', padx=17, pady=(10, 6))
+        self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
+        self.sidebar_footer.grid(row=11, column=0, sticky='ew', padx=14, pady=(0, 10))
+        self.sidebar_footer.grid_columnconfigure(1, weight=1)
+        footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} falker47',
+                              height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
+        footer.grid(row=0, column=0, sticky='w')
+        footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
+        ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
+                     font=self._font(10), anchor='e').grid(row=0, column=1, sticky='e')
 
     def select_frame(self, name):
-        frame_map = {
-            "Dashboard": self.frame_dashboard,
-            "Cleaning": self.frame_cleaning,
-            "Disk": self.frame_disk,
-            "Tools": self.frame_tools,
-            "Apps": self.frame_apps,
-            "Turbo": self.frame_turbo,
-            "Resurrect": self.frame_resurrect,
-        }
-        for frame in frame_map.values():
+        if name not in self.frames:
+            return
+        if name not in self._built_frames:
+            self._setup_functions[name]()
+            self._built_frames.add(name)
+        for frame in self.frames.values():
             frame.grid_forget()
-        if name in frame_map:
-            frame_map[name].grid(row=0, column=1, sticky="nsew")
+        self.frames[name].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
+        self.active_frame = name
+        for key, button in self.nav_buttons.items():
+            selected = key == name
+            icon_key = {'Cleaning': 'clean', 'Resurrect': 'resurrect'}.get(key, key.lower())
+            icon_set = getattr(self, 'icons_active' if selected else 'icons', None)
+            kwargs = {'fg_color': '#263a56' if selected else 'transparent',
+                      'border_color': COL_GOLD if selected else '#0e192b',
+                      'text_color': TEXT if selected else MUTED}
+            if icon_set and icon_key in icon_set:
+                kwargs['image'] = icon_set[icon_key]
+            button.configure(**kwargs)
+
+    def _setup_update_bar(self):
+        bar = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=42)
+        bar.grid(row=0, column=1, sticky='ew', padx=(6, 0))
+        bar.grid_columnconfigure(0, weight=1)
+        self.app_update_status = ctk.CTkLabel(bar, text='Checking Panacea updates…', anchor='w', text_color=MUTED, font=self._font(11), wraplength=350)
+        self.app_update_status.grid(row=0, column=0, sticky='ew', padx=18, pady=7)
+        self.btn_check_update = self._button(bar, 'Check updates', self._check_app_update, secondary=True, width=105)
+        self.btn_check_update.grid(row=0, column=1, padx=(4, 12), pady=6)
+        self.update_actions = ctk.CTkFrame(bar, fg_color='transparent')
+        self.btn_update_install = self._button(self.update_actions, 'Download / install', self._auto_update, width=130)
+        self.btn_update_notes = self._button(self.update_actions, 'Release notes', self._show_release_notes, secondary=True, width=98)
+        self.btn_update_defer = self._button(self.update_actions, 'Defer', self._defer_update, secondary=True, width=60)
+        for column, button in enumerate((self.btn_update_install, self.btn_update_notes, self.btn_update_defer)):
+            button.grid(row=0, column=column, padx=(0, 8), pady=(0, 8))
 
     def _setup_dashboard_frame(self):
-        self.frame_dashboard.grid_columnconfigure((0, 1), weight=1)
-        self.frame_dashboard.grid_rowconfigure((1, 2), weight=1)
-        
-        lbl = ctk.CTkLabel(self.frame_dashboard, text="Live System Monitor", font=ctk.CTkFont(size=24, weight="bold"))
-        lbl.grid(row=0, column=0, columnspan=2, padx=20, pady=(20, 20), sticky="w")
-        
-        # --- Card 1: System Specs ---
-        self.card_sys = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
-        self.card_sys.grid(row=1, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_sys, text="System Specs & Uptime", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.dash_os = ctk.CTkLabel(self.card_sys, text="OS: Win ...", text_color="gray")
-        self.dash_os.pack()
+        outer = self.frame_dashboard
+        outer.grid_columnconfigure(0, weight=1)
+        outer.grid_rowconfigure(0, weight=1)
+        frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
+        frame.grid(row=0, column=0, sticky='nsew')
+        frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(frame, text='Dashboard', font=self._font(22, True), anchor='w').grid(
+            row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
-        # Update Status Label (shows checking/up-to-date message)
-        self.lbl_update_status = ctk.CTkLabel(self.card_sys, text="Looking for updates...", font=ctk.CTkFont(size=12), text_color="gray")
-        self.lbl_update_status.pack(pady=(10, 5))
+        # A compact system summary, with a separate truthful Windows Update status.
+        info = self._card(frame)
+        info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
+        info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
+        system = ctk.CTkFrame(info, fg_color='transparent')
+        system.grid(row=0, column=0, sticky='ew', padx=(14, 7), pady=10)
+        self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', height=22, anchor='w',
+                                    font=self._font(15, True), text_color=TEXT)
+        self.dash_os.pack(anchor='w')
+        system_details = ctk.CTkFrame(system, fg_color='transparent')
+        system_details.pack(fill='x')
+        self.dash_uptime_val = ctk.CTkLabel(system_details, text='Uptime: —', height=16, anchor='w',
+                                            font=self._font(11), text_color=MUTED)
+        self.dash_uptime_val.pack(side='left')
+        self.dash_battery = ctk.CTkLabel(system_details, text='Power: —', height=16, anchor='w',
+                                         font=self._font(10), text_color=MUTED)
+        self.dash_battery.pack(side='left', padx=(10, 0))
+        updates = ctk.CTkFrame(info, fg_color=SURFACE_ALT, corner_radius=8)
+        updates.grid(row=0, column=1, sticky='nsew', padx=(7, 10), pady=7)
+        updates.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(updates, text='', image=self.action_icons['updates'], width=28).grid(
+            row=0, column=0, rowspan=2, padx=(10, 3))
+        ctk.CTkLabel(updates, text='Windows Update', height=18, text_color=TEXT, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+        self.lbl_update_status = ctk.CTkLabel(updates, text='Checking…', height=16, font=self._font(10),
+                                              text_color=MUTED, anchor='w', wraplength=210)
+        self.lbl_update_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
+        self._button(updates, 'View', self.run_windows_update, secondary=True, width=58).grid(
+            row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
 
-        # Update Buttons Row (Hidden by default, centered horizontally)
-        self.btn_update_row = ctk.CTkFrame(self.card_sys, fg_color="transparent")
-        
-        self.btn_run_update = ctk.CTkButton(self.btn_update_row, text="Install Required", height=28, width=140, 
-                                            fg_color="#F44336", hover_color="#C62828",
-                                            command=self.run_windows_update)
-        self.btn_view_optional = ctk.CTkButton(self.btn_update_row, text="View Optional", height=28, width=140, 
-                                               fg_color="#FFC107", hover_color="#FFA000", text_color="black",
-                                               command=self.run_view_optional_updates)
-        
-        self.dash_uptime_val = ctk.CTkLabel(self.card_sys, text="Time since restart: 0d 0h 0m", font=ctk.CTkFont(size=18, weight="bold"), text_color="#3B8ED0")
-        self.dash_uptime_val.pack(pady=5)
-        ctk.CTkLabel(self.card_sys, text="(Restart is recommended once a week)", font=ctk.CTkFont(size=10), text_color="gray").pack(pady=(0, 5))
+        body = ctk.CTkFrame(frame, fg_color='transparent')
+        body.grid(row=2, column=0, padx=18, pady=(0, 5), sticky='ew')
+        body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
+        self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
+        for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
+            card.grid(row=0, column=index, padx=(0, 5) if index == 0 else
+                      (5, 0) if index == 2 else 5, sticky='nsew')
+        for card, title, icon_name in (
+            (self.card_cpu, 'CPU', 'cpu'),
+            (self.card_ram, 'Memory', 'memory'),
+            (self.card_disk, 'System drive', 'drive'),
+        ):
+            heading = ctk.CTkFrame(card, fg_color='transparent')
+            heading.pack(fill='x', padx=12, pady=(7, 1))
+            ctk.CTkLabel(heading, text='', image=self.action_icons[icon_name],
+                         width=24, height=24).pack(side='left', padx=(0, 6))
+            ctk.CTkLabel(heading, text=title, font=self._font(12, True),
+                         anchor='w', text_color=TEXT).pack(side='left', fill='x')
 
-        # --- Card 2: Disk Usage ---
-        self.card_disk = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
-        self.card_disk.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_disk, text="Disk Usage (C:)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=18)
-        self.dash_disk_bar.pack(pady=10, fill="x", padx=30)
-        self.dash_disk_val = ctk.CTkLabel(self.card_disk, text="0GB Free")
-        self.dash_disk_val.pack()
-        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text="", text_color="gray", font=ctk.CTkFont(size=11), wraplength=280)
-        self.dash_disk_info.pack()
-        self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
-        self.dash_disk_perc.pack(pady=5)
+        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(25, True),
+                                         text_color=TEXT, anchor='w')
+        self.dash_cpu_val.pack(fill='x', padx=12)
+        self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=36, line_color=COL_BLUE)
+        self.cpu_graph.pack(fill='x', padx=12, pady=(5, 5))
+        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…',
+                                          text_color=MUTED, font=self._font(10),
+                                          anchor='w', wraplength=185, justify='left')
+        self.dash_cpu_name.pack(fill='x', padx=12, pady=(0, 9))
 
-        # --- Card 3: CPU Graph ---
-        self.card_cpu = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
-        self.card_cpu.grid(row=2, column=0, padx=(20, 10), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_cpu, text="CPU Usage History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.cpu_graph = LiveGraph(self.card_cpu, width=300, height=100, line_color="#4CAF50")
-        self.cpu_graph.pack(pady=5, fill="x", padx=15)
-        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text="CPU: ...", text_color="gray", wraplength=280)
-        self.dash_cpu_name.pack()
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
-        self.dash_cpu_val.pack(pady=5)
+        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(25, True),
+                                          text_color=TEXT, anchor='w')
+        self.dash_ram_perc.pack(fill='x', padx=12)
+        self.ram_graph = LiveGraph(self.card_ram, width=175, height=36, line_color=COL_GOLD)
+        self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
+        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED,
+                                         font=self._font(11), anchor='w', wraplength=185)
+        self.dash_ram_val.pack(fill='x', padx=12)
+        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text='Loading memory details…',
+                                          text_color=MUTED, font=self._font(10),
+                                          anchor='w', wraplength=185)
+        self.dash_ram_info.pack(fill='x', padx=12, pady=(0, 9))
 
-        # --- Card 4: RAM Graph ---
-        self.card_ram = ctk.CTkFrame(self.frame_dashboard, border_width=1, border_color="#2a2a2a")
-        self.card_ram.grid(row=2, column=1, padx=(10, 20), pady=10, sticky="nsew")
-        ctk.CTkLabel(self.card_ram, text="Memory (RAM) History", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 5))
-        self.ram_graph = LiveGraph(self.card_ram, width=300, height=100, line_color="#FFC107")
-        self.ram_graph.pack(pady=5, fill="x", padx=15)
-        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text="0GB / 0GB")
-        self.dash_ram_val.pack()
-        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text="", text_color="gray", font=ctk.CTkFont(size=11))
-        self.dash_ram_info.pack()
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text="0%", font=ctk.CTkFont(size=20, weight="bold"))
-        self.dash_ram_perc.pack(pady=5)
+        self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text='—', font=self._font(25, True),
+                                           text_color=TEXT, anchor='w')
+        self.dash_disk_perc.pack(fill='x', padx=12)
+        self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=12, corner_radius=6,
+                                                 progress_color=COL_GOLD, fg_color='#26364b')
+        self.dash_disk_bar.set(0)
+        self.dash_disk_bar.pack(fill='x', padx=12, pady=(12, 8))
+        self.dash_disk_val = ctk.CTkLabel(self.card_disk, text='Storage: —', text_color=MUTED,
+                                          font=self._font(11), anchor='w', wraplength=185)
+        self.dash_disk_val.pack(fill='x', padx=12)
+        self.dash_disk_state = ctk.CTkLabel(self.card_disk, text='Checking space…',
+                                            text_color=MUTED, font=self._font(10), anchor='w')
+        self.dash_disk_state.pack(fill='x', padx=12)
+        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text='Loading disk details…',
+                                           text_color=MUTED, font=self._font(10),
+                                           anchor='w', wraplength=185)
+        self.dash_disk_info.pack(fill='x', padx=12, pady=(0, 9))
+
+        # Two meaningful actions. Navigation is already in the sidebar: no redundant
+        # "Open cleanup" tile. Preview feedback remains in-place on the dashboard.
+        self.card_sys = ctk.CTkFrame(frame, fg_color='transparent')
+        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 4), sticky='ew')
+        self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
+        scan = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
+                            border_color=BORDER, border_width=1, corner_radius=9)
+        scan.grid(row=0, column=0, sticky='nsew', padx=(0, 5), pady=0)
+        scan.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
+            row=0, column=0, rowspan=2, padx=(9, 5))
+        ctk.CTkLabel(scan, text='Temporary files', height=18, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+        self.dash_preview_status = ctk.CTkLabel(
+            scan, text=self._preview_summary, height=16, text_color=MUTED, font=self._font(10),
+            anchor='w', wraplength=226, justify='left')
+        self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
+        self._button(scan, 'Analyze', self.run_preview_temp, secondary=True,
+                     maintenance=True, width=77).grid(
+            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+
+        restore = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
+                               border_color=BORDER, border_width=1, corner_radius=9)
+        restore.grid(row=0, column=1, sticky='nsew', padx=(5, 0), pady=0)
+        restore.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
+            row=0, column=0, rowspan=2, padx=(9, 5))
+        ctk.CTkLabel(restore, text='Restore point', height=18, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+        restore_detail = ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
+                     height=16, text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
+                     justify='left')
+        restore_detail.grid(row=1, column=1, sticky='nw', pady=(0, 14))
+        self._button(restore, 'Create', self.run_create_restore, secondary=True,
+                     maintenance=True, width=77).grid(
+            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+
+        for card, label, reserved in ((scan, self.dash_preview_status, 151),
+                                      (restore, restore_detail, 151),
+                                      (updates, self.lbl_update_status, 132)):
+            card.bind('<Configure>', lambda event, item=label, space=reserved:
+                      item.configure(wraplength=max(80, event.width / item._get_widget_scaling() - space)))
+
+        for card, labels in (
+            (self.card_cpu, (self.dash_cpu_name,)),
+            (self.card_ram, (self.dash_ram_val, self.dash_ram_info)),
+            (self.card_disk, (self.dash_disk_val, self.dash_disk_info)),
+        ):
+            card.bind('<Configure>', lambda event, items=labels: [
+                label.configure(wraplength=max(110, event.width / label._get_widget_scaling() - 24))
+                for label in items
+            ])
+
+    def _section_body(self, frame, title, detail):
+        self._header(frame, title, detail, compact=True)
+        frame.grid_rowconfigure(1, weight=1)
+        body = ctk.CTkScrollableFrame(frame, fg_color=BG, corner_radius=0)
+        body.grid(row=1, column=0, sticky='nsew', padx=14, pady=(0, 8))
+        body.grid_columnconfigure(0, weight=1)
+        return body
+
+    def _section_log(self, parent, attribute, title='Activity details'):
+        panel = self._card(parent)
+        panel.pack(fill='x', pady=(4, 0))
+        log = self._create_log_textbox(panel, height=160)
+        def toggle():
+            self._set_section_log_open(attribute, not bool(log.winfo_manager()))
+        button = self._button(panel, f'+ {title}', toggle, secondary=True, anchor='w', height=26)
+        button.pack(fill='x', padx=6, pady=4)
+        setattr(self, attribute, log)
+        self.__dict__.setdefault('_section_logs', {})[attribute] = (log, button, title, parent)
+        self._set_section_log_open(attribute, self.__dict__.get('_section_log_open', {}).get(attribute, False))
+        self._flush_section_log(attribute)
+        return log
+
+    def _set_section_log_open(self, attribute, opened):
+        """UI-thread state; delivery of worker messages never changes visibility."""
+        self.__dict__.setdefault('_section_log_open', {})[attribute] = opened
+        entry = self.__dict__.get('_section_logs', {}).get(attribute)
+        if entry:
+            log, button, title, _ = entry
+            if opened:
+                log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+            else:
+                log.pack_forget()
+            button.configure(text=f'{"−" if opened else "+"} {title}')
+
+    def _open_operation_output(self, attribute):
+        self._set_section_log_open(attribute, True)
+        # Dashboard shortcuts open the working view so live output is visible.
+        section = {'clean_log': 'Cleaning', 'tools_log': 'Tools', 'disk_log': 'Disk', 'god_log': 'Resurrect'}[attribute]
+        active = self.__dict__.get('active_frame')
+        if active and active != section:
+            self.select_frame(section)
+        entry = self.__dict__.get('_section_logs', {}).get(attribute)
+        if entry and isinstance(entry[3], ctk.CTkScrollableFrame):
+            body = entry[3]
+            def reveal():
+                # CTk updates the scrollregion after packing the textbox. Flush
+                # geometry before this one-time reveal, never on streamed lines.
+                body.update_idletasks()
+                if self.__dict__.get('_section_log_open', {}).get(attribute):
+                    body._parent_canvas.yview_moveto(1.0)
+            self.after_idle(reveal)
+
+    def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
+        row = ctk.CTkFrame(parent, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=4)
+        row.grid_columnconfigure(1, weight=1)
+        if icon:
+            ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(row=0, column=0, rowspan=2, padx=(0, 10))
+        ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew')
+        description = ctk.CTkLabel(row, text=detail, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+        description.grid(row=1, column=1, sticky='ew')
+        button = self._button(row, label, command, secondary=True, maintenance=maintenance, width=112)
+        button.grid(row=0, column=2, rowspan=2, padx=(12, 0))
+        row.bind('<Configure>', lambda event: description.configure(
+            wraplength=max(100, event.width / description._get_widget_scaling() - (170 if icon else 130))))
+        return button
 
     def _setup_cleaning_frame(self):
-        self.frame_cleaning.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.frame_cleaning, text="System Cleanup", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
-        btn_frame = ctk.CTkFrame(self.frame_cleaning)
-        btn_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        
-        c_base, c_hover = self.col_clean_tuple
-
-        self.btn_clean_temp = ctk.CTkButton(btn_frame, text="Clean Temporary Files", fg_color=c_base, hover_color=c_hover, command=self.run_clean_temp)
-        self.btn_clean_temp.pack(fill="x", padx=20, pady=10)
-        self.btn_empty_bin = ctk.CTkButton(btn_frame, text="Empty Recycle Bin", fg_color=c_base, hover_color=c_hover, command=self.run_empty_recycle)
-        self.btn_empty_bin.pack(fill="x", padx=20, pady=10)
-        ctk.CTkButton(btn_frame, text="Open Windows Disk Cleanup", fg_color=c_base, hover_color=c_hover, command=self.run_cleanmgr).pack(fill="x", padx=20, pady=10)
-        ctk.CTkLabel(btn_frame, text="Expert Warning: Takes 10+ minutes.", text_color="orange").pack(anchor="w", padx=20, pady=(10,0))
-        ctk.CTkButton(btn_frame, text="Run Deep Clean (WinSxS)", fg_color="darkred", hover_color="#800000", command=self.run_deep_clean).pack(fill="x", padx=20, pady=10)
-        self.clean_log = self._create_log_textbox(self.frame_cleaning)
-        self.clean_log.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
+        body = self._section_body(self.frame_cleaning, 'Cleanup', 'Analyze if you wish, or clean now. Locked and protected files stay untouched.')
+        preview = self._card(body)
+        preview.pack(fill='x', pady=(0, 8))
+        preview.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(preview, text='', image=self.icons_active['clean'], width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
+        ctk.CTkLabel(preview, text='Temporary files', height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew', pady=(12, 0))
+        ctk.CTkLabel(preview, text='Optional analysis · does not delete files', height=16, font=self._font(11), text_color=MUTED, anchor='w').grid(row=1, column=1, sticky='ew')
+        self.preview_label = ctk.CTkLabel(preview, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12), justify='left', wraplength=650)
+        self.preview_label.grid(row=2, column=1, sticky='ew', pady=(5, 0))
+        self._button(preview, 'Analyze', self.run_preview_temp, secondary=True, maintenance=True, width=112).grid(row=0, column=2, rowspan=4, padx=(12, 14), pady=12)
+        self.cleanup_reasons_button = self._button(preview, 'View reasons', self._show_cleanup_diagnostics, secondary=True, width=112, height=24)
+        self.cleanup_reasons_button.grid(row=3, column=1, sticky='w', pady=(3, 12))
+        self.cleanup_reasons_button.configure(state='normal' if self.__dict__.get('_cleanup_diagnostics') else 'disabled')
+        preview.bind('<Configure>', lambda event: self.preview_label.configure(wraplength=max(100, event.width / self.preview_label._get_widget_scaling() - 210)))
+        actions = self._card(body)
+        actions.pack(fill='x')
+        self.btn_clean_temp = self._action_row(actions, 'Delete temporary files', 'No analysis required · permanent deletion after confirmation', 'Clean now', self.run_clean_temp, maintenance=True)
+        self.btn_empty_bin = self._action_row(actions, 'Recycle Bin', 'Permanently empty all items · confirmation required', 'Empty bin', self.run_empty_recycle, maintenance=True)
+        self._action_row(actions, 'Component store', 'Windows removes superseded components.', 'Clean store', self.run_deep_clean, maintenance=True)
+        self._action_row(actions, 'Windows Disk Cleanup', 'Choose categories in the Windows utility.', 'Open utility', self.run_cleanmgr)
+        self._section_log(body, 'clean_log', 'Cleanup details')
 
     def _setup_disk_frame(self):
-        self.frame_disk.grid_columnconfigure(0, weight=1)
-        # Only row 4 (log) expands
-        self.frame_disk.grid_rowconfigure(4, weight=1)
-        
-        ctk.CTkLabel(self.frame_disk, text="Disk Optimization", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(10, 5), sticky="w")
-        
-        # Compact drive selection using regular Frame (not scrollable) with horizontal layout
-        drive_row = ctk.CTkFrame(self.frame_disk, fg_color="transparent")
-        drive_row.grid(row=1, column=0, padx=20, pady=5, sticky="w")
-        
-        ctk.CTkLabel(drive_row, text="Select Drive:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 10))
-        
-        self.selected_drive = tk.StringVar()
-        self.drive_menu = ctk.CTkOptionMenu(drive_row, variable=self.selected_drive, values=["Loading..."], width=120)
-        self.drive_menu.pack(side="left", padx=(0, 10))
-        
-        d_base, d_hover = self.col_disk_tuple
-        ctk.CTkButton(drive_row, text="Refresh", fg_color=d_base, hover_color=d_hover, width=80, command=self.refresh_drives).pack(side="left")
-        
-        # Action buttons in a horizontal row
-        btn_row = ctk.CTkFrame(self.frame_disk, fg_color="transparent")
-        btn_row.grid(row=2, column=0, padx=20, pady=5, sticky="w")
-        
-        ctk.CTkButton(btn_row, text="Run Optimization (Defrag/Trim)", fg_color=d_base, hover_color=d_hover, command=self.run_optimize_drive).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_row, text="Open Windows Defrag GUI", fg_color=d_base, hover_color=d_hover, command=self.run_dfrgui).pack(side="left")
-        
-        # Log takes remaining space
-        self.disk_log = self._create_log_textbox(self.frame_disk)
-        self.disk_log.grid(row=4, column=0, padx=20, pady=10, sticky="nsew")
-        
-        self.refresh_drives()
+        body = self._section_body(self.frame_disk, 'Disk', 'Optimize a local drive with the method selected by Windows.')
+        card = self._card(body)
+        card.pack(fill='x', pady=(0, 8))
+        row = ctk.CTkFrame(card, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=12)
+        ctk.CTkLabel(row, text='', image=self.icons_active['disk'], width=28).pack(side='left', padx=(0, 8))
+        self.selected_drive = tk.StringVar(value='Loading…')
+        self.drive_menu = ctk.CTkOptionMenu(row, variable=self.selected_drive, values=['Loading…'], command=self._drive_selected, width=112, fg_color=SURFACE_ALT, button_color=BORDER, font=self._font(13))
+        self.drive_menu.pack(side='left')
+        self.drive_menu._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
+        self.drive_menu.bind('<Down>', lambda event: self._cycle_drive(1))
+        self.drive_menu.bind('<Up>', lambda event: self._cycle_drive(-1))
+        self._button(row, 'Refresh', self.refresh_drives, secondary=True, width=85).pack(side='right')
+        self.drive_detail = ctk.CTkLabel(card, text='Reading local drives…', anchor='w', justify='left', font=self._font(13), text_color=MUTED, wraplength=650)
+        self.drive_detail.pack(fill='x', padx=14, pady=(0, 10))
+        self.drive_capacity = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
+        self.drive_capacity.set(0)
+        self.drive_capacity.pack(fill='x', padx=14, pady=(0, 14))
+        self.btn_optimize_drive = self._action_row(card, 'Optimize selected drive', 'Windows chooses TRIM or defragmentation. May take several minutes.', 'Optimize', self.run_optimize_drive, maintenance=True)
+        windows = self._card(body)
+        windows.pack(fill='x')
+        self._action_row(windows, 'Windows drive optimization', 'View schedules and drive health in Windows.', 'Open utility', self.run_dfrgui)
+        self._section_log(body, 'disk_log', 'Optimization output')
+        self._set_drives(self.__dict__.get('_drive_info', [{'letter': value} for value in self._drive_values]))
 
     def _setup_tools_frame(self):
-        self.frame_tools.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.frame_tools, text="Advanced Tools", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
-        container = ctk.CTkScrollableFrame(self.frame_tools)
-        container.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        self.frame_tools.grid_rowconfigure(1, weight=1)
-        
-        t_base, t_hover = self.col_tools
-        
-        grp1 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
-        grp1.pack(fill="x", pady=8)
-        ctk.CTkLabel(grp1, text="System Integrity", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
-        self._add_tool_btn(grp1, "Run SFC Scan", "Scans system files.", "sfc /scannow", "SFC", t_base, t_hover)
-        self._add_tool_btn(grp1, "Check Health (DISM)", "Checks system image.", "DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", t_base, t_hover)
-        self._add_tool_btn(grp1, "Restore Health (DISM)", "Repairs system image.", "DISM /Online /Cleanup-Image /RestoreHealth", "DISM Restore", t_base, t_hover)
+        body = self._section_body(self.frame_tools, 'Tools', 'Choose one diagnostic or repair. Changes require confirmation.')
+        for title, entries in [
+            ('WINDOWS INTEGRITY', [('System file scan', 'Verify and repair protected files.', 'sfc /scannow', 'SFC scan'), ('Image health', 'Check the component image for recorded corruption.', 'DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check'), ('Repair image', 'Repair corruption; may use Windows Update.', 'DISM /Online /Cleanup-Image /RestoreHealth', 'DISM repair')]),
+            ('NETWORK', [('Flush DNS', 'Clear cached DNS records.', 'ipconfig /flushdns', 'DNS flush'), ('Reset Winsock', 'May interrupt connections and require a restart.', 'netsh winsock reset', 'Network reset')])]:
+            ctk.CTkLabel(body, text=title, height=18, text_color=COL_GOLD, font=self._font(10, True), anchor='w').pack(fill='x', pady=(4, 3), padx=2)
+            card = self._card(body)
+            card.pack(fill='x', pady=(0, 4))
+            for text, detail, command, name in entries:
+                self._add_tool_btn(card, text, detail, command, name)
+        row = ctk.CTkFrame(body, fg_color='transparent')
+        row.pack(fill='x', pady=(6, 0))
+        self._button(row, 'Restore point', self.run_create_restore, secondary=True, maintenance=True).pack(side='left', padx=(0, 8))
+        self._button(row, 'Battery report', self.run_battery_report, secondary=True, maintenance=True).pack(side='left')
+        self._section_log(body, 'tools_log', 'Command output')
 
-        grp2 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
-        grp2.pack(fill="x", pady=8)
-        ctk.CTkLabel(grp2, text="Network Tools", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
-        self._add_tool_btn(grp2, "Flush DNS", "Clears DNS cache.", "ipconfig /flushdns", "DNS", t_base, t_hover)
-        self._add_tool_btn(grp2, "Reset Winsock", "Resets network adapter.", "netsh winsock reset", "Winsock", t_base, t_hover)
-
-        grp3 = ctk.CTkFrame(container, border_width=1, border_color="#2a2a2a")
-        grp3.pack(fill="x", pady=8)
-        ctk.CTkLabel(grp3, text="Power & Backup", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
-        ctk.CTkButton(grp3, text="Generate Battery Report", fg_color=t_base, hover_color=t_hover, command=self.run_battery_report).pack(fill="x", padx=10, pady=5)
-        ctk.CTkButton(grp3, text="Create Restore Point (Now)", fg_color=t_base, hover_color=t_hover, command=self.run_create_restore).pack(fill="x", padx=10, pady=5)
-
-        # Tools Execution Log
-        ctk.CTkLabel(self.frame_tools, text="Execution Log", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").grid(row=2, column=0, padx=20, pady=(5, 0), sticky="w")
-        
-        self.tools_log = self._create_log_textbox(self.frame_tools)
-        self.tools_log.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
-        
-        self.frame_tools.grid_rowconfigure(3, weight=1)
-
-    def _add_tool_btn(self, parent, text, desc, cmd, name, col, hover_col):
-        f = ctk.CTkFrame(parent, fg_color="transparent")
-        f.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(f, text=desc, width=200, anchor="w").pack(side="left")
-        ctk.CTkButton(f, text=text, fg_color=col, hover_color=hover_col, command=lambda: self.run_cmd(cmd, name)).pack(side="right", fill="x", expand=True)
-
-    def log_tools_msg(self, msg):
-        self._log_to_widget(self.tools_log, msg)
+    def _add_tool_btn(self, parent, text, desc, cmd, name):
+        return self._action_row(parent, text, desc, 'Run', lambda: self.run_cmd(cmd, name), maintenance=True)
 
     def _setup_apps_frame(self):
-        self.frame_apps.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(self.frame_apps, text="App Management", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
-        frame = ctk.CTkFrame(self.frame_apps)
-        frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        
-        a_base, a_hover = self.col_apps
-        
-        ctk.CTkLabel(frame, text="Uninstall Programs", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=10)
-        ctk.CTkButton(frame, text="Open Settings (Apps)", fg_color=a_base, hover_color=a_hover, command=lambda: self.run_launch("start ms-settings:appsfeatures", "Settings")).pack(fill="x", padx=20, pady=5)
-        ctk.CTkButton(frame, text="Open Control Panel", fg_color=a_base, hover_color=a_hover, command=lambda: self.run_launch("control appwiz.cpl", "Control Panel")).pack(fill="x", padx=20, pady=5)
-        ctk.CTkLabel(frame, text="Startup", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=10)
-        ctk.CTkButton(frame, text="Manage Startup Apps", fg_color=a_base, hover_color=a_hover, command=lambda: self.run_launch("start ms-settings:startupapps", "Startup")).pack(fill="x", padx=20, pady=5)
+        body = self._section_body(self.frame_apps, 'Apps', 'Manage software and startup behavior in Windows.')
+        for title, detail, actions, icon in [
+            ('Installed apps', 'Review storage use, repair or uninstall apps.', [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps'),
+            ('Startup apps', 'Choose what runs when you sign in.', [('Startup settings', 'ms-settings:startupapps')], 'turbo')]:
+            card = self._card(body)
+            card.pack(fill='x', pady=(0, 10))
+            heading = ctk.CTkFrame(card, fg_color='transparent')
+            heading.pack(fill='x', padx=16, pady=(14, 4))
+            ctk.CTkLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
+            ctk.CTkLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
+            ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
+            row = ctk.CTkFrame(card, fg_color='transparent')
+            row.pack(fill='x', padx=16, pady=(0, 14))
+            for text, uri in actions:
+                self._button(row, text, lambda u=uri, t=text: self.run_launch(u, t), secondary=True, width=150).pack(side='left', padx=(0, 8))
+        self.apps_status = ctk.CTkLabel(body, text='Windows handles app changes. Return here when finished.', font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
+        self.apps_status.pack(fill='x', padx=2, pady=5)
 
     def _setup_turbo_frame(self):
-        self.frame_turbo.grid_columnconfigure(0, weight=1)
-        
-        ctk.CTkLabel(self.frame_turbo, text="Turbo Mode", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
-        ctk.CTkLabel(self.frame_turbo, text="Toggle performance settings. Changes apply immediately.", font=ctk.CTkFont(size=12), text_color="gray").grid(row=1, column=0, padx=20, pady=(0, 10), sticky="w")
-        
-        container = ctk.CTkScrollableFrame(self.frame_turbo)
-        container.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
-        self.frame_turbo.grid_rowconfigure(2, weight=1)
-        
-        # Store toggle variables
-        self.turbo_vars = {}
-        self.turbo_switches = {}
-        
-        # Master Toggle
-        master_frame = ctk.CTkFrame(container, fg_color="#00BCD4", corner_radius=10)
-        master_frame.pack(fill="x", pady=(0, 15))
-        ctk.CTkLabel(master_frame, text="MASTER TOGGLE", font=ctk.CTkFont(size=14, weight="bold"), text_color="black").pack(side="left", padx=15, pady=10)
-        self.master_switch = ctk.CTkSwitch(master_frame, text="Enable All", text_color="black", 
-                                           command=self._master_toggle_changed)
-        self.master_switch.pack(side="right", padx=15, pady=10)
-        
-        # Individual toggles config: (key, label, description, get_func, set_func_on, set_func_off)
-        toggle_config = [
-            ("power", "High Performance Power Plan", "Switch from Balanced to High Performance", 
-             lambda: self.perf_mgr.get_power_plan() == "high",
-             lambda: self.perf_mgr.set_power_plan(True),
-             lambda: self.perf_mgr.set_power_plan(False)),
-            ("visual", "Disable Visual Effects", "Turn off animations, shadows, transparency",
-             lambda: not self.perf_mgr.get_visual_effects(),
-             lambda: self.perf_mgr.set_visual_effects(False),
-             lambda: self.perf_mgr.set_visual_effects(True)),
-            ("sysmain", "Disable SysMain (Superfetch)", "Stop app pre-loading service",
-             lambda: not self.perf_mgr.get_sysmain_status(),
-             lambda: self.perf_mgr.set_sysmain(False),
-             lambda: self.perf_mgr.set_sysmain(True)),
-            ("wsearch", "Disable Windows Search", "Stop background indexing",
-             lambda: not self.perf_mgr.get_wsearch_status(),
-             lambda: self.perf_mgr.set_wsearch(False),
-             lambda: self.perf_mgr.set_wsearch(True)),
-            ("spooler", "Disable Print Spooler", "Stop print service (if no printer)",
-             lambda: not self.perf_mgr.get_spooler_status(),
-             lambda: self.perf_mgr.set_spooler(False),
-             lambda: self.perf_mgr.set_spooler(True)),
-        ]
-        
-        self.turbo_getters = {}
-        for key, label, desc, get_fn, on_fn, off_fn in toggle_config:
-            self.turbo_getters[key] = get_fn
-            self._create_turbo_toggle(container, key, label, desc, get_fn, on_fn, off_fn)
+        body = self._section_body(self.frame_turbo, 'Turbo', 'Original settings are saved before changes and restored when turned off.')
+        self.turbo_vars, self.turbo_switches = {}, {}
+        master = self._card(body)
+        master.pack(fill='x', pady=(0, 8))
+        row = ctk.CTkFrame(master, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=(10, 5))
+        ctk.CTkLabel(row, text='All settings', font=self._font(15, True)).pack(side='left')
+        self.master_var = tk.BooleanVar(value=False)
+        self.master_switch = ctk.CTkSwitch(row, text='Loading…', variable=self.master_var, state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_GOLD)
+        self.master_switch.pack(side='right')
+        self._keyboard_switch(self.master_switch)
+        self.turbo_saved_label = ctk.CTkLabel(master, text='Reading saved originals…', height=18, font=self._font(11), text_color=MUTED, anchor='w', wraplength=600)
+        self.turbo_saved_label.pack(fill='x', padx=14, pady=(0, 8))
+        actions = ctk.CTkFrame(master, fg_color='transparent')
+        actions.pack(fill='x', padx=14, pady=(0, 10))
+        self.btn_restore_turbo = self._button(actions, 'Restore saved settings', self._restore_saved_turbo, secondary=True, maintenance=True)
+        self.btn_restore_turbo.pack(side='left')
+        self._button(actions, 'Refresh state', self._load_turbo_states, secondary=True, width=112).pack(side='right')
+        card = self._card(body)
+        card.pack(fill='x')
+        config = [('power', 'High performance', 'More power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Visual effects preset', 'Save the Windows performance preference.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Pause application preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Pause background indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
+        for key, title, desc, on_fn, off_fn in config:
+            row = ctk.CTkFrame(card, fg_color='transparent')
+            row.pack(fill='x', padx=14, pady=5)
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew')
+            detail = ctk.CTkLabel(row, text=desc, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+            detail.grid(row=1, column=0, sticky='ew')
+            var = tk.BooleanVar(value=False)
+            switch = ctk.CTkSwitch(row, text='Unknown', variable=var, state='disabled', font=self._font(11), width=125, progress_color=COL_GOLD, command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
+            switch.grid(row=0, column=1, rowspan=2, padx=(12, 0))
+            self._keyboard_switch(switch)
+            self.turbo_vars[key], self.turbo_switches[key] = var, switch
+            row.bind('<Configure>', lambda event, label=detail: label.configure(wraplength=max(120, event.width / label._get_widget_scaling() - 150)))
+        if self._turbo_states:
+            self._apply_turbo_states((self._turbo_states, self._turbo_master))
+        self._apply_saved_turbo(self.__dict__.get('_turbo_saved'))
 
-        # Initial state load (in background to avoid blocking)
-        threading.Thread(target=self._load_turbo_states, daemon=True).start()
+    RESURRECTION_STEPS = ('Restore point', 'Browser caches', 'Temporary files', 'Recycle Bin', 'DNS cache',
+                          'Network reset', 'Drive optimization', 'Disk health scan', 'Windows image health', 'System file scan')
 
-    def _create_turbo_toggle(self, parent, key, label, desc, get_fn, on_fn, off_fn):
-        frame = ctk.CTkFrame(parent, border_width=1, border_color="#2a2a2a")
-        frame.pack(fill="x", pady=4)
-        
-        left = ctk.CTkFrame(frame, fg_color="transparent")
-        left.pack(side="left", fill="x", expand=True, padx=10, pady=10)
-        ctk.CTkLabel(left, text=label, font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w")
-        ctk.CTkLabel(left, text=desc, font=ctk.CTkFont(size=11), text_color="gray").pack(anchor="w")
-        
-        var = tk.BooleanVar(value=False)
-        self.turbo_vars[key] = var
-        
-        switch = ctk.CTkSwitch(frame, text="", variable=var, 
-                               command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
-        switch.pack(side="right", padx=15, pady=10)
-        self.turbo_switches[key] = switch
+    def _setup_resurrect_frame(self):
+        body = self._section_body(self.frame_resurrect, 'Resurrection', '10 steps · Verified restore point required')
+        card = self._card(body)
+        card.pack(fill='x', pady=(0, 6))
+        self.lbl_status = ctk.CTkLabel(card, text='Ready · No steps run', height=22, font=self._font(15, True), anchor='w', justify='left')
+        self.lbl_status.pack(fill='x', padx=14, pady=(8, 4))
+        self.progress_bar = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(fill='x', padx=14, pady=(0, 6))
+        row = ctk.CTkFrame(card, fg_color='transparent')
+        row.pack(fill='x', padx=14, pady=(0, 8))
+        self.btn_resurrect_start = self._button(row, 'Start sequence', self.run_god_mode, maintenance=True)
+        self.btn_resurrect_start.pack(side='right')
+        self.btn_resurrect_cancel = self._button(row, 'Cancel after step', self._cancel_resurrect, secondary=True)
+        warning = ctk.CTkLabel(body, text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.', height=28, text_color=COL_WARNING, font=self._font(10), anchor='w', justify='left', wraplength=650)
+        warning.pack(fill='x', padx=2, pady=(0, 6))
+        card.bind('<Configure>', lambda event: (
+            warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 4)),
+            self.lbl_status.configure(wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 28)),
+        ))
+        timeline = ctk.CTkFrame(body, fg_color='transparent')
+        timeline.pack(fill='x')
+        timeline.grid_columnconfigure((0, 1), weight=1, uniform='phases')
+        self._resurrection_rows = {}
+        for index, name in enumerate(self.RESURRECTION_STEPS):
+            phase = self._card(timeline)
+            phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
+            phase.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=28).grid(row=0, column=0, padx=(6, 4), pady=4)
+            display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
+            ctk.CTkLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
+            status = ctk.CTkLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
+            status.grid(row=0, column=2, padx=(4, 10))
+            self._resurrection_rows[name] = status
+        self._section_log(body, 'god_log', 'Full sequence output')
+        for name, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
+            self._set_resurrection_step(name, state, detail)
 
-    def _load_turbo_states(self):
-        for key, var in self.turbo_vars.items():
+    def _create_log_textbox(self, parent, height=150):
+        log = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(family='Consolas', size=12), fg_color='#121820', text_color=TEXT, border_width=1, border_color=BORDER, corner_radius=6, wrap='word')
+        for tag, color in [('info', TEXT), ('head', COL_BLUE), ('warn', COL_WARNING), ('err', COL_RED)]:
+            log.tag_config(tag, foreground=color)
+        log.configure(state='disabled')
+        return log
+
+    def _log_to_widget(self, widget, msg, level='info'):
+        self.dispatcher.post(self._append_log, widget, str(msg)[:4000], level)
+
+    def _append_log(self, widget, msg, level):
+        widget.configure(state='normal')
+        widget.insert(tk.END, msg + '\n', level)
+        lines = int(widget.index('end-1c').split('.')[0])
+        if lines > self.LOG_LINES:
+            widget.delete('1.0', f'{lines - self.LOG_LINES + 1}.0')
+        widget.see(tk.END)
+        widget.configure(state='disabled')
+
+    def log_msg(self, msg):
+        self._log_section('clean_log', msg)
+
+    def log_disk_msg(self, msg):
+        self._log_section('disk_log', msg)
+
+    def log_tools_msg(self, msg):
+        self._log_section('tools_log', msg)
+
+    def log_god_msg(self, msg, level='info'):
+        self._log_section('god_log', msg, level)
+
+    def _log_section(self, attribute, msg, level='info'):
+        self.dispatcher.post(self._append_section_log, attribute, str(msg)[:4000], level)
+
+    def _append_section_log(self, attribute, msg, level):
+        widget = self.__dict__.get(attribute)
+        if widget is None:
+            self._pending_logs.setdefault(attribute, deque(maxlen=self.LOG_LINES)).append((msg, level))
+        else:
+            self._append_log(widget, msg, level)
+
+    def _flush_section_log(self, attribute):
+        for msg, level in self._pending_logs.pop(attribute, ()):
+            self._append_log(self.__dict__[attribute], msg, level)
+
+    def _drain_callbacks(self):
+        if self._shutdown.is_set():
+            return
+        self.dispatcher.drain(100)
+        if not self._shutdown.is_set():
+            self.after(30, self._drain_callbacks)
+
+    def _set_maintenance_state(self, busy):
+        busy = busy or self.__dict__.get('_maintenance_uncertain', False)
+        for button in self._maintenance_controls:
+            button.configure(state='disabled' if busy else 'normal')
+        for key, switch in self.__dict__.get('turbo_switches', {}).items():
+            switch.configure(state='disabled' if busy or self.__dict__.get('_turbo_refreshing') or self._turbo_states.get(key) is None else 'normal')
+        if 'master_switch' in self.__dict__:
+            self.master_switch.configure(state='disabled' if busy or self.__dict__.get('_turbo_refreshing') or self._turbo_master is None else 'normal')
+        if 'btn_restore_turbo' in self.__dict__:
+            self.btn_restore_turbo.configure(state='normal' if not busy and self.__dict__.get('_turbo_saved') else 'disabled')
+        if 'btn_optimize_drive' in self.__dict__:
+            self._drive_selected()
+
+    def _request_operation(self, name, work, on_success=None, on_done=None, *, output=None, on_error=None):
+        if self.__dict__.get('_maintenance_uncertain'):
+            guard = self.__dict__.get('maintenance_guard')
+            message = guard.last_error if guard is not None else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.'
+            self._show_toast('Command state unknown', message, 'warning')
+            return False
+        if self._update_installing or self._update_downloading or self.workers.busy():
+            self._show_toast('Operation in progress', 'Wait for the current operation to finish.', 'warning')
+            return False
+        def done():
+            self._set_maintenance_state(False)
+            if on_done:
+                on_done()
+            elif self.__dict__.get('_turbo_refresh_pending'):
+                self._load_turbo_states()
+            if self.__dict__.get('_close_when_idle'):
+                self._on_close()
+        def error(exc):
+            self.operation_label.configure(text=f'Failed · {name}: {exc}', text_color=COL_RED)
+            self._show_toast(f'{name} failed', str(exc), 'error')
+            if output:
+                self._log_section(output, f'{name} failed: {exc}', 'err')
+            if on_error:
+                on_error(exc)
+            if name == 'Resurrection':
+                for step, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
+                    if state == 'running':
+                        self._set_resurrection_step(step, 'failed', str(exc))
+                self.lbl_status.configure(text='Failed · See sequence output', text_color=COL_RED)
+            show_uncertainty()
+        def completion_unknown():
+            return any(getattr(manager, 'completion_unknown', False) is True for manager in (self.cmd_runner, self.disk_opt))
+        def guarded_work():
             try:
-                get_fn = self.turbo_getters.get(key)
-                state = get_fn() if get_fn else False
-                self.after(0, lambda v=var, s=state: v.set(s))
-            except Exception:
-                pass
+                return work()
+            finally:
+                guard = self.__dict__.get('maintenance_guard')
+                if completion_unknown() and guard is not None:
+                    guard.mark_unknown()
+        def show_uncertainty():
+            if completion_unknown():
+                self._maintenance_uncertain = True
+                guard = self.__dict__.get('maintenance_guard')
+                message = guard.last_error if guard is not None else 'Command completion unknown · Restart Windows before further maintenance'
+                self.operation_label.configure(text=f'Stopped · {message}', text_color=COL_WARNING)
+        def delivered(result):
+            if completion_unknown():
+                self._maintenance_uncertain = True
+            if on_success:
+                on_success(result)
+            show_uncertainty()
+        started = self.workers.start(name, guarded_work, on_success=delivered, on_error=error, on_done=done)
+        if started:
+            if output:
+                self._open_operation_output(output)
+            self._set_maintenance_state(True)
+            self.operation_label.configure(text=f'Running · {name}', text_color=MUTED)
+        return started
 
-    def _turbo_toggle_changed(self, key, on_fn, off_fn):
-        state = self.turbo_vars[key].get()
-        def task():
-            try:
-                result = on_fn() if state else off_fn()
-                # If result is a tuple (success, msg), check success
-                if isinstance(result, tuple) and not result[0]:
-                    self.after(0, lambda: self.turbo_vars[key].set(not state))
-                    self.after(0, lambda: self._show_toast("Toggle Failed", str(result[1]), "error"))
-            except Exception as e:
-                self.after(0, lambda: self.turbo_vars[key].set(not state))
-                self.after(0, lambda: self._show_toast("Toggle Failed", str(e), "error"))
-        threading.Thread(target=task, daemon=True).start()
+    def _show_result(self, name, result):
+        success, message = result
+        self.operation_label.configure(text=f'{"Completed" if success else "Failed / partial"} · {name}: {message}', text_color=COL_SUCCESS if success else COL_WARNING)
+        self._show_toast(name, message, 'success' if success else 'warning')
 
-    def _master_toggle_changed(self):
-        state = self.master_switch.get()
-        
-        # Update all toggle variables
-        for key, var in self.turbo_vars.items():
-            var.set(state)
-        
-        # Apply all changes in background
-        def apply_all():
-            if state:
-                # Enable all turbo settings
-                self.perf_mgr.set_power_plan(True)
-                self.perf_mgr.set_visual_effects(False)
-                self.perf_mgr.set_sysmain(False)
-                self.perf_mgr.set_wsearch(False)
-                self.perf_mgr.set_spooler(False)
-            else:
-                # Disable all turbo settings (restore defaults)
-                self.perf_mgr.set_power_plan(False)
-                self.perf_mgr.set_visual_effects(True)
-                self.perf_mgr.set_sysmain(True)
-                self.perf_mgr.set_wsearch(True)
-                self.perf_mgr.set_spooler(True)
-        threading.Thread(target=apply_all, daemon=True).start()
+    def _show_logged_result(self, name, result, output):
+        self._log_section(output, f'{name}: {"completed" if result[0] else "failed / partial"} · {result[1]}')
+        self._show_result(name, result)
 
     def update_dashboard(self):
-        if not self._dashboard_lock.acquire(blocking=False):
+        if self._shutdown.is_set():
             return
-        threading.Thread(target=self._update_data_thread, daemon=True).start()
+        self.workers.start('metrics', self.monitor.sample_fast, group='metrics', on_success=self._update_fast_gui, on_error=lambda exc: self.operation_label.configure(text=f'Metrics unavailable: {exc}'), on_done=lambda: self.after(3000, self.update_dashboard))
 
-    def _update_data_thread(self):
-        try:
-            os_info = self.monitor.get_os_info()
-            cpu_name = self.monitor.get_cpu_info()
-            uptime = self.monitor.get_system_uptime()
-            t_ram, a_ram, p_ram = self.monitor.get_ram_usage()
-            t_disk, f_disk, p_disk = self.monitor.get_disk_usage()
-            cpu_usage = self.monitor.get_cpu_usage()
-            bat_perc, bat_plug = self.monitor.get_battery_status()
-            # Fetch slow cached data on background thread (not UI thread)
-            ram_info = self.monitor.get_ram_info()
-            disk_model = self.monitor.get_disk_model()
-            self.after(0, lambda: self._update_gui(os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug, ram_info, disk_model))
-        except Exception as e:
-            self.logger.log(f"Dashboard update error: {e}", "WARNING")
-        finally:
-            self._dashboard_lock.release()
-        if not self._shutdown.is_set():
-            self.after(3000, self.update_dashboard)
-        
+    def _load_metadata(self):
+        if self._shutdown.is_set():
+            return
+        self.workers.start('hardware', self.monitor.sample_metadata, group='hardware', on_success=self._update_metadata_gui, on_done=lambda: self.after(120000, self._load_metadata))
+
+    def _update_fast_gui(self, sample):
+        self.dash_uptime_val.configure(text=f"Uptime: {sample['uptime']}")
+        cpu = sample['cpu']
+        self.dash_cpu_val.configure(text='—' if cpu is None else f'{cpu:.1f}%')
+        if cpu is not None:
+            self.cpu_graph.add_value(cpu)
+        if sample['ram'] is None:
+            self.dash_ram_perc.configure(text='—', text_color=MUTED)
+            self.dash_ram_val.configure(text='Memory unavailable')
+        else:
+            total_ram, available_ram, ram_percent = sample['ram']
+            self.ram_graph.add_value(ram_percent)
+            self.dash_ram_val.configure(text=f'{total_ram - available_ram:.1f} GB used / {total_ram:.1f} GB')
+            self.dash_ram_perc.configure(text=f'{ram_percent:.1f}%', text_color=COL_WARNING if ram_percent >= 90 else TEXT)
+        if sample['disk'] is None:
+            self.dash_disk_bar.set(0)
+            self.dash_disk_bar.configure(progress_color=MUTED)
+            self.dash_disk_state.configure(text='Unavailable', text_color=COL_WARNING)
+            self.dash_disk_val.configure(text='Drive information unavailable')
+            self.dash_disk_perc.configure(text='—', text_color=MUTED)
+        else:
+            total_disk, free_disk, disk_percent = sample['disk']
+            self.dash_disk_bar.set(max(0, min(1, disk_percent / 100)))
+            disk_color = COL_RED if disk_percent >= 95 else COL_WARNING if disk_percent >= 85 else COL_GOLD
+            self.dash_disk_bar.configure(progress_color=disk_color)
+            self.dash_disk_state.configure(text='Low free space' if disk_percent >= 90 else 'Space available', text_color=disk_color if disk_percent >= 85 else MUTED)
+            self.dash_disk_val.configure(text=f'{free_disk:.1f} GB free / {total_disk:.1f} GB')
+            self.dash_disk_perc.configure(text=f'{disk_percent:.1f}% used', text_color=disk_color if disk_percent >= 85 else TEXT)
+        percent, power = sample['battery']
+        self.dash_battery.configure(text=f'Power: {power}' if percent is None else f'Battery: {percent}% · {power}')
+
+    def _update_metadata_gui(self, sample):
+        self.dash_os.configure(text=sample['os'])
+        cpu_name = (sample['cpu_name'] or 'Processor details unavailable').splitlines()[0]
+        # Keep the card compact; full diagnostics still come from the Windows system.
+        self.dash_cpu_name.configure(text=cpu_name.split(' with ')[0].split(' @ ')[0])
+        self.dash_ram_info.configure(text=sample['ram_info'] or 'Memory details unavailable')
+        self.dash_disk_info.configure(text=sample['disk_model'] or 'Disk details unavailable')
+
     def _check_updates_thread(self):
-        try:
-            mandatory, optional, status = self.monitor.get_windows_update_status()
-            self.after(0, lambda: self._update_updates_gui(mandatory, optional, status))
-        except Exception:
-            self.after(0, lambda: self._update_updates_gui(-1, -1, "Check Failed"))
+        self.workers.start('windows-updates', self.monitor.get_windows_update_status, group='windows-updates', on_success=lambda result: self._update_updates_gui(*result), on_error=lambda exc: self._update_updates_gui(-1, -1, 'Check failed'))
 
     def _update_updates_gui(self, mandatory, optional, status):
-        # Hide button row first
-        self.btn_update_row.pack_forget()
-        self.btn_run_update.pack_forget()
-        self.btn_view_optional.pack_forget()
-        
-        if mandatory > 0 or optional > 0:
-            # Hide status label, show buttons
-            self.lbl_update_status.pack_forget()
-            self.btn_update_row.pack(pady=(10, 5), before=self.dash_uptime_val)
-            
-            if mandatory > 0:
-                self.btn_run_update.configure(text=f"Install Required ({mandatory})")
-                self.btn_run_update.pack(side="left", padx=5)
-            
-            if optional > 0:
-                self.btn_view_optional.configure(text=f"View Optional ({optional})")
-                self.btn_view_optional.pack(side="left", padx=5)
-        elif mandatory == 0 and optional == 0:
-            # System is up to date
-            self.lbl_update_status.configure(text="✓ System is up to date", text_color="#4CAF50")
+        self.lbl_update_status.configure(text=str(status), text_color=COL_SUCCESS if mandatory == optional == 0 else COL_WARNING if mandatory > 0 or optional > 0 else MUTED)
+
+    def refresh_drives(self):
+        def failed(exc):
+            self._set_drives([])
+            self.log_disk_msg(f'Drive query failed: {exc}')
+            if 'drive_detail' in self.__dict__:
+                self.drive_detail.configure(text=f'Drive information unavailable: {exc}', text_color=COL_WARNING)
+        self.workers.start('drive-list', self.disk_opt.get_drive_info, group='drive-list', on_success=self._set_drives, on_error=failed)
+
+    def _set_drives(self, drives):
+        self._drive_info = list(drives)
+        values = [str(drive['letter']) for drive in drives]
+        self._drive_values = values
+        if 'drive_menu' not in self.__dict__:
+            return
+        self.drive_menu.configure(values=values or ['No drives'])
+        if self.selected_drive.get() not in values:
+            self.selected_drive.set(values[0] if values else 'No drives')
+        self.drive_menu.configure(state='normal' if values else 'disabled')
+        self._drive_selected()
+
+    def _drive_selected(self, value=None):
+        selected = value or self.selected_drive.get()
+        info = next((row for row in self.__dict__.get('_drive_info', ()) if row['letter'] == selected), None)
+        available = info is not None and info.get('available', True)
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
+        self.btn_optimize_drive.configure(state='normal' if available and not busy else 'disabled')
+        if not available:
+            text = 'No available local drive' if info is None else f"{selected} · Unavailable: {info.get('error', 'Cannot read drive')}"
+        elif info.get('total_bytes'):
+            text = f"{selected} · {info.get('type', 'Local')} drive · {info['free_bytes'] / 1024**3:.1f} GB free / {info['total_bytes'] / 1024**3:.1f} GB"
         else:
-            # Check failed
-            self.lbl_update_status.configure(text="Update check failed", text_color="gray")
+            text = f'{selected} · Capacity unavailable'
+        self.drive_detail.configure(text=text, text_color=MUTED if available else COL_WARNING)
+        if 'drive_capacity' in self.__dict__:
+            self.drive_capacity.set(max(0, min(1, (info.get('used_percent') or 0) / 100)) if info else 0)
+
+    def _cycle_drive(self, direction):
+        if self.drive_menu.cget('state') == 'disabled' or not self._drive_values:
+            return
+        current = self.selected_drive.get()
+        index = self._drive_values.index(current) if current in self._drive_values else 0
+        value = self._drive_values[(index + direction) % len(self._drive_values)]
+        self.selected_drive.set(value)
+        self._drive_selected(value)
+
+    def _set_preview_status(self, message, color=MUTED):
+        """Keep the same preview result visible from Dashboard and Cleanup."""
+        self._preview_summary = str(message)
+        for name in ('dash_preview_status', 'preview_label'):
+            widget = self.__dict__.get(name)
+            if widget is not None:
+                settings = {'text': self._preview_summary, 'text_color': color}
+                widget.configure(**settings)
+
+    def run_preview_temp(self):
+        previous = getattr(self, '_preview_summary', 'Not scanned yet')
+        before = self.cleanup_mgr.last_result
+        self._set_preview_status('Scanning temporary files… No files deleted', COL_GOLD)
+        def show(result):
+            count, size = result
+            self._show_temp_result(count, size, self.cleanup_mgr.last_result, preview=True)
+        started = self._request_operation(
+            'Temporary file analysis', lambda: self.cleanup_mgr.preview_temp_files(progress_callback=self.log_msg), show,
+            output='clean_log', on_error=lambda exc: self._show_temp_failure(exc, before, preview=True))
+        if started is False:
+            self._set_preview_status(previous)
+
+    def _show_temp_result(self, count, size, result, *, preview, state=None):
+        skipped = tuple(str(item) for item in getattr(result, 'skipped', ()))
+        errors = tuple(str(item) for item in getattr(result, 'errors', ()))
+        partial = bool(skipped or errors)
+        state = state or ('failed' if errors and not count else 'partial' if partial else 'completed')
+        title = f'{"Analysis" if preview else "Cleanup"} {state}'
+        if preview:
+            title += ' — No files deleted'
+        amount = f'{size / 1024**3:.2f} GB' if size >= 1024**3 else f'{size / 1024**2:.1f} MB'
+        totals = f'{count:,} candidates · about {amount} recoverable' if preview else f'{count:,} files deleted · {amount} freed'
+        issues = f'{len(skipped):,} skipped · {len(errors):,} errors'
+        color = COL_RED if state == 'failed' else COL_WARNING if partial else COL_SUCCESS
+        self._set_preview_status(f'{title}\n{totals}\n{issues}', color)
+        self.operation_label.configure(text=title, text_color=color)
+        labels = {'locked': 'In use (Windows sharing/lock violation)',
+                  'access_denied': 'Access denied by Windows', 'disappeared': 'No longer present',
+                  'reparse_point': 'Reparse points refused', 'hard_link': 'Hard links refused',
+                  'case_sensitive': 'Case-sensitive directories refused',
+                  'identity_unverified': 'Object identity could not be verified',
+                  'unapproved_root': 'Outside authorized paths',
+                  'unsupported_path': 'Unsupported path format', 'ambiguous_path': 'Ambiguous path refused',
+                  'unsupported_platform': 'Windows handle protection unavailable',
+                  'not_directory': 'Expected directory unavailable', 'not_regular': 'Nonregular objects refused',
+                  'location_unavailable': 'Temporary location could not be verified',
+                  'filesystem_error': 'Other filesystem errors', 'unexpected_error': 'Other recorded errors',
+                  'progress_callback': 'Progress reporting error', 'unknown': 'Other recorded reasons'}
+        counts = getattr(result, 'skipped_counts', {})
+        groups = [f'{labels.get(reason, reason)}: {value:,}' for reason, value in counts.items()]
+        # Snapshot all original records: the bounded live log is not the diagnostic archive.
+        self._cleanup_diagnostics = tuple([title, totals, issues, *groups,
+            *(f'SKIPPED · {item}' for item in skipped), *(f'ERROR · {item}' for item in errors)]) if partial else ()
+        button = self.__dict__.get('cleanup_reasons_button')
+        if button is not None:
+            button.configure(state='normal' if partial else 'disabled')
+        for line in (title, totals, issues, *groups):
+            self.log_msg(line)
+        if partial:
+            self.log_msg('View reasons: all original skipped/error details are available above.')
+
+    def _show_temp_failure(self, exc, before, *, preview):
+        current = self.cleanup_mgr.last_result
+        # Only a result created by this pass may supply actual progress totals.
+        result = CleanupResult(preview=preview)
+        if current is not before and getattr(current, 'preview', None) is preview:
+            result.count, result.bytes = current.count, current.bytes
+            result.skipped, result.errors = list(current.skipped), list(current.errors)
+            result.issues = list(getattr(current, 'issues', ()))
+        result.add_issue('error', None, exc)
+        self._show_temp_result(result.count, result.bytes, result, preview=preview,
+                               state='interrupted' if result.count else 'failed')
+
+    def _show_cleanup_diagnostics(self):
+        details = self.__dict__.get('_cleanup_diagnostics', ())
+        if not details:
+            return
+        dialog = ctk.CTkToplevel(self)
+        dialog.title('Temporary files · Reasons and original details')
+        dialog.geometry('820x480')
+        dialog.minsize(500, 300)
+        dialog.transient(self)
+        text = ctk.CTkTextbox(dialog, wrap='word', font=self._font(12))
+        text.pack(fill='both', expand=True, padx=12, pady=12)
+        text.insert('1.0', '\n'.join(details))
+        text.configure(state='disabled')
+        text._textbox.configure(takefocus=1)
+        dialog.bind('<Escape>', lambda event: dialog.destroy())
+        dialog.after(50, text.focus_set)
+
+    def run_clean_temp(self):
+        if not messagebox.askyesno('Clean temporary files now', 'Permanently delete eligible files in validated temporary folders?\n\nNo analysis is required. Files are checked as they are deleted; locked and protected items are skipped. Results may differ from an earlier analysis.\n\nDeletion cannot be undone through the Recycle Bin.', parent=self):
+            return
+        before = self.cleanup_mgr.last_result
+        self._request_operation('Temporary file cleanup',
+            lambda: self.cleanup_mgr.clean_temp_files(progress_callback=self.log_msg),
+            lambda result: self._show_temp_result(*result, self.cleanup_mgr.last_result, preview=False), output='clean_log',
+            on_error=lambda exc: self._show_temp_failure(exc, before, preview=False))
+
+    def run_empty_recycle(self):
+        if not messagebox.askyesno('Empty Recycle Bin', 'Permanently delete every item in the Recycle Bin?\nThese items cannot be recovered through the Recycle Bin.', parent=self):
+            return
+        self._request_operation('Empty Recycle Bin', self.cleanup_mgr.empty_recycle_bin, lambda result: self._show_logged_result('Recycle Bin', result, 'clean_log'), output='clean_log')
+
+    def run_cleanmgr(self):
+        try:
+            if self.cleanup_mgr.open_disk_cleanup() is not True:
+                raise RuntimeError('Windows Disk Cleanup could not be opened.')
+            self.operation_label.configure(text='Opened · Windows Disk Cleanup · Continue in Windows', text_color=MUTED)
+        except Exception as exc:
+            self._show_toast('Disk Cleanup', str(exc), 'error')
+
+    def run_deep_clean(self):
+        self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=self.log_msg, output='clean_log')
+
+    def run_optimize_drive(self):
+        letter = self.selected_drive.get()
+        import re
+        if not re.fullmatch(r'[A-Za-z]:', letter) or letter not in self._drive_values:
+            self._show_toast('Select a drive', 'Choose a valid drive letter.', 'warning')
+            return
+        if messagebox.askyesno('Optimize drive', f'Run Windows optimization on {letter}?\nThis operation can take several minutes.', parent=self):
+            self._request_operation('Drive optimization', lambda: self.disk_opt.analyze_optimize_drive(letter, progress_callback=self.log_disk_msg), lambda success: self._show_logged_result('Drive optimization', (success is True, 'See optimization output for details.'), 'disk_log'), output='disk_log')
+
+    def run_dfrgui(self):
+        try:
+            if self.disk_opt.open_optimize_gui() is not True:
+                raise RuntimeError('Windows drive optimization could not be opened.')
+            self.operation_label.configure(text='Opened · Windows drive optimization', text_color=MUTED)
+        except Exception as exc:
+            self._show_toast('Drive optimization', str(exc), 'error')
+
+    def run_cmd(self, cmd, desc, *, log=None, output='tools_log'):
+        log = log or self.log_tools_msg
+        detail = 'Network connections may be interrupted and a restart may be needed.' if 'winsock' in cmd.lower() else 'The operation can take several minutes. Save your work first.'
+        if not messagebox.askyesno(desc, f'Run {desc}?\n{detail}', parent=self):
+            return
+        def work():
+            log(f'> {desc}')
+            success = self.cmd_runner.run_command_stream(cmd, desc, log)
+            log(f'{desc}: {"completed" if success is True else "failed"}')
+            return success is True, 'Restart required · see command output.' if getattr(self.cmd_runner, 'restart_required', False) else 'See command output for details.'
+        self._request_operation(desc, work, lambda result: self._show_result(desc, result), output=output)
+
+    def run_launch(self, target, desc):
+        try:
+            if target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'ms-settings:windowsupdate', 'ms-settings:windowsupdate-optionalupdates'):
+                os.startfile(target)
+            elif target == 'appwiz.cpl':
+                from modules.commands import system_executable
+                subprocess.Popen([system_executable('control.exe'), 'appwiz.cpl'], shell=False)
+            else:
+                raise ValueError('Unsupported Windows settings destination')
+            self.operation_label.configure(text=f'Opened · {desc} · Continue in Windows', text_color=MUTED)
+            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                self.apps_status.configure(text=f'Opened {desc} · Changes are managed in Windows.', text_color=MUTED)
+        except Exception as exc:
+            self.operation_label.configure(text=f'Failed · {desc}: {exc}', text_color=COL_WARNING)
+            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                self.apps_status.configure(text=f'{desc} unavailable: {exc}', text_color=COL_WARNING)
+            self._show_toast(desc, str(exc), 'error')
+
+    def run_battery_report(self):
+        path = Path(os.environ.get('USERPROFILE', str(Path.home()))) / 'battery_report.html'
+        def report():
+            from modules.commands import system_executable
+            subprocess.run([system_executable('powercfg.exe'), '/batteryreport', '/output', str(path)], stdin=subprocess.DEVNULL, shell=False, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), capture_output=True, timeout=60)
+            return path
+        def saved(result):
+            self.operation_label.configure(text=f'Completed · Battery report saved to {result}', text_color=COL_SUCCESS)
+            self.log_tools_msg(f'Battery report saved to {result}')
+            try:
+                os.startfile(str(result))
+            except OSError as exc:
+                self._show_toast('Report saved', f'{result}\nCould not open the report: {exc}', 'warning')
+        self._request_operation('Battery report', report, saved, output='tools_log')
+
+    def run_create_restore(self):
+        if messagebox.askyesno('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):
+            self._request_operation('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Manual Point'), lambda result: self._show_logged_result('Restore point', result, 'tools_log'), output='tools_log')
+
+    def run_windows_update(self):
+        self.run_launch('ms-settings:windowsupdate', 'Windows Update')
+
+    def run_view_optional_updates(self):
+        self.run_launch('ms-settings:windowsupdate-optionalupdates', 'Optional updates')
+
+    def _read_turbo_states(self):
+        def read(fn, invert=False):
+            try:
+                value = fn()
+                return None if value is None else (not value if invert else bool(value))
+            except Exception:
+                return None
+        try:
+            power = self.perf_mgr.get_power_plan()
+            power = None if power is None else power == 'high'
+        except Exception:
+            power = None
+        states = {'power': power, 'visual': read(self.perf_mgr.get_visual_effects, True), 'sysmain': read(self.perf_mgr.get_sysmain_status, True), 'wsearch': read(self.perf_mgr.get_wsearch_status, True), 'spooler': read(self.perf_mgr.get_spooler_status, True)}
+        return states, read(self.perf_mgr.is_turbo_active)
+
+    def _load_turbo_states(self):
+        generation = self.__dict__.get('_turbo_generation', 0) + 1
+        self._turbo_generation = generation
+        self._turbo_refresh_pending = True
+        self._turbo_refreshing = True
+        for switch in self.__dict__.get('turbo_switches', {}).values():
+            switch.configure(state='disabled')
+        if 'master_switch' in self.__dict__:
+            self.master_switch.configure(state='disabled')
+        if 'btn_restore_turbo' in self.__dict__:
+            self.btn_restore_turbo.configure(state='disabled')
+        if self.workers.busy():
+            return
+        if self.workers.busy('turbo-state'):
+            return
+        self._turbo_refresh_pending = False
+        def read():
+            states = self._read_turbo_states()
+            return states, self.perf_mgr.get_saved_settings()
+        def apply(result):
+            if self.workers.busy() or generation != self._turbo_generation:
+                self._turbo_refresh_pending = True
+                return  # A late read must not overwrite an in-flight mutation.
+            self._apply_turbo_states(result[0])
+            self._apply_saved_turbo(result[1])
+        def failed(exc):
+            if generation == self._turbo_generation:
+                states = {key: None for key in ('power', 'visual', 'sysmain', 'wsearch', 'spooler')}
+                self._apply_turbo_states((states, None))
+                self._apply_saved_turbo(None)
+        def done():
+            if self._turbo_refresh_pending:
+                self._load_turbo_states()
+            else:
+                self._turbo_refreshing = False
+                self._set_maintenance_state(self.workers.busy() or self._update_downloading or self._update_installing)
+        self.workers.start('turbo-state', read, group='turbo-state', on_success=apply,
+                           on_error=failed, on_done=done)
+
+    def _apply_saved_turbo(self, saved):
+        self._turbo_saved = saved
+        if 'btn_restore_turbo' not in self.__dict__:
+            return
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
+        text = 'Saved originals unavailable · retry Refresh state' if saved is None else f'{len(saved)} original settings saved · available for restoration' if saved else 'No saved changes · switches show the current Windows state'
+        self.turbo_saved_label.configure(text=text, text_color=COL_WARNING if saved is None else MUTED)
+        self.btn_restore_turbo.configure(state='normal' if saved and not busy else 'disabled')
+
+    def _restore_saved_turbo(self):
+        self._request_operation('Restore Turbo settings', lambda: self.perf_mgr.set_turbo(False),
+                                lambda result: self._show_result('Restore Turbo settings', result), self._load_turbo_states)
+
+    def _apply_turbo_states(self, result):
+        states, master = result
+        self._turbo_states, self._turbo_master = states, master
+        if 'turbo_switches' not in self.__dict__:
+            return
+        busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
+        for key, state in states.items():
+            if state is not None:
+                self.turbo_vars[key].set(state)
+            self.turbo_switches[key].configure(text='Unknown' if state is None else 'Active' if state else 'Inactive', state='disabled' if busy or state is None else 'normal')
+        if master is not None:
+            if 'master_var' in self.__dict__:
+                self.master_var.set(master)
+            else:
+                self.master_switch.select() if master else self.master_switch.deselect()
+        self.master_switch.configure(text='Unknown' if master is None else 'Active' if master else 'Inactive', state='disabled' if busy or master is None else 'normal')
+
+    def _turbo_toggle_changed(self, key, on_fn, off_fn):
+        requested = self.turbo_vars[key].get()
+        if not self._request_operation('Turbo setting', on_fn if requested else off_fn, lambda result: self._show_result('Turbo setting', result), self._load_turbo_states):
+            self._load_turbo_states()
+
+    def _master_toggle_changed(self):
+        requested = bool(self.master_switch.get())
+        if not self._request_operation('Turbo settings', lambda: self.perf_mgr.set_turbo(requested), lambda result: self._show_result('Turbo settings', result), self._load_turbo_states):
+            self._load_turbo_states()
+
+    def _cancel_resurrect(self):
+        self._resurrect_cancel.set()
+        self.btn_resurrect_cancel.configure(state='disabled', text='Cancellation requested…')
+        self.log_god_msg('Cancellation requested; the current command will finish.', 'warn')
+
+    def _resurrection_progress(self, progress, text):
+        self.progress_bar.set(progress)
+        self.lbl_status.configure(text=text, text_color=MUTED)
+
+    def _set_resurrection_step(self, name, state, detail=''):
+        self.__dict__.setdefault('_resurrection_states', {})[name] = (state, detail)
+        label = self.__dict__.get('_resurrection_rows', {}).get(name)
+        if label is not None:
+            color = {'completed': COL_SUCCESS, 'failed': COL_RED, 'running': COL_GOLD}.get(state, MUTED)
+            label.configure(text={'pending': 'Not started', 'running': 'Running…', 'completed': 'Completed',
+                                  'failed': 'Failed / partial', 'not run': 'Not run'}.get(state, state), text_color=color)
+
+    def _finish_resurrection(self, result):
+        self.last_resurrection_result = result
+        attempted = {row['name']: row for row in result['steps']}
+        for name in self.RESURRECTION_STEPS:
+            row = attempted.get(name)
+            self._set_resurrection_step(name, 'completed' if row and row['success'] else 'failed' if row else 'not run', row['message'] if row else '')
+        text = f"{result['status'].capitalize()} · {len(result['steps'])}/{result['total']} steps finished"
+        color = COL_SUCCESS if result['status'] == 'completed' else COL_WARNING if result['status'] in ('partial', 'cancelled') else COL_RED
+        self.lbl_status.configure(text=text, text_color=color)
+        self.operation_label.configure(text=text, text_color=color)
+        self.log_god_msg(text, 'head')
+        if result.get('error'):
+            self.log_god_msg(result['error'], 'err')
+
+    def _run_resurrection_sequence(self):
+        from modules.operations import OperationStep, run_sequence
+        from modules.commands import validate_drive, system_executable
+        import ntpath
+        system_drive = validate_drive(ntpath.splitdrive(system_executable('cmd.exe'))[0])
+        uncertain = False
+        log = self.log_god_msg
+        def cleanup(fn, **kwargs):
+            count, size = fn(**kwargs)
+            detail = self.cleanup_mgr.last_result
+            errors, skipped = getattr(detail, 'errors', []), getattr(detail, 'skipped', [])
+            return not errors and not skipped, f'{count} files · {size / 1048576:.1f} MB freed · {len(skipped)} skipped · {len(errors)} errors'
+        def command(cmd, name):
+            nonlocal uncertain
+            success = self.cmd_runner.run_command_stream(cmd, name, lambda msg: log(msg)) is True
+            if getattr(self.cmd_runner, 'completion_unknown', False) is True:
+                uncertain = True
+                return False, 'Command completion unknown · sequence stopped; restart Windows before retrying.'
+            return success, 'Restart required.' if getattr(self.cmd_runner, 'restart_required', False) else 'See command output.'
+        def optimize():
+            nonlocal uncertain
+            success = self.disk_opt.analyze_optimize_drive(system_drive, progress_callback=log) is True
+            if getattr(self.disk_opt, 'completion_unknown', False) is True:
+                uncertain = True
+                return False, 'Drive command completion unknown · sequence stopped; restart Windows before retrying.'
+            return success, 'See drive output.'
+        steps = [OperationStep('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Resurrection restore point'), True),
+                 OperationStep('Browser caches', lambda: cleanup(self.cleanup_mgr.clean_browser_caches)),
+                 OperationStep('Temporary files', lambda: cleanup(self.cleanup_mgr.clean_temp_files, progress_callback=log)),
+                 OperationStep('Recycle Bin', self.cleanup_mgr.empty_recycle_bin),
+                 OperationStep('DNS cache', lambda: command('ipconfig /flushdns', 'DNS flush')),
+                 OperationStep('Network reset', lambda: command('netsh winsock reset', 'Network reset')),
+                 OperationStep('Drive optimization', optimize),
+                 OperationStep('Disk health scan', lambda: command(f'chkdsk {system_drive} /scan /perf', 'Disk health scan')),
+                 OperationStep('Windows image health', lambda: command('DISM /Online /Cleanup-Image /CheckHealth', 'Image health')),
+                 OperationStep('System file scan', lambda: command('sfc /scannow', 'System file scan'))]
+        def tracked(step):
+            def action():
+                self.dispatcher.post(self._set_resurrection_step, step.name, 'running', critical=True)
+                return step.action()
+            return OperationStep(step.name, action, step.critical)
+        steps = [tracked(step) for step in steps]
+        def progress(completed, total, result):
+            log(f'{"Completed" if result.success else "Failed / partial"}: {result.name} · {result.message}', 'info' if result.success else 'err')
+            self.dispatcher.post(self._resurrection_progress, completed / total, f'{completed}/{total} finished · {result.name}', critical=True)
+            self.dispatcher.post(self._set_resurrection_step, result.name, 'completed' if result.success else 'failed', result.message, critical=True)
+        result = run_sequence(steps, cancel=lambda: uncertain or self._shutdown.is_set() or self._resurrect_cancel.is_set(), progress=progress)
+        if uncertain:
+            result.status = 'partial' if any(row.success for row in result.steps) else 'failed'
+        if result.steps and not result.steps[0].success:
+            log('Stopped before cleanup: a new restore point could not be verified. Enable System Protection in Windows and retry.', 'err')
+        return {'status': result.status, 'steps': [{'name': row.name, 'success': row.success, 'message': row.message} for row in result.steps], 'total': len(steps), 'error': result.error}
+
+    def run_god_mode(self):
+        if self._update_installing or self._update_downloading or self.workers.busy():
+            self._show_toast('Operation in progress', 'Wait for the current operation to finish.', 'warning')
+            return
+        if not messagebox.askyesno('Confirm Resurrection', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
+            return
+        self._resurrect_cancel.clear()
+        def done():
+            self.btn_resurrect_cancel.pack_forget()
+            self.btn_resurrect_start.configure(text='Start sequence')
+        if self._request_operation('Resurrection', self._run_resurrection_sequence, self._finish_resurrection, done, output='god_log'):
+            for name in self.RESURRECTION_STEPS:
+                self._set_resurrection_step(name, 'pending')
+            self.btn_resurrect_start.configure(text='Maintenance running…')
+            self.btn_resurrect_cancel.configure(state='normal', text='Cancel after current step')
+            self.btn_resurrect_cancel.pack(side='left', padx=10)
+            self.progress_bar.set(0)
+            self.lbl_status.configure(text='Starting · Verifying restore point', text_color=MUTED)
 
     def _check_app_update(self):
-        """Check GitHub releases for a newer version of Panacea."""
-        try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-            req = urllib.request.Request(url, headers={"User-Agent": "Panacea"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-            remote_tag = data.get("tag_name", "").lstrip("v")
-            if remote_tag and self._is_newer(remote_tag, VERSION):
-                # Find .exe asset download URL
-                exe_url = None
-                for asset in data.get("assets", []):
-                    if asset.get("name", "").lower().endswith(".exe"):
-                        exe_url = asset.get("browser_download_url")
-                        break
-                self.after(0, lambda: self._show_update_banner(remote_tag, exe_url))
-        except Exception:
-            pass
+        from modules.updater import UpdateClient
+        if self._shutdown.is_set() or self.workers.busy('app-update') or self._update_installing:
+            return
+        self.app_update_status.configure(text='Checking Panacea updates…', text_color=MUTED)
+        self.btn_check_update.configure(state='disabled')
+        def check():
+            client = UpdateClient(GITHUB_REPO, VERSION)
+            return client, client.check()
+        def checked(result):
+            self.update_client, self._release = result
+            self.update_actions.grid_forget()
+            if self._release is None:
+                self.app_update_status.configure(text=f'Panacea {VERSION} is up to date', text_color=MUTED)
+            else:
+                self.app_update_status.configure(text=f'Panacea {self._release.version} available', text_color=COL_BLUE)
+                self.update_actions.grid(row=1, column=0, columnspan=2, sticky='w', padx=18)
+        def failed(exc):
+            self.app_update_status.configure(text=f'Update check failed: {exc}', text_color=COL_WARNING)
+            self.btn_check_update.configure(text='Retry check')
+        self.workers.start('app-update-check', check, group='app-update', on_success=checked, on_error=failed, on_done=lambda: self.btn_check_update.configure(state='normal'))
+
+    def _defer_update(self):
+        self.update_actions.grid_forget()
+        self.app_update_status.configure(text='Update deferred · Use Check updates when ready', text_color=MUTED)
+
+    def _show_release_notes(self):
+        if self._release:
+            webbrowser.open(self._release.release_url)
 
     @staticmethod
-    def _is_newer(remote: str, local: str) -> bool:
-        """Compare dotted version strings (e.g. '1.40' > '1.39')."""
-        try:
-            r_parts = [int(x) for x in remote.split(".")]
-            l_parts = [int(x) for x in local.split(".")]
-            return r_parts > l_parts
-        except ValueError:
-            return False
+    def _is_newer(remote, local):
+        from modules.updater import is_newer
+        return is_newer(remote, local)
 
-    def _show_update_banner(self, new_ver, exe_url):
-        """Show a small banner at the top of the window for app updates."""
-        banner = ctk.CTkFrame(self, fg_color="#1565C0", height=32, corner_radius=0)
-        banner.grid(row=0, column=1, sticky="new", padx=0, pady=0)
-        banner.lift()
+    def _auto_update(self):
+        if not self._release:
+            return
+        if not getattr(sys, 'frozen', False):
+            webbrowser.open(self._release.release_url)
+            return
+        if self.workers.busy() or self.workers.busy('app-update') or self._update_installing:
+            self._show_toast('Operation in progress', 'Finish the current operation before updating.', 'warning')
+            return
+        if not messagebox.askyesno('Install verified update', f'Download and verify Panacea {self._release.version}?\nThe app stays open if verification or installation fails.', parent=self):
+            return
+        self._update_cancel.clear()
+        self._update_downloading = True
+        release, client = self._release, self.update_client
+        def download():
+            import tempfile
+            directory = Path(tempfile.mkdtemp(prefix='Panacea-download-'))
+            self._update_dir = directory
+            def progress(received, total):
+                self.dispatcher.post(self._update_download_progress, received, total, key='download-progress')
+                return not self._update_cancel.is_set() and not self._shutdown.is_set()
+            return client.download(release, directory, progress)
+        def downloaded(staged):
+            self._update_downloading = False
+            self.app_update_status.configure(text='Verified · Preparing installation…', text_color=COL_BLUE)
+            self._update_installing = True
+            self._set_maintenance_state(True)
+            def prepare():
+                from modules.update_install import start_self_update
+                return start_self_update(staged, Path(sys.executable), release, client)
+            self.workers.start('prepare-update', prepare, group='update-install', on_success=self._update_prepared, on_error=self._update_failed)
+        self.btn_update_install.configure(state='disabled')
+        self.btn_check_update.configure(state='disabled')
+        self._set_maintenance_state(True)
+        self.app_update_status.configure(text='Downloading and verifying…', text_color=COL_BLUE)
+        self.workers.start('download-update', download, group='app-update', on_success=downloaded, on_error=self._update_failed)
 
-        self._update_banner_lbl = ctk.CTkLabel(banner, text=f"v{new_ver} available",
-                           font=ctk.CTkFont(size=12), text_color="white")
-        self._update_banner_lbl.pack(side="left", padx=(10, 5))
+    def _update_download_progress(self, received, total):
+        text = 'Verifying downloaded executable…' if total and received >= total else f'Downloading · {received * 100 // max(1, total)}%'
+        self.app_update_status.configure(text=text, text_color=COL_BLUE)
 
-        close_btn = ctk.CTkLabel(banner, text="✕", font=ctk.CTkFont(size=12),
-                                 text_color="white", cursor="hand2", width=20)
-        close_btn.pack(side="right", padx=(0, 6))
-        close_btn.bind("<Button-1>", lambda e: banner.destroy())
+    def _update_prepared(self, job):
+        self._update_job = job
+        self._poll_update_job()
 
-        if exe_url:
-            link = ctk.CTkLabel(banner, text="Install", font=ctk.CTkFont(size=12, underline=True),
-                                text_color="#BBDEFB", cursor="hand2")
-            link.pack(side="right", padx=4)
-            link.bind("<Button-1>", lambda e, u=exe_url: self._auto_update(u, banner))
-        else:
-            link = ctk.CTkLabel(banner, text="View", font=ctk.CTkFont(size=12, underline=True),
-                                text_color="#BBDEFB", cursor="hand2")
-            link.pack(side="right", padx=4)
-            link.bind("<Button-1>", lambda e: webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases"))
+    def _poll_update_job(self):
+        if self._shutdown.is_set() or not self._update_job:
+            return
+        def status_ready(result):
+            status = result.get('status', 'failed')
+            self.app_update_status.configure(text=f"Update · {result.get('message') or status}", text_color=COL_BLUE)
+            if status == 'ready':
+                self._remove_update_download()
+                self._update_installing = False
+                self._on_close()
+            elif status == 'failed':
+                self._update_failed(RuntimeError(result.get('message', 'Installation failed; old app retained.')))
+            else:
+                self.after(750, self._poll_update_job)
+        self.workers.start('update-status', self._update_job.poll, group='update-status', on_success=status_ready, on_error=self._update_failed)
 
-    def _auto_update(self, exe_url, banner):
-        """Download new exe, swap in-place, and relaunch — no external scripts."""
-        self._update_banner_lbl.configure(text="Downloading... 0%")
+    def _update_failed(self, exc):
+        self._update_downloading = False
+        self._update_installing = False
+        self._update_job = None
+        self._set_maintenance_state(False)
+        self.btn_update_install.configure(state='normal', text='Retry install')
+        self.btn_check_update.configure(state='normal')
+        self.app_update_status.configure(text=f'Update failed: {exc}', text_color=COL_WARNING)
+        self._remove_update_download()
+        self._show_toast('Update failed', f'{exc}\nUse Release notes for manual download.', 'error')
 
-        def download_and_swap():
+    def _remove_update_download(self):
+        # Never enumerate/delete updater or backup files. Download verification cleans
+        # partial files; only remove an empty directory owned by this operation.
+        directory = self._update_dir
+        if directory is not None:
             try:
-                current_exe = sys.executable
-                if not current_exe.lower().endswith("panacea.exe"):
-                    self.after(0, lambda: webbrowser.open(exe_url))
-                    return
+                directory.rmdir()
+            except OSError:
+                pass
+        self._update_dir = None
 
-                exe_dir = os.path.dirname(current_exe)
-                new_exe = os.path.join(exe_dir, "Panacea.new.exe")
-                old_exe = os.path.join(exe_dir, "Panacea.old.exe")
+    @staticmethod
+    def _fit_window_size(width, height, work_width, work_height, scale):
+        return min(width, max(1, int((work_width - 48) / scale))), min(height, max(1, int((work_height - 48) / scale)))
 
-                # Download new exe
-                req = urllib.request.Request(exe_url, headers={"User-Agent": "Panacea"})
-                with urllib.request.urlopen(req, timeout=120) as resp:
-                    total = int(resp.headers.get("Content-Length", 0))
-                    downloaded = 0
-                    with open(new_exe, "wb") as f:
-                        while True:
-                            chunk = resp.read(65536)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if total > 0:
-                                pct = int(downloaded * 100 / total)
-                                self.after(0, lambda p=pct:
-                                    self._update_banner_lbl.configure(
-                                        text=f"Downloading... {p}%"))
-
-                self.after(0, lambda: self._update_banner_lbl.configure(text="Installing..."))
-
-                # Windows allows renaming a running exe
-                # 1) Remove leftover .old from previous update
-                if os.path.exists(old_exe):
-                    try: os.remove(old_exe)
-                    except OSError: pass
-
-                # 2) Rename running exe → .old
-                os.rename(current_exe, old_exe)
-
-                # 3) Rename new exe → Panacea.exe
-                os.rename(new_exe, current_exe)
-
-                # 4) Relaunch with admin and exit
-                self.after(0, lambda: self._relaunch_and_exit(current_exe))
-
-            except Exception as e:
-                self.after(0, lambda: self._update_banner_lbl.configure(
-                    text=f"Update failed: {e}"))
-                # Try to rollback
-                try:
-                    if not os.path.exists(current_exe) and os.path.exists(old_exe):
-                        os.rename(old_exe, current_exe)
-                except OSError:
-                    pass
-
-        threading.Thread(target=download_and_swap, daemon=True).start()
-
-    def _relaunch_and_exit(self, exe_path):
-        """Relaunch the exe with admin elevation and exit."""
-        import ctypes
-        ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", exe_path, "", os.path.dirname(exe_path), 1)
-        self.destroy()
-        sys.exit(0)
-
-    def _cleanup_old_exe(self):
-        """Remove leftover files from previous auto-update."""
-        try:
-            exe_dir = os.path.dirname(sys.executable)
-            for suffix in ('.old.exe', '.update', '.updater.vbs', '.updater.bat', '.update.bat'):
-                path = os.path.join(exe_dir, f"Panacea{suffix}")
-                if os.path.exists(path):
-                    os.remove(path)
-        except OSError:
-            pass
+    def geometry(self, geometry_string=None):
+        # CTk's pending Configure events can overwrite _current_width/height
+        # while a new window is withdrawn. Preserve explicit size requests.
+        if geometry_string is not None:
+            width, height, _, _ = self._parse_geometry_string(geometry_string)
+            if width is not None and height is not None:
+                self._requested_window_size = (max(self._min_width, width), max(self._min_height, height))
+        return super().geometry(geometry_string)
 
     def _center_and_show(self):
-        """Center the window on screen using Win32 API directly."""
+        requested_width, requested_height = self._requested_window_size
         self.update_idletasks()
+        scale = self._get_window_scaling()
         try:
             import ctypes
-            import ctypes.wintypes
-            # Get the top-level HWND (walk up from inner tkinter frame)
-            inner = self.winfo_id()
-            GA_ROOT = 2
-            hwnd = ctypes.windll.user32.GetAncestor(inner, GA_ROOT)
-            if not hwnd:
-                hwnd = inner
-            # Get actual window size from Windows
-            rect = ctypes.wintypes.RECT()
-            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            w = rect.right - rect.left
-            h = rect.bottom - rect.top
-            if w <= 1 or h <= 1:
-                self.after(50, self._center_and_show)
-                return
-            # Get screen work area (excludes taskbar)
-            sw = ctypes.windll.user32.GetSystemMetrics(0)
-            sh = ctypes.windll.user32.GetSystemMetrics(1)
-            x = (sw - w) // 2
-            y = (sh - h) // 2
-            # Position window directly via Win32 - bypasses ALL tkinter/CTk DPI scaling
-            SWP_NOSIZE = 0x0001
-            SWP_NOZORDER = 0x0004
-            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
+            from ctypes import wintypes
+            rect = wintypes.RECT()
+            if not ctypes.windll.user32.SystemParametersInfoW(48, 0, ctypes.byref(rect), 0):
+                raise OSError('Work area unavailable')
+            width, height = self._fit_window_size(requested_width, requested_height, rect.right - rect.left, rect.bottom - rect.top, scale)
+            self.minsize(min(760, width), min(420, height))
+            self.geometry(f'{width}x{height}')
+            self.update_idletasks()
+            x = rect.left + max(0, int((rect.right - rect.left - width * scale) / 2))
+            y = rect.top + max(0, int((rect.bottom - rect.top - height * scale) / 2))
+            hwnd = ctypes.windll.user32.GetAncestor(self.winfo_id(), 2) or self.winfo_id()
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0001 | 0x0004)
         except Exception:
             pass
         self.deiconify()
 
     def _on_close(self):
-        """Graceful shutdown: signal threads to stop, then destroy."""
+        if self._update_installing:
+            self._show_toast('Update installation in progress', 'Wait for installation to finish before closing Panacea.', 'warning')
+            return
+        if self.workers.busy():
+            self._close_when_idle = True
+            self._resurrect_cancel.set()
+            self.operation_label.configure(text='Closing after the current operation · No further sequence steps will start', text_color=COL_WARNING)
+            return
         self._shutdown.set()
-        self.after(300, self.destroy)
+        self._resurrect_cancel.set()
+        self._update_cancel.set()
+        self.monitor.close()
+        self.workers.close()
+        self.destroy()
 
-    def _show_toast(self, title, message, msg_type="info"):
-        """Show a compact toast notification instead of a tall messagebox."""
-        colors = {"info": "#1565C0", "success": "#2E7D32", "error": "#C62828", "warning": "#EF6C00"}
-        bg = colors.get(msg_type, "#1565C0")
-
+    def _show_toast(self, title, message, msg_type='info'):
+        colors = {'info': COL_BLUE, 'success': COL_SUCCESS, 'error': COL_RED, 'warning': COL_WARNING}
         toast = ctk.CTkToplevel(self)
         toast.overrideredirect(True)
-        toast.attributes("-topmost", True)
-        toast.configure(fg_color=bg)
+        toast.attributes('-topmost', True)
+        toast.configure(fg_color=SURFACE_ALT)
+        width, height = 360, 110
+        x = max(0, self.winfo_rootx() + self.winfo_width() - width - 16)
+        y = max(0, self.winfo_rooty() + self.winfo_height() - height - 16)
+        toast.geometry(f'{width}x{height}+{x}+{y}')
+        ctk.CTkLabel(toast, text=title, text_color=colors.get(msg_type, COL_BLUE), font=self._font(13, True), anchor='w').pack(fill='x', padx=14, pady=(10, 2))
+        ctk.CTkLabel(toast, text=str(message)[:500], text_color=TEXT, font=self._font(11), anchor='w', wraplength=330, justify='left').pack(fill='x', padx=14, pady=(0, 10))
+        toast.after(6500, toast.destroy)
 
-        # Size and position: bottom-right of parent window, clamped to screen
-        t_w, t_h = 340, 80
-        try:
-            px = self.winfo_rootx() + self.winfo_width() - t_w - 20
-            py = self.winfo_rooty() + self.winfo_height() - t_h - 20
-            # Clamp to screen bounds
-            sw = self.winfo_screenwidth()
-            sh = self.winfo_screenheight()
-            px = max(0, min(px, sw - t_w))
-            py = max(0, min(py, sh - t_h))
-        except Exception:
-            px, py = 100, 100
-        toast.geometry(f"{t_w}x{t_h}+{px}+{py}")
 
-        title_lbl = ctk.CTkLabel(toast, text=title, font=ctk.CTkFont(size=14, weight="bold"),
-                                 text_color="white", anchor="w")
-        title_lbl.pack(padx=14, pady=(10, 0), fill="x")
-
-        msg_lbl = ctk.CTkLabel(toast, text=message, font=ctk.CTkFont(size=12),
-                               text_color="#E0E0E0", anchor="w", wraplength=310)
-        msg_lbl.pack(padx=14, pady=(2, 10), fill="x")
-
-        toast.after(5000, toast.destroy)
-
-    def _update_gui(self, os_info, cpu_name, uptime, t_ram, a_ram, p_ram, t_disk, f_disk, p_disk, cpu_usage, bat_perc, bat_plug, ram_info="", disk_model=""):
-        # Update static info (OS, CPU name) and cached info every cycle
-        self.dash_os.configure(text=os_info)
-        self.dash_cpu_name.configure(text=cpu_name)
-        if ram_info:
-            self.dash_ram_info.configure(text=ram_info)
-        if disk_model:
-            self.dash_disk_info.configure(text=disk_model)
-        
-        # Uptime
-        new_uptime = f"Time since restart: {uptime}"
-        if self.dash_uptime_val.cget("text") != new_uptime:
-            self.dash_uptime_val.configure(text=new_uptime)
-        
-        # Update CPU Graph
-        self.cpu_graph.add_value(cpu_usage)
-        new_cpu_val = f"{round(cpu_usage, 1)}%"
-        if self.dash_cpu_val.cget("text") != new_cpu_val:
-            self.dash_cpu_val.configure(text=new_cpu_val)
-        
-        # Update RAM Graph
-        self.ram_graph.add_value(p_ram)
-        new_ram_val = f"{round(t_ram - a_ram, 1)} GB / {t_ram} GB"
-        if self.dash_ram_val.cget("text") != new_ram_val:
-            self.dash_ram_val.configure(text=new_ram_val)
-        
-        new_ram_perc = f"{round(p_ram, 1)}%"
-        if self.dash_ram_perc.cget("text") != new_ram_perc:
-            self.dash_ram_perc.configure(text=new_ram_perc)
-
-        # Disk
-        def get_color(perc):
-            if perc < 60: return COL_SUCCESS
-            if perc < 85: return COL_WARNING
-            return COL_RED
-        
-        # ProgressBar
-        current_prog = self.dash_disk_bar.get()
-        target_prog = p_disk / 100
-        if abs(current_prog - target_prog) > 0.01:
-            self.dash_disk_bar.set(target_prog)
-
-        new_color = get_color(p_disk)
-        try:
-            self.dash_disk_bar.configure(progress_color=new_color)
-        except Exception:
-            pass
-
-        new_disk_val = f"{f_disk} GB Free / {t_disk} GB"
-        if self.dash_disk_val.cget("text") != new_disk_val:
-            self.dash_disk_val.configure(text=new_disk_val)
-            
-        new_disk_perc = f"{p_disk}%"
-        if self.dash_disk_perc.cget("text") != new_disk_perc:
-            self.dash_disk_perc.configure(text=new_disk_perc)
-
-    def log_msg(self, msg):
-        self._log_to_widget(self.clean_log, msg)
-
-    def log_disk_msg(self, msg):
-        self._log_to_widget(self.disk_log, msg)
-
-    def refresh_drives(self):
-        drives = self.disk_opt.get_drive_info()
-        drive_values = [f"{d['letter']}" for d in drives]
-        if drive_values:
-            self.drive_menu.configure(values=drive_values)
-            self.selected_drive.set(drive_values[0])
-        else:
-            self.drive_menu.configure(values=["No drives"])
-            self.selected_drive.set("No drives")
-
-    def run_clean_temp(self):
-        self.btn_clean_temp.configure(state="disabled", text="Cleaning...")
-        def task():
-            self.log_msg("Starting cleanup...")
-            count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=self.log_msg)
-            if count == 0:
-                self.log_msg("No temporary files found.")
-                self.after(0, lambda: self._show_toast("No Cleanup Needed", "No temporary files found.", "info"))
-            else:
-                self.log_msg(f"Finished. Deleted {count} files. Freed {freed / (1024*1024):.2f} MB.")
-                self.after(0, lambda c=count, f=freed: self._show_toast("Cleanup Complete", f"Deleted {c} files. Freed {f / (1024*1024):.2f} MB.", "success"))
-            self.after(0, lambda: self.btn_clean_temp.configure(state="normal", text="Clean Temporary Files"))
-        threading.Thread(target=task, daemon=True).start()
-
-    def run_empty_recycle(self):
-        self.btn_empty_bin.configure(state="disabled", text="Emptying...")
-        def task():
-            self.log_msg("Emptying Recycle Bin...")
-            success, msg = self.cleanup_mgr.empty_recycle_bin()
-            self.log_msg(msg)
-            if success: self.after(0, lambda m=msg: self._show_toast("Success", m, "success"))
-            else: self.after(0, lambda m=msg: self._show_toast("Error", m, "error"))
-            self.after(0, lambda: self.btn_empty_bin.configure(state="normal", text="Empty Recycle Bin"))
-        threading.Thread(target=task, daemon=True).start()
-
-    def run_cleanmgr(self):
-        self.cleanup_mgr.open_disk_cleanup()
-        self.log_msg("Opened Disk Cleanup.")
-
-    def run_deep_clean(self):
-        if messagebox.askyesno("Deep Clean Warning", "Run DISM Component Store Cleanup?\nTarget: WinSxS.\nTime: 10-20mins.\n\nProceed?"):
-             self.cmd_runner.run_command("DISM /Online /Cleanup-Image /StartComponentCleanup", "Deep Clean")
-
-    def run_optimize_drive(self):
-        letter = self.selected_drive.get()
-        if not letter: messagebox.showwarning("Selection", "Select a drive."); return
-        
-        def task():
-            self.log_disk_msg("--- Optimization Task Started ---")
-            self.disk_opt.analyze_optimize_drive(letter, progress_callback=self.log_disk_msg)
-            self.log_disk_msg("--- Optimization Task Finished ---")
-            
-        if messagebox.askyesno("Confirm", f"Optimize {letter}?"): 
-            threading.Thread(target=task, daemon=True).start()
-
-    def run_dfrgui(self): self.disk_opt.open_optimize_gui()
-
-    def run_cmd(self, cmd, desc):
-        """Runs command streaming to tools log instead of external window"""
-        # Ensure user confirms first
-        if not messagebox.askyesno("Confirm", f"Run {desc}?"): return
-            
-        def task():
-            self.log_tools_msg(f"\n> RUNNING: {desc}...")
-            # Use run_command_stream and pass our logger
-            self.cmd_runner.run_command_stream(cmd, desc, self.log_tools_msg)
-            self.log_tools_msg(f"> FINISHED: {desc}")
-        
-        threading.Thread(target=task, daemon=True).start()
-
-    def run_launch(self, cmd, desc):
-        try: subprocess.Popen(cmd, shell=True)
-        except Exception as e: messagebox.showerror("Error", str(e))
-    
-    def run_battery_report(self):
-        try:
-            path = os.path.join(os.environ['USERPROFILE'], 'battery_report.html')
-            subprocess.run(f'powercfg /batteryreport /output "{path}"', shell=True, check=True)
-            os.startfile(path)
-        except Exception as e: messagebox.showerror("Error", str(e))
-
-    def run_create_restore(self):
-        if messagebox.askyesno("Create Restore Point", "Create a Windows System Restore Point?\n(Requires Admin privileges)\nThis may take a minute."):
-            def task():
-                success, msg = self.restore_mgr.create_restore_point("Panacea Manual Point")
-                if success:
-                    self.after(0, lambda m=msg: self._show_toast("Success", m, "success"))
-                elif msg.startswith("Skipped:"):
-                    self.after(0, lambda m=msg: self._show_toast("Skipped", m, "warning"))
-                else:
-                    self.after(0, lambda m=msg: self._show_toast("Error", m, "error"))
-            threading.Thread(target=task, daemon=True).start()
-
-    def run_windows_update(self):
-        try:
-            subprocess.Popen("start ms-settings:windowsupdate", shell=True)
-            # Use CREATE_NO_WINDOW to hide CMD flash
-            subprocess.Popen("USOClient.exe StartInteractiveScan", shell=True, 
-                             creationflags=subprocess.CREATE_NO_WINDOW)
-            # Hide buttons, show status and refresh after delay
-            self.btn_update_row.pack_forget()
-            self.lbl_update_status.configure(text="Updating... please wait", text_color="gray")
-            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
-            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to launch updater: {e}")
-
-    def run_view_optional_updates(self):
-        try:
-            subprocess.Popen("start ms-settings:windowsupdate-optionalupdates", shell=True)
-            # Refresh update status after a delay
-            self.btn_update_row.pack_forget()
-            self.lbl_update_status.configure(text="Looking for updates...", text_color="gray")
-            self.lbl_update_status.pack(pady=(10, 5), before=self.dash_uptime_val)
-            self.after(30000, lambda: threading.Thread(target=self._check_updates_thread, daemon=True).start())
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open settings: {e}")
-
-    def _setup_resurrect_frame(self):
-        self.frame_resurrect.grid_columnconfigure(0, weight=1)
-        self.frame_resurrect.grid_rowconfigure(2, weight=1)
-        
-        # Hero Section
-        hero = ctk.CTkFrame(self.frame_resurrect, fg_color="transparent")
-        hero.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
-        
-        title = ctk.CTkLabel(hero, text="SYSTEM RESURRECTION", font=ctk.CTkFont(size=26, weight="bold"), text_color="#FFD700")
-        title.pack(anchor="center")
-        subtitle = ctk.CTkLabel(hero, text="Advanced Safety Protocol & Deep Optimization", font=ctk.CTkFont(size=14), text_color="gray")
-        subtitle.pack(anchor="center")
-
-        # Action Area
-        self.action_frame = ctk.CTkFrame(self.frame_resurrect, fg_color=("gray90", "gray13"))
-        self.action_frame.grid(row=1, column=0, padx=40, pady=10, sticky="ew")
-        
-        # Larger Progress Bar with Gold Theme
-        self.progress_bar = ctk.CTkProgressBar(self.action_frame, orientation="horizontal", height=20, progress_color="#FFD700")
-        self.progress_bar.set(0)
-        self.progress_bar.pack(fill="x", padx=20, pady=(20, 10))
-        
-        self.lbl_status = ctk.CTkLabel(self.action_frame, text="Ready to Start", font=ctk.CTkFont(size=14, weight="bold"))
-        self.lbl_status.pack(pady=(5, 0))
-        
-        self.lbl_warning = ctk.CTkLabel(self.action_frame, text="(Includes: Auto System Restore, Browser Cleanup, Disk Health Scan)", font=ctk.CTkFont(size=11), text_color="gray70")
-        self.lbl_warning.pack(pady=(0, 5))
-
-        btn_row = ctk.CTkFrame(self.action_frame, fg_color="transparent")
-        btn_row.pack(pady=20)
-
-        self.btn_resurrect_start = ctk.CTkButton(btn_row, text="INITIATE PROTOCOL", font=ctk.CTkFont(size=16, weight="bold"),
-                                             fg_color="#FFD700", hover_color="#B8860B", text_color="black",
-                                             height=40,
-                                             command=self.run_god_mode)
-        self.btn_resurrect_start.pack(side="left", padx=(0, 10))
-
-        self._resurrect_cancel = threading.Event()
-        self.btn_resurrect_cancel = ctk.CTkButton(btn_row, text="CANCEL", font=ctk.CTkFont(size=14, weight="bold"),
-                                             fg_color="#C62828", hover_color="#8E0000", text_color="white",
-                                             height=40, width=100,
-                                             command=self._cancel_resurrect)
-        # Hidden by default, shown when protocol is running
-        self.btn_resurrect_cancel.pack_forget()
-        
-        # Log Area (Terminal Style)
-        log_frame = ctk.CTkFrame(self.frame_resurrect, corner_radius=10, fg_color="black")
-        log_frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
-        
-        ctk.CTkLabel(log_frame, text="> EXECUTION LOG", font=ctk.CTkFont(family="Consolas", size=12), text_color="#00FF00").pack(anchor="w", padx=10, pady=5)
-        
-        self.god_log = self._create_log_textbox(log_frame)
-        self.god_log.tag_config("head", foreground=COL_BLUE)
-        self.god_log.pack(fill="both", expand=True, padx=5, pady=5)
-        self.god_log.configure(state="normal")
-        self.god_log.insert("0.0", "Waiting for user command...\n")
-        self.god_log.configure(state="disabled")
-
-    def log_god_msg(self, msg, level="info"):
-        self._log_to_widget(self.god_log, msg, level)
-
-    def _cancel_resurrect(self):
-        self._resurrect_cancel.set()
-        self.btn_resurrect_cancel.configure(state="disabled", text="CANCELLING...")
-        self.log_god_msg("\n[!] CANCELLATION REQUESTED — stopping after current phase...", "warn")
-
-    def run_god_mode(self):
-        if not messagebox.askyesno("Confirm Resurrection", "Initiate System Resurrection Protocol?\n\nThis process is intensive and may take time.\nEnsure all work is saved."):
-            return
-
-        self.btn_resurrect_start.configure(state="disabled", text="PROTOCOL RUNNING...")
-        self._resurrect_cancel.clear()
-        self.btn_resurrect_cancel.configure(state="normal", text="CANCEL")
-        self.btn_resurrect_cancel.pack(side="left")
-        self.lbl_status.configure(text="Initializing...", text_color="#FFD700")
-        self.progress_bar.set(0)
-        self.god_log.configure(state="normal"); self.god_log.delete("0.0", tk.END); self.god_log.configure(state="disabled")
-        
-        # Filters for Cleaner Output
-        def health_filter(line):
-            # SFC / DISM / CHKDSK filter
-            bad_phrases = [
-                "Avvio in corso", "Attendere", "L'operazione richieder", "100%", "completed", "Avanzamento:", "ETA:", "Fase:", "totale:", "percent complete",
-                # CHKDSK Noise
-                "Il file system", "etichetta del volume", "Durata fase", "Verifica file", "Verifica indici", "Verifica descrittori", "journal USN",
-                "KB di spazio", "KB in", "KB occupati", "KB disponibili", "byte in ogni", "unit", "allocazione"
-            ]
-            # Keep final results or phase indicators, drop progress noise if needed or verbose intros
-            for phrase in bad_phrases:
-                if phrase in line: return False
-            if line.strip() == "": return False
-            return True
-            
-        def sequence():
-            steps = 8
-            current_step = 0
-
-            def update_progress(step_i, status_text):
-                self.after(0, lambda s=step_i, t=status_text: (
-                    self.progress_bar.set(s / steps),
-                    self.lbl_status.configure(text=t)
-                ))
-
-            def stopped():
-                return self._shutdown.is_set() or self._resurrect_cancel.is_set()
-
-            try:
-                # PHASE 1: SAFETY (Auto-Enable Restore)
-                current_step += 1; update_progress(current_step, "Phase 1: Safety Backup")
-                self.log_god_msg("\n[PHASE 1] SAFETY BACKUP INITIATED...", "head")
-                self.log_god_msg("Verifying System Restore state...", "info")
-                self.restore_mgr.ensure_restore_enabled("C:\\")
-                success, msg = self.restore_mgr.create_restore_point("Panacea GodMode Auto-Restore")
-                if success: self.log_god_msg(f"Restore Point: {msg}", "info")
-                else: self.log_god_msg(f"Restore Point Warning: {msg}", "warn")
-                if stopped(): return
-
-                # PHASE 2: BROWSER CLEANUP
-                current_step += 1; update_progress(current_step, "Phase 2: Browser Cleanup")
-                self.log_god_msg("\n[PHASE 2] BROWSER CLEANUP...", "head")
-                bc_count, bc_size = self.cleanup_mgr.clean_browser_caches()
-                self.log_god_msg(f"Browser Cache: Cleared {bc_count} files ({bc_size / (1024*1024):.2f} MB)", "info")
-                if stopped(): return
-
-                # PHASE 3: SYSTEM CLEANUP
-                current_step += 1; update_progress(current_step, "Phase 3: System Junk Cleanup")
-                self.log_god_msg("\n[PHASE 3] SYSTEM JUNK CLEANUP...", "head")
-                count, freed = self.cleanup_mgr.clean_temp_files(progress_callback=lambda m: self.log_god_msg(m, "info"))
-                self.log_god_msg(f"Temp Files: Deleted {count}, Freed {freed / (1024*1024):.2f} MB", "info")
-                success, msg = self.cleanup_mgr.empty_recycle_bin()
-                self.log_god_msg(f"Recycle Bin: {msg}", "info")
-                if stopped(): return
-
-                # PHASE 4: NETWORK
-                current_step += 1; update_progress(current_step, "Phase 4: Network Reset")
-                self.log_god_msg("\n[PHASE 4] NETWORK RESET...", "head")
-                self.cmd_runner.run_command_stream("ipconfig /flushdns", "DNS Flush", lambda m: self.log_god_msg(m, "info"))
-                self.cmd_runner.run_command_stream("netsh winsock reset", "Winsock Reset", lambda m: self.log_god_msg(m, "info"))
-                if stopped(): return
-
-                # PHASE 5: DISK OPTIMIZATION
-                current_step += 1; update_progress(current_step, "Phase 5: Disk Defrag/Trim")
-                self.log_god_msg("\n[PHASE 5] DISK OPTIMIZATION (C:)...", "head")
-                self.disk_opt.analyze_optimize_drive("C:", progress_callback=lambda m: self.log_god_msg(m, "info"))
-                if stopped(): return
-
-                # PHASE 6: DISK HEALTH
-                current_step += 1; update_progress(current_step, "Phase 6: Disk Health Scan")
-                self.log_god_msg("\n[PHASE 6] DISK HEALTH CHECK (CHKDSK)...", "head")
-                self.cmd_runner.run_command_stream("chkdsk C: /scan /perf", "CHKDSK", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
-                if stopped(): return
-
-                # PHASE 7: SYSTEM IMAGE HEALTH
-                current_step += 1; update_progress(current_step, "Phase 7: DISM Health Check")
-                self.log_god_msg("\n[PHASE 7] DISM IMAGE HEALTH...", "head")
-                self.cmd_runner.run_command_stream("DISM /Online /Cleanup-Image /CheckHealth", "DISM Check", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
-                if stopped(): return
-
-                # PHASE 8: SFC
-                current_step += 1; update_progress(current_step, "Phase 8: Integrity Scan (SFC)")
-                self.log_god_msg("\n[PHASE 8] SFC INTEGRITY SCAN...", "head")
-                self.cmd_runner.run_command_stream("sfc /scannow", "SFC Scan", lambda m: self.log_god_msg(m, "info"), filter_func=health_filter)
-
-                if self._resurrect_cancel.is_set():
-                    self.log_god_msg("\n=== PROTOCOL CANCELLED BY USER ===", "warn")
-                    self.after(0, lambda: self.lbl_status.configure(text="Cancelled", text_color="#EF6C00"))
-                else:
-                    update_progress(steps, "Protocol Complete")
-                    self.log_god_msg("\n=== RESURRECTION PROTOCOL COMPLETE ===", "head")
-                    self.log_god_msg("\n[TIP] For best results: Uninstall useless programs and manage startup apps from the APPS tab and then restart your PC.", "warn")
-                    self.after(0, lambda: self._show_toast("Success", "Resurrection Protocol Finished. A system restart is highly recommended.", "success"))
-
-            except Exception as e:
-                self.log_god_msg(f"\n[!] ERROR: {str(e)}", "err")
-                self.after(0, lambda: self.lbl_status.configure(text="Protocol Failed", text_color="red"))
-                self.after(0, lambda: messagebox.showerror("Error", f"Sequence failed: {e}"))
-
-            finally:
-                self.after(0, lambda: self.btn_resurrect_start.configure(state="normal", text="INITIATE PROTOCOL"))
-                self.after(0, lambda: self.btn_resurrect_cancel.pack_forget())
-                if not self._resurrect_cancel.is_set():
-                    self.after(0, lambda: self.lbl_status.configure(text="Ready", text_color="gray"))
-
-        threading.Thread(target=sequence, daemon=True).start()
 class LiveGraph(ctk.CTkFrame):
-    def __init__(self, master, width=200, height=100, line_color="#00EE00", **kwargs):
-        super().__init__(master, **kwargs)
-        self.bg_color = "#111111"
-        self.grid_color = "#222222"
-        self.canvas = ctk.CTkCanvas(self, width=width, height=height, bg=self.bg_color, highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True)
-        self.width = width
-        self.height = height
+    def __init__(self, master, width=250, height=72, line_color=COL_BLUE, **kwargs):
+        super().__init__(master, width=width, height=height, fg_color=SURFACE, **kwargs)
+        self.canvas = ctk.CTkCanvas(self, width=width, height=height, bg=SURFACE, highlightthickness=0)
+        self.canvas.pack(fill='both', expand=True)
+        self.width, self.height = width, height
         self.line_color = line_color
-        self.max_points = width // 5
-        self.points = [0] * self.max_points
-
-        # Draw grid lines and labels
+        self.points = [0.0] * 60
+        self.canvas.bind('<Configure>', self._resized)
         self._draw_grid()
+        self.fill_id = self.canvas.create_polygon(0, 0, fill='#3b342b' if line_color == COL_GOLD else '#24364c', outline='')
+        self.line_id = self.canvas.create_line(0, 0, 0, 0, fill=line_color, width=2, smooth=True)
 
-        # Area fill polygon (under curve)
-        self.fill_id = self.canvas.create_polygon(0, 0, fill=self._fade_color(line_color), outline="", stipple="gray25")
-        # Main line
-        self.line_id = self.canvas.create_line(0, 0, 0, 0, fill=self.line_color, width=2, smooth=True)
-
-    def _fade_color(self, hex_color):
-        """Return a darker version of the color for area fill."""
-        r = int(hex_color[1:3], 16) // 3
-        g = int(hex_color[3:5], 16) // 3
-        b = int(hex_color[5:7], 16) // 3
-        return f"#{r:02x}{g:02x}{b:02x}"
+    def _resized(self, event):
+        self.width, self.height = max(2, event.width), max(2, event.height)
+        self.canvas.delete('grid')
+        self._draw_grid()
+        self.draw()
 
     def _draw_grid(self):
-        """Draw horizontal grid lines at 25%, 50%, 75%."""
-        for pct in (25, 50, 75):
-            y = self.height - (pct / 100 * self.height)
-            self.canvas.create_line(0, y, self.width, y, fill=self.grid_color, dash=(2, 4))
-            self.canvas.create_text(self.width - 2, y - 1, text=f"{pct}%", anchor="se",
-                                    fill="#444444", font=("Consolas", 7))
+        for percent in (25, 50, 75):
+            y = self.height * (1 - percent / 100)
+            self.canvas.create_line(0, y, self.width, y, fill=BORDER, dash=(2, 4), tags='grid')
 
     def add_value(self, value):
-        self.points.pop(0)
-        self.points.append(value)
+        self.points = self.points[1:] + [max(0, min(100, float(value)))]
         self.draw()
 
     def draw(self):
-        w = self.width
-        h = self.height
-        step = w / (len(self.points) - 1)
-
-        line_coords = []
-        for i, val in enumerate(self.points):
-            x = i * step
-            y = h - (val / 100 * h)
-            line_coords.extend([x, y])
-
-        if len(line_coords) >= 4:
-            self.canvas.coords(self.line_id, *line_coords)
-            # Area fill: line points + bottom-right + bottom-left
-            fill_coords = list(line_coords) + [w, h, 0, h]
-            self.canvas.coords(self.fill_id, *fill_coords)
+        step = self.width / (len(self.points) - 1)
+        coords = [coord for index, value in enumerate(self.points) for coord in (index * step, self.height * (1 - value / 100))]
+        self.canvas.coords(self.line_id, *coords)
+        self.canvas.coords(self.fill_id, *(coords + [self.width, self.height, 0, self.height]))

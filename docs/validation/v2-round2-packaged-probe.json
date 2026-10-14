@@ -1,0 +1,75 @@
+{
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python_harness": "3.14.3",
+  "executable": "C:\\Users\\Falker\\Desktop\\Code\\Panacea\\dist\\v2.0.0-round2\\Panacea.exe",
+  "sha256": "3088e81faea0253f0b775ed562229a9ee7eefd09c2d6b0b450c3f2864ad9efe6",
+  "method": "Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.",
+  "samples": [
+    {
+      "sample": 1,
+      "mapped_window_seconds": 2.1585229999982403,
+      "window": {
+        "pid": 11460,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.076206499998079,
+      "exit_code": 0
+    },
+    {
+      "sample": 2,
+      "mapped_window_seconds": 2.013127900001564,
+      "window": {
+        "pid": 10208,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.9122989999996207,
+      "exit_code": 0
+    },
+    {
+      "sample": 3,
+      "mapped_window_seconds": 1.9978804000020318,
+      "window": {
+        "pid": 24216,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.8319909000019834,
+      "exit_code": 0
+    },
+    {
+      "sample": 4,
+      "mapped_window_seconds": 1.7227519000007305,
+      "window": {
+        "pid": 26896,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 3.635133899999346,
+      "exit_code": 0
+    },
+    {
+      "sample": 5,
+      "mapped_window_seconds": 2.3794435000017984,
+      "window": {
+        "pid": 14664,
+        "client_pixels": [
+          1020,
+          680
+        ]
+      },
+      "total_smoke_seconds": 4.313561599999957,
+      "exit_code": 0
+    }
+  ],
+  "median_mapped_window_seconds": 2.013127900001564
+}

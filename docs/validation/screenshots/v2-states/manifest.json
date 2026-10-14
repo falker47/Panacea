@@ -1,0 +1,689 @@
+{
+  "fixture_only": true,
+  "case_count": 13,
+  "source_sha256": {
+    "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+    "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+    "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+    "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+    "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+    "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+  },
+  "all_passed": true,
+  "captures": [
+    {
+      "case": "cleanup-loading",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-loading",
+        "section": "Cleaning",
+        "state": "loading",
+        "description": "Pending inert preview; controls disabled.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:44.674787+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "preview": "Scanning temporary files\u2026 No files changed",
+          "operation": "Running \u00b7 Temporary file preview",
+          "delete_enabled": "disabled",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "53e09ad5fe489abaa05a5af359a9af1ee9b568b60b79125f8579edfc3bf56ef8",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "cleanup-success",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-success",
+        "section": "Cleaning",
+        "state": "success",
+        "description": "Synthetic successful preview; no deletion.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:48.000559+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "preview": "24 files \u00b7 3.0 MB eligible",
+          "operation": "Completed \u00b7 Temporary file preview",
+          "delete_enabled": "normal",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "5d7662b6bea6f1286dcac27d790e19ea89f5827a055c462773685f7838510c4d",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "cleanup-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-partial",
+        "section": "Cleaning",
+        "state": "partial",
+        "description": "Synthetic preview with skipped and locked entries.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:50.272307+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "preview": "24 files \u00b7 3.0 MB eligible \u00b7 1 skipped \u00b7 1 errors",
+          "operation": "Partial \u00b7 Temporary file preview",
+          "delete_enabled": "normal",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "9aff7809be2c29d6f5bfb9203da2327ee9129616e4e031091f4b0d0ce4961475",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "cleanup-error",
+      "exit_code": 0,
+      "record": {
+        "case": "cleanup-error",
+        "section": "Cleaning",
+        "state": "error",
+        "description": "Synthetic preview exception and visible error feedback.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:52.745414+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "preview": "Scan failed \u00b7 see status below",
+          "operation": "Failed \u00b7 Temporary file preview: Fixture only: temporary folder is unavailable",
+          "delete_enabled": "normal",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "efbb909d0729c2bfdae0362ff69f6277481c03cda9de815bcf48934bca1c2292",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "disk-unavailable",
+      "exit_code": 0,
+      "record": {
+        "case": "disk-unavailable",
+        "section": "Disk",
+        "state": "unavailable",
+        "description": "Synthetic offline volume; optimization disabled.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:54.957339+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "drive_detail": "Z: \u00b7 Unavailable: Fixture only: volume offline",
+          "optimize_enabled": "disabled",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "bfe5b4672f59e44d11262e319151f3cd0d3d6e4e0ee60a576d96a0d4784ca8cc",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "turbo-unknown",
+      "exit_code": 0,
+      "record": {
+        "case": "turbo-unknown",
+        "section": "Turbo",
+        "state": "unavailable",
+        "description": "Unknown settings and unavailable originals.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:57.290876+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "live_settings": {
+            "power": null,
+            "visual": null,
+            "sysmain": null,
+            "wsearch": null,
+            "spooler": null
+          },
+          "saved_originals": null,
+          "recovery_text": "Saved originals unavailable \u00b7 retry Refresh state",
+          "restore_enabled": "disabled",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "c8f902880d77758ae96bfd0afd5f598fee120b2322e0f1236d426ab462774f5a",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "turbo-saved-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "turbo-saved-partial",
+        "section": "Turbo",
+        "state": "partial",
+        "description": "Two saved originals with incomplete live state.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:30:59.646783+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "live_settings": {
+            "power": true,
+            "visual": null,
+            "sysmain": false,
+            "wsearch": null,
+            "spooler": false
+          },
+          "saved_originals": [
+            "power",
+            "visual"
+          ],
+          "recovery_text": "2 original settings saved \u00b7 available for restoration",
+          "restore_enabled": "normal",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "0346097ccf8b239887389127b3cddda4c91bb742df4e1b948ac25f08128c9400",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "resurrection-running",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-running",
+        "section": "Resurrect",
+        "state": "running",
+        "description": "Two completed steps; third running; progress 2/10.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:02.056073+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "status": "running",
+          "attempted": 2,
+          "progress": 0.2,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "running",
+            "Recycle Bin": "pending",
+            "DNS cache": "pending",
+            "Network reset": "pending",
+            "Drive optimization": "pending",
+            "Disk health scan": "pending",
+            "Windows image health": "pending",
+            "System file scan": "pending"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Running\u2026",
+            "Recycle Bin": "Not started",
+            "DNS cache": "Not started",
+            "Network reset": "Not started",
+            "Drive optimization": "Not started",
+            "Disk health scan": "Not started",
+            "Windows image health": "Not started",
+            "System file scan": "Not started"
+          },
+          "summary": "2/10 finished \u00b7 Browser caches",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "971fa6de578785626738da09c9f5545ef806877737abdb1ec2645687f84c9d4b",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "resurrection-completed",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-completed",
+        "section": "Resurrect",
+        "state": "success",
+        "description": "Ten simulated successful steps; progress 10/10.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:04.326021+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "status": "completed",
+          "attempted": 10,
+          "progress": 1.0,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "completed",
+            "Recycle Bin": "completed",
+            "DNS cache": "completed",
+            "Network reset": "completed",
+            "Drive optimization": "completed",
+            "Disk health scan": "completed",
+            "Windows image health": "completed",
+            "System file scan": "completed"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Completed",
+            "Recycle Bin": "Completed",
+            "DNS cache": "Completed",
+            "Network reset": "Completed",
+            "Drive optimization": "Completed",
+            "Disk health scan": "Completed",
+            "Windows image health": "Completed",
+            "System file scan": "Completed"
+          },
+          "summary": "Completed \u00b7 10/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "056620c984a6c70ae278d053ef5d3735922cd608d87a4ede76fc8d6bafaa2a70",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "resurrection-partial",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-partial",
+        "section": "Resurrect",
+        "state": "partial",
+        "description": "Synthetic network-reset failure; all ten attempted.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:06.640636+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "status": "partial",
+          "attempted": 10,
+          "progress": 1.0,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "completed",
+            "Recycle Bin": "completed",
+            "DNS cache": "completed",
+            "Network reset": "failed",
+            "Drive optimization": "completed",
+            "Disk health scan": "completed",
+            "Windows image health": "completed",
+            "System file scan": "completed"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Completed",
+            "Recycle Bin": "Completed",
+            "DNS cache": "Completed",
+            "Network reset": "Failed / partial",
+            "Drive optimization": "Completed",
+            "Disk health scan": "Completed",
+            "Windows image health": "Completed",
+            "System file scan": "Completed"
+          },
+          "summary": "Partial \u00b7 10/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "94a3b99296608f25ca53ca93b444f4893ecea8b30111b64d61fc409db5495303",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "resurrection-failed",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-failed",
+        "section": "Resurrect",
+        "state": "error",
+        "description": "Synthetic restore-point failure; nine steps not run.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:08.981861+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "status": "failed",
+          "attempted": 1,
+          "progress": 0.1,
+          "phases": {
+            "Restore point": "failed",
+            "Browser caches": "not run",
+            "Temporary files": "not run",
+            "Recycle Bin": "not run",
+            "DNS cache": "not run",
+            "Network reset": "not run",
+            "Drive optimization": "not run",
+            "Disk health scan": "not run",
+            "Windows image health": "not run",
+            "System file scan": "not run"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Failed / partial",
+            "Browser caches": "Not run",
+            "Temporary files": "Not run",
+            "Recycle Bin": "Not run",
+            "DNS cache": "Not run",
+            "Network reset": "Not run",
+            "Drive optimization": "Not run",
+            "Disk health scan": "Not run",
+            "Windows image health": "Not run",
+            "System file scan": "Not run"
+          },
+          "summary": "Failed \u00b7 1/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "0ed9ebf5e5c05c1ddd1d9c044502fc15aecc076b8657439f2d638a7d9f05a6e8",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "resurrection-cancelled",
+      "exit_code": 0,
+      "record": {
+        "case": "resurrection-cancelled",
+        "section": "Resurrect",
+        "state": "cancelled",
+        "description": "Cancellation after two steps; eight not run.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:11.361801+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "status": "cancelled",
+          "attempted": 2,
+          "progress": 0.2,
+          "phases": {
+            "Restore point": "completed",
+            "Browser caches": "completed",
+            "Temporary files": "not run",
+            "Recycle Bin": "not run",
+            "DNS cache": "not run",
+            "Network reset": "not run",
+            "Drive optimization": "not run",
+            "Disk health scan": "not run",
+            "Windows image health": "not run",
+            "System file scan": "not run"
+          },
+          "visible_phase_labels": {
+            "Restore point": "Completed",
+            "Browser caches": "Completed",
+            "Temporary files": "Not run",
+            "Recycle Bin": "Not run",
+            "DNS cache": "Not run",
+            "Network reset": "Not run",
+            "Drive optimization": "Not run",
+            "Disk health scan": "Not run",
+            "Windows image health": "Not run",
+            "System file scan": "Not run"
+          },
+          "summary": "Cancelled \u00b7 2/10 steps finished",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "078c3a92c9adbad28c5a468bda87f3fdbaa18046a61f8423d48a275dcff3cf6f",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    },
+    {
+      "case": "dashboard-unavailable",
+      "exit_code": 0,
+      "record": {
+        "case": "dashboard-unavailable",
+        "section": "Dashboard",
+        "state": "unavailable",
+        "description": "All synthetic resource samples unavailable.",
+        "fixture_only": true,
+        "visible_label": "SIMULATED RESULTS \u00b7 UI fixture only",
+        "timestamp_utc": "2026-10-13T17:31:13.261451+00:00",
+        "widget_scale": 1.0,
+        "scaling_method": "CTk widget simulation; window scale 1; no Windows scaling change.",
+        "source_sha256": {
+          "panacea_ui.py": "5b33cfc755e1d087ab8f5a6ad780c149065fdabfe24076dc857b5d2fdbf83554",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+          "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+          "scripts/ui_state_check.py": "c6d86aac9d403c521a18dedada7d50fc9acf8d7e1016eead8c22da4edd25194b"
+        },
+        "observed": {
+          "cpu": "\u2014",
+          "memory": "Memory unavailable",
+          "disk": "Unavailable",
+          "pixels": [
+            1366,
+            768
+          ],
+          "screen_pixels": [
+            2560,
+            1440
+          ],
+          "image_sha256": "8e3c052c2aadb0a329ec4654237586a20452b0d62eacfb979060966909ff0ba4",
+          "native_window_dpi": 96
+        },
+        "callback_errors": []
+      },
+      "stdout": "",
+      "stderr": "customtkinter.windows.widgets.font warning: Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\nUsing 'circle_shapes' instead. The rendering quality will be bad!\n"
+    }
+  ]
+}

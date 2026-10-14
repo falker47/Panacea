@@ -1,0 +1,18 @@
+{
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python": "3.14.3",
+  "source": "d605d5c",
+  "method": "Five fresh SystemMonitor instances, sequential cold RAM and disk CIM metadata lookups; read-only; perf_counter seconds",
+  "metadata_seconds": [
+    2.5302589000202715,
+    2.0026727000367828,
+    2.154350900033023,
+    1.9377626000205055,
+    1.825956300017424
+  ],
+  "metadata_median_seconds": 2.0026727000367828,
+  "details": {
+    "ram": "DDR4 @ 3200 MHz (2 Moduli)",
+    "disk": "SAMSUNG MZVLB1T0HBLR-000H1"
+  }
+}

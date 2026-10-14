@@ -164,12 +164,21 @@ def actual_install_test(args):
         if len(matches) != 1:
             raise RuntimeError("Expected exactly one registered Inno Setup uninstaller.")
         run_checked([matches[0], "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
-        installed = False
-        if app.exists() or sentinel.read_text(encoding="utf-8") != "PRESERVE":
-            raise RuntimeError("Uninstall failed to protect unrelated data.")
+        # Inno Setup can finish cleaning its running uninstaller asynchronously.
+        # Wait for actual deletion rather than treating the process exit as proof.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if not app.exists() and (previous_link or not start_link.exists()):
+                break
+            time.sleep(0.25)
+        if app.exists():
+            raise RuntimeError("Uninstaller exited but Panacea.exe still exists: " + str(app))
+        if sentinel.read_text(encoding="utf-8") != "PRESERVE":
+            raise RuntimeError("Uninstaller modified an unrelated sentinel.")
         verify_file(portable, expected, portable.stat().st_size)
         if not previous_link and start_link.exists():
             raise RuntimeError("Start Menu shortcut remained after uninstall.")
+        installed = False
         report["checks"]["uninstall_keeps_outside_and_portable"] = "PASS"
     finally:
         report["installation_may_remain"] = installed

@@ -320,7 +320,6 @@ def _native_bounds(widget):
 ])
 @isolated_tk_test
 def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, height, scale):
-    import tkinter.font as tkfont
     panacea_ui.ctk.set_widget_scaling(scale)
     panacea_ui.ctk.set_window_scaling(1)
     app = _safe_real_app(monkeypatch)
@@ -330,11 +329,16 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
         if not condition:
             problems.append(message)
 
+    def font_metric(rendered, metric):
+        # Font(font=...) recreates the font through `font actual`, which can
+        # round pixel sizes to points. Query the exact rendered description.
+        return int(rendered.tk.call('font', 'metrics', rendered.cget('font'),
+                                    '-displayof', rendered, '-' + metric))
+
     def baseline(label):
         rendered = label._label
-        font = tkfont.Font(root=app, font=rendered.cget('font'))
-        return (rendered.winfo_rooty() + (rendered.winfo_height() - font.metrics('linespace')) / 2
-                + font.metrics('ascent'))
+        return (rendered.winfo_rooty() + (rendered.winfo_height() - font_metric(rendered, 'linespace')) / 2
+                + font_metric(rendered, 'ascent'))
 
     def inside(widget, container, name):
         left, top, right, bottom = _native_bounds(widget)
@@ -388,7 +392,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 stacked = sorted(text_labels, key=lambda label: label._label.winfo_rooty())
                 for upper, lower in zip(stacked, stacked[1:]):
                     text_gap = lower._label.winfo_rooty() - _native_bounds(upper._label)[3]
-                    line_height = tkfont.Font(root=app, font=lower._label.cget('font')).metrics('linespace')
+                    line_height = font_metric(lower._label, 'linespace')
                     expect(-1 <= text_gap <= line_height * 0.65 + 2,
                            f'{name} title/detail gap is not compact or overlaps: {text_gap}')
                 inside(icon, icon.master, name + ' icon')
@@ -437,11 +441,16 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 phase_labels = list(_native_widgets(phase, panacea_ui.ctk.CTkLabel))
                 for label in phase_labels:
                     inside(label, phase, f'{name} phase text')
-                    font = tkfont.Font(root=app, font=label._label.cget('font'))
-                    expect(font.measure(label.cget('text')) <= label._label.winfo_width() + 2,
-                           f'{name} phase text is horizontally clipped: {label.cget("text")}')
-                    expect(font.metrics('linespace') <= label._label.winfo_height() + 2,
-                           f'{name} phase text is vertically clipped')
+                    rendered = label._label
+                    text_width = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                      '-displayof', rendered, label.cget('text')))
+                    line_height = font_metric(rendered, 'linespace')
+                    expect(text_width <= rendered.winfo_width() + 2,
+                           f'{name} phase text is horizontally clipped: {label.cget("text")}; '
+                           f'required={text_width}px, available={rendered.winfo_width()}px')
+                    expect(line_height <= rendered.winfo_height() + 2,
+                           f'{name} phase text is vertically clipped: '
+                           f'required={line_height}px, available={rendered.winfo_height()}px')
                 ordered = sorted(phase_labels, key=lambda label: label.winfo_rootx())
                 for previous, following in zip(ordered, ordered[1:]):
                     expect(_native_bounds(previous)[2] <= _native_bounds(following)[0] + 2,

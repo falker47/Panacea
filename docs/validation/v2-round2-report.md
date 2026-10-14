@@ -32,7 +32,7 @@ unchanged. The [functional polish report](v2-polish-report.md) remains applicabl
 
 ## Verification
 
-- Baseline: **501 passed**. Final complete suite: **501 passed in 63.62 s**.
+- Baseline: **501 passed**. Final complete suite: **501 passed**.
   Existing six native geometry cases were extended; no test was disabled.
 - Dashboard/Cleanup/Resurrection geometry, footer baseline and left/right/bottom
   insets, title/detail glyph gaps, all ten readable phases, Start/status/progress,
@@ -58,6 +58,16 @@ Visual inspection exposed a lower edge of the Resurrection output panel outside
 the scroll viewport at 1366×768/150%. Reduced progress/grid spacing fixes it; the
 native geometry matrix now checks the entire panel against the actual canvas.
 Independent source and visual review found no remaining blocker.
+
+The first Windows CI run exposed a test measurement error: constructing a new
+`tkinter.font.Font` from CTk's pixel-sized descriptor could round it to a different
+point size. A local isolated reproduction at Tk text resolution 1.5 measured
+**48 px** for the actual rendered text and **58 px** for the copied font, falsely
+reporting clipping. The previous geometry test failed under that same setup; the
+corrected test passed by querying the original font descriptor directly. Bounds
+and tolerances were not relaxed. This matches the class of issue documented in
+[CPython #143990](https://github.com/python/cpython/issues/143990). The complete
+suite was rerun; runtime sources, screenshots and the local EXE remain unchanged.
 
 ## Candidate
 

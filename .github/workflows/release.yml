@@ -54,12 +54,35 @@ jobs:
           $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged smoke failed: $($process.ExitCode)" }
+      - name: Ensure Inno Setup compiler is available on the disposable runner
+        shell: pwsh
+        run: |
+          $pf32 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+          $compiler = Join-Path $pf32 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup' }
+          }
+          if (-not (Test-Path -LiteralPath $compiler)) { throw 'ISCC.exe is missing' }
+          "PANACEA_ISCC=$compiler" >> $env:GITHUB_ENV
+
+      - name: Build checksum-verified per-machine installer
+        shell: pwsh
+        run: |
+          python scripts/build_installer.py --iscc "$env:PANACEA_ISCC" --exe dist/Panacea.exe --checksum dist/Panacea.exe.sha256 --out dist
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          $actual = (Get-FileHash -LiteralPath dist/PanaceaSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = (Get-Content -LiteralPath dist/PanaceaSetup.exe.sha256 -Raw).Trim()
+          if ($manifest -cne "$actual  PanaceaSetup.exe") { throw 'Setup SHA-256 mismatch' }
+
       - uses: actions/upload-artifact@v4
         with:
           name: Panacea-release-assets
           path: |
             dist/Panacea.exe
             dist/Panacea.exe.sha256
+            dist/PanaceaSetup.exe
+            dist/PanaceaSetup.exe.sha256
             dist/release-notes.md
           if-no-files-found: error
 
@@ -80,12 +103,12 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
           SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          gh release create "$RELEASE_TAG" --draft --target "$SOURCE_REF" --title "Panacea $RELEASE_TAG" --notes-file assets/release-notes.md assets/Panacea.exe assets/Panacea.exe.sha256
+          gh release create "$RELEASE_TAG" --draft --target "$SOURCE_REF" --title "Panacea $RELEASE_TAG" --notes-file assets/release-notes.md assets/Panacea.exe assets/Panacea.exe.sha256 assets/PanaceaSetup.exe assets/PanaceaSetup.exe.sha256
       - name: Verify both draft assets exist
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          gh release view "$RELEASE_TAG" --json isDraft,assets --jq 'select(.isDraft == true and ([.assets[].name] | index("Panacea.exe")) != null and ([.assets[].name] | index("Panacea.exe.sha256")) != null)' > draft.json
+          gh release view "$RELEASE_TAG" --json isDraft,assets --jq 'select(.isDraft == true and ([.assets[].name] | index("Panacea.exe")) != null and ([.assets[].name] | index("Panacea.exe.sha256")) != null and ([.assets[].name] | index("PanaceaSetup.exe")) != null and ([.assets[].name] | index("PanaceaSetup.exe.sha256")) != null)' > draft.json
           test -s draft.json

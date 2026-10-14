@@ -19,6 +19,10 @@ import time
 import traceback
 from types import SimpleNamespace
 
+# Direct script execution starts with scripts/ on sys.path, not the repository root.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from modules.cleanup import CleanupManager
 from modules import update_install
 from modules.updater import parse_checksum, verify_file

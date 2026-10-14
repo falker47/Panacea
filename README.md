@@ -95,6 +95,25 @@ Using native Windows commands does **not** make every operation risk-free. Befor
 
 The project does not implement a registry cleaner or automatic driver updater. It **does** write one documented visual-effects registry setting and can stop/start selected Windows services.
 
+## Installer and future updates
+
+Download the recommended `PanaceaSetup.exe` plus its separately published SHA-256
+manifest to install Panacea as an administrator-protected per-machine application
+in `Program Files\Panacea`. Inno Setup registers the Windows uninstaller and
+creates a Start Menu shortcut, with a desktop shortcut optionally available.
+
+The installer does not touch existing portable V1 executables. Older v1.47
+users should close the app and install V2 manually, not use the unverified
+legacy in-app Install banner.
+
+The V2 updater can offer checksum-verified, user-confirmed in-place updates
+for this protected installation. Desktop/Downloads copies deliberately cannot
+perform elevated in-place replacement; portable copies stay supported with
+manual updates and keep the existing ZEROfilez stable `Panacea.exe` link.
+
+Installation does not mean automatic silent background update. The runtime
+asks for approval and must satisfy protected-file and directory checks.
+
 ## Updates
 
 The desktop app checks GitHub Releases in the background and offers a manual check. It selects exactly `Panacea.exe` and `Panacea.exe.sha256`, rejects downgrade and unofficial URLs, and verifies the downloaded size, SHA-256 and Windows executable header before installation.

@@ -356,12 +356,16 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
             version = next(label for label in labels if f'v{panacea_ui.VERSION}' in label.cget('text'))
             copyright_label = next(label for label in labels if '©' in label.cget('text'))
+            expect(copyright_label.cget('text') == f'© {panacea_ui.datetime.now().year} falker47',
+                   'Footer must identify the repository author')
             expect(abs(baseline(version) - baseline(copyright_label)) <= 2 * scale, 'Footer text must share one baseline')
             expect('\n' not in version.cget('text') + copyright_label.cget('text'), 'Footer must stay on one line')
+            expect(_native_bounds(copyright_label)[2] <= _native_bounds(version)[0],
+                   'Footer author must be left of the version without overlap')
             sidebar = _native_bounds(app.sidebar_frame)
-            footer_left = min(_native_bounds(label)[0] for label in (version, copyright_label))
             footer_bottom = max(_native_bounds(label)[3] for label in (version, copyright_label))
-            insets = (footer_left - sidebar[0], sidebar[3] - footer_bottom)
+            insets = (_native_bounds(copyright_label)[0] - sidebar[0],
+                      sidebar[2] - _native_bounds(version)[2], sidebar[3] - footer_bottom)
             footer_insets.append(insets)
             expect(all(0 <= inset <= 20 * scale for inset in insets), f'Footer edge insets too large: {insets}')
             for label in (version, copyright_label):
@@ -381,6 +385,12 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 text_top = min(label._label.winfo_rooty() for label in text_labels)
                 text_bottom = max(label._label.winfo_rooty() + label._label.winfo_height() for label in text_labels)
                 expect(image_height >= 0.65 * (text_bottom - text_top), f'{name} image too small for its text group')
+                stacked = sorted(text_labels, key=lambda label: label._label.winfo_rooty())
+                for upper, lower in zip(stacked, stacked[1:]):
+                    text_gap = lower._label.winfo_rooty() - _native_bounds(upper._label)[3]
+                    line_height = tkfont.Font(root=app, font=lower._label.cget('font')).metrics('linespace')
+                    expect(-1 <= text_gap <= line_height * 0.65 + 2,
+                           f'{name} title/detail gap is not compact or overlaps: {text_gap}')
                 inside(icon, icon.master, name + ' icon')
                 for label in text_labels:
                     inside(label, icon.master, name + ' text')
@@ -406,7 +416,49 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                    'Analyze is not centered across the complete result card')
             inside(analyze, card, 'Analyze')
             inside(card, app.frame_cleaning, 'Cleanup analysis card')
-        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1)),
+            app.select_frame('Resurrect')
+            app.update()
+            resurrection_canvas = app.god_log.master.master._parent_canvas
+            resurrection_canvas.yview_moveto(0)
+            app.update()
+            for widget, label in ((app.btn_resurrect_start, 'Start sequence'),
+                                  (app.lbl_status, 'Resurrection status'),
+                                  (app.progress_bar, 'Resurrection progress')):
+                inside(widget, resurrection_canvas, label)
+            status_bounds = _native_bounds(app.lbl_status)
+            start_bounds = _native_bounds(app.btn_resurrect_start)
+            expect(status_bounds[2] <= start_bounds[0] or start_bounds[2] <= status_bounds[0]
+                   or status_bounds[3] <= start_bounds[1] or start_bounds[3] <= status_bounds[1],
+                   'Resurrection status overlaps Start sequence')
+            expect(len(app._resurrection_rows) == len(app.RESURRECTION_STEPS) == 10,
+                   'Every Resurrection phase must have a visible status')
+            for name, status in app._resurrection_rows.items():
+                phase = status.master
+                phase_labels = list(_native_widgets(phase, panacea_ui.ctk.CTkLabel))
+                for label in phase_labels:
+                    inside(label, phase, f'{name} phase text')
+                    font = tkfont.Font(root=app, font=label._label.cget('font'))
+                    expect(font.measure(label.cget('text')) <= label._label.winfo_width() + 2,
+                           f'{name} phase text is horizontally clipped: {label.cget("text")}')
+                    expect(font.metrics('linespace') <= label._label.winfo_height() + 2,
+                           f'{name} phase text is vertically clipped')
+                ordered = sorted(phase_labels, key=lambda label: label.winfo_rootx())
+                for previous, following in zip(ordered, ordered[1:]):
+                    expect(_native_bounds(previous)[2] <= _native_bounds(following)[0] + 2,
+                           f'{name} phase labels overlap')
+                if window_height == height:
+                    inside(phase, resurrection_canvas, name + ' phase')
+            if window_height < height:
+                resurrection_canvas.yview_moveto(1)
+                app.update()
+                for name in (app.RESURRECTION_STEPS[4], app.RESURRECTION_STEPS[-1]):
+                    inside(app._resurrection_rows[name].master, resurrection_canvas, name + ' phase after scroll')
+            output_panel = app.god_log.master
+            output_toggle = next(button for button in output_panel.winfo_children()
+                                 if isinstance(button, panacea_ui.ctk.CTkButton))
+            inside(output_panel, resurrection_canvas, 'Full sequence panel')
+            inside(output_toggle, resurrection_canvas, 'Full sequence output toggle')
+        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1, 2)),
                f'Footer insets drift on resize: {footer_insets}')
         assert not problems, '\n'.join(problems)
     finally:

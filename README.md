@@ -8,7 +8,8 @@ Panacea is a Windows desktop utility that groups common maintenance, repair and 
 The current codebase is the **2.0.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
 
 See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
-The [final polish report](docs/validation/v2-polish-report.md) records the latest candidate, optional analysis, direct cleanup and visible operation output.
+The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.
+The [Round 2 visual polish report](docs/validation/v2-round2-report.md) records the latest candidate, tighter Dashboard spacing, focused Resurrection layout and updated sidebar footer.
 
 ## What it does
 

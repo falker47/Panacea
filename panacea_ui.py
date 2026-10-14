@@ -99,7 +99,7 @@ class PanaceaApp(ctk.CTk):
                                  'Resurrect': self._setup_resurrect_frame}
         self._built_frames = set()
         self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
-        self.operation_label.grid(row=2, column=1, sticky='ew', padx=22, pady=(2, 10))
+        self.operation_label.grid(row=2, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
         self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
         if self._maintenance_uncertain:
             self.operation_label.configure(text=self.maintenance_guard.last_error, text_color=COL_WARNING)
@@ -200,12 +200,12 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         self.sidebar_footer.grid(row=11, column=0, sticky='ew', padx=14, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
-                     font=self._font(10), anchor='w').grid(row=0, column=0, sticky='w')
-        footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} M. Falconi',
+        footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} falker47',
                               height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
-        footer.grid(row=0, column=1, sticky='e')
+        footer.grid(row=0, column=0, sticky='w')
         footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
+        ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
+                     font=self._font(10), anchor='e').grid(row=0, column=1, sticky='e')
 
     def select_frame(self, name):
         if name not in self.frames:
@@ -215,7 +215,7 @@ class PanaceaApp(ctk.CTk):
             self._built_frames.add(name)
         for frame in self.frames.values():
             frame.grid_forget()
-        self.frames[name].grid(row=1, column=1, sticky='nsew')
+        self.frames[name].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
         self.active_frame = name
         for key, button in self.nav_buttons.items():
             selected = key == name
@@ -230,7 +230,7 @@ class PanaceaApp(ctk.CTk):
 
     def _setup_update_bar(self):
         bar = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=42)
-        bar.grid(row=0, column=1, sticky='ew')
+        bar.grid(row=0, column=1, sticky='ew', padx=(6, 0))
         bar.grid_columnconfigure(0, weight=1)
         self.app_update_status = ctk.CTkLabel(bar, text='Checking Panacea updates…', anchor='w', text_color=MUTED, font=self._font(11), wraplength=350)
         self.app_update_status.grid(row=0, column=0, sticky='ew', padx=18, pady=7)
@@ -258,16 +258,16 @@ class PanaceaApp(ctk.CTk):
         info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
-        system.grid(row=0, column=0, sticky='nsew', padx=(14, 7), pady=8)
-        self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', anchor='w',
+        system.grid(row=0, column=0, sticky='ew', padx=(14, 7), pady=10)
+        self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', height=22, anchor='w',
                                     font=self._font(15, True), text_color=TEXT)
         self.dash_os.pack(anchor='w')
         system_details = ctk.CTkFrame(system, fg_color='transparent')
-        system_details.pack(fill='x', pady=(3, 0))
-        self.dash_uptime_val = ctk.CTkLabel(system_details, text='Uptime: —', anchor='w',
+        system_details.pack(fill='x')
+        self.dash_uptime_val = ctk.CTkLabel(system_details, text='Uptime: —', height=16, anchor='w',
                                             font=self._font(11), text_color=MUTED)
         self.dash_uptime_val.pack(side='left')
-        self.dash_battery = ctk.CTkLabel(system_details, text='Power: —', anchor='w',
+        self.dash_battery = ctk.CTkLabel(system_details, text='Power: —', height=16, anchor='w',
                                          font=self._font(10), text_color=MUTED)
         self.dash_battery.pack(side='left', padx=(10, 0))
         updates = ctk.CTkFrame(info, fg_color=SURFACE_ALT, corner_radius=8)
@@ -275,11 +275,11 @@ class PanaceaApp(ctk.CTk):
         updates.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(updates, text='', image=self.action_icons['updates'], width=28).grid(
             row=0, column=0, rowspan=2, padx=(10, 3))
-        ctk.CTkLabel(updates, text='Windows Update', text_color=TEXT, font=self._font(12, True),
-                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
-        self.lbl_update_status = ctk.CTkLabel(updates, text='Checking…', font=self._font(10),
+        ctk.CTkLabel(updates, text='Windows Update', height=18, text_color=TEXT, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+        self.lbl_update_status = ctk.CTkLabel(updates, text='Checking…', height=16, font=self._font(10),
                                               text_color=MUTED, anchor='w', wraplength=210)
-        self.lbl_update_status.grid(row=1, column=1, sticky='nw', pady=(0, 7))
+        self.lbl_update_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
         self._button(updates, 'View', self.run_windows_update, secondary=True, width=58).grid(
             row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
 
@@ -354,12 +354,12 @@ class PanaceaApp(ctk.CTk):
         scan.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))
-        ctk.CTkLabel(scan, text='Temporary files', font=self._font(12, True),
-                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
+        ctk.CTkLabel(scan, text='Temporary files', height=18, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
         self.dash_preview_status = ctk.CTkLabel(
-            scan, text=self._preview_summary, text_color=MUTED, font=self._font(10),
+            scan, text=self._preview_summary, height=16, text_color=MUTED, font=self._font(10),
             anchor='w', wraplength=226, justify='left')
-        self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 9))
+        self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
         self._button(scan, 'Analyze', self.run_preview_temp, secondary=True,
                      maintenance=True, width=77).grid(
             row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
@@ -370,12 +370,12 @@ class PanaceaApp(ctk.CTk):
         restore.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
             row=0, column=0, rowspan=2, padx=(9, 5))
-        ctk.CTkLabel(restore, text='Restore point', font=self._font(12, True),
-                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(7, 0))
+        ctk.CTkLabel(restore, text='Restore point', height=18, font=self._font(12, True),
+                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
         restore_detail = ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
-                     text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
+                     height=16, text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
                      justify='left')
-        restore_detail.grid(row=1, column=1, sticky='nw', pady=(0, 9))
+        restore_detail.grid(row=1, column=1, sticky='nw', pady=(0, 14))
         self._button(restore, 'Create', self.run_create_restore, secondary=True,
                      maintenance=True, width=77).grid(
             row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
@@ -593,31 +593,34 @@ class PanaceaApp(ctk.CTk):
                           'Network reset', 'Drive optimization', 'Disk health scan', 'Windows image health', 'System file scan')
 
     def _setup_resurrect_frame(self):
-        body = self._section_body(self.frame_resurrect, 'Resurrection', 'Ten maintenance steps. A verified restore point is required to continue.')
+        body = self._section_body(self.frame_resurrect, 'Resurrection', '10 steps · Verified restore point required')
         card = self._card(body)
-        card.pack(fill='x', pady=(0, 8))
-        warning = ctk.CTkLabel(card, text='Permanently deletes caches, temporary files and the Recycle Bin; resets networking.\nSave your work. Cancellation stops between commands; deleted files cannot be restored.', text_color=COL_WARNING, font=self._font(11), anchor='w', justify='left', wraplength=650)
-        warning.pack(fill='x', padx=14, pady=(10, 5))
-        card.bind('<Configure>', lambda event: warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 28)))
-        self.progress_bar = ctk.CTkProgressBar(card, height=7, progress_color=COL_GOLD, fg_color=BORDER)
+        card.pack(fill='x', pady=(0, 6))
+        self.lbl_status = ctk.CTkLabel(card, text='Ready · No steps run', height=22, font=self._font(15, True), anchor='w', justify='left')
+        self.lbl_status.pack(fill='x', padx=14, pady=(8, 4))
+        self.progress_bar = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
         self.progress_bar.set(0)
-        self.progress_bar.pack(fill='x', padx=14, pady=(5, 8))
+        self.progress_bar.pack(fill='x', padx=14, pady=(0, 6))
         row = ctk.CTkFrame(card, fg_color='transparent')
-        row.pack(fill='x', padx=14, pady=(0, 12))
-        self.lbl_status = ctk.CTkLabel(row, text='Ready · No steps run', height=20, font=self._font(12, True), anchor='w')
-        self.lbl_status.pack(side='left', padx=(0, 12))
+        row.pack(fill='x', padx=14, pady=(0, 8))
         self.btn_resurrect_start = self._button(row, 'Start sequence', self.run_god_mode, maintenance=True)
         self.btn_resurrect_start.pack(side='right')
         self.btn_resurrect_cancel = self._button(row, 'Cancel after step', self._cancel_resurrect, secondary=True)
+        warning = ctk.CTkLabel(body, text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.', height=28, text_color=COL_WARNING, font=self._font(10), anchor='w', justify='left', wraplength=650)
+        warning.pack(fill='x', padx=2, pady=(0, 6))
+        card.bind('<Configure>', lambda event: (
+            warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 4)),
+            self.lbl_status.configure(wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 28)),
+        ))
         timeline = ctk.CTkFrame(body, fg_color='transparent')
         timeline.pack(fill='x')
         timeline.grid_columnconfigure((0, 1), weight=1, uniform='phases')
         self._resurrection_rows = {}
         for index, name in enumerate(self.RESURRECTION_STEPS):
             phase = self._card(timeline)
-            phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=3)
+            phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
             phase.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(11, True), width=24).grid(row=0, column=0, padx=(6, 4), pady=4)
+            ctk.CTkLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=28).grid(row=0, column=0, padx=(6, 4), pady=4)
             display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
             ctk.CTkLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
             status = ctk.CTkLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)

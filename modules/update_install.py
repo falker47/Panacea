@@ -64,16 +64,22 @@ def _read_json(path: Path) -> dict:
 def _write_json(path: Path, data: dict, *, exclusive=False, protected=False):
     _assert_plain_path(path)
     temporary = path.with_name(path.name + f".{secrets.token_hex(16)}.tmp") if protected and not exclusive else path
+    created = False
+    completed = False
     try:
         context = _open_exclusive(temporary, protected) if exclusive or protected else path.open("wb")
+        created = True
         with context as stream:
             stream.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
             stream.flush()
             os.fsync(stream.fileno())
         if temporary != path:
             os.replace(temporary, path)
+        completed = True
     finally:
-        if temporary != path:
+        # Remove only a file this call created, never a colliding operation's
+        # record. An incomplete exclusive marker must not poison every retry.
+        if created and (temporary != path or exclusive and not completed):
             temporary.unlink(missing_ok=True)
 
 
@@ -111,10 +117,15 @@ def _rollback(target: Path, backup: Path, marker: Path) -> bool:
         _assert_plain_path(target)
         _assert_plain_path(backup)
         os.replace(backup, target)
-        marker.unlink(missing_ok=True)
-        return True
     except (OSError, UpdateError):
         return False
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError:
+        # The original image is already restored. A later install can remove
+        # this marker only after verifying the restored original's checksum.
+        pass
+    return True
 
 
 _INSTALL_LOCK = threading.RLock()
@@ -160,7 +171,8 @@ def _transaction_guard(target: Path, protected=False):
             close(handle)
 
 
-def _validated_marker(target: Path, *, token=None, protected=False, require_ready=True) -> tuple[dict, Path]:
+def _validated_marker(target: Path, *, token=None, protected=False, require_ready=True,
+                      restored=False) -> tuple[dict, Path]:
     marker = readiness_path(target)
     state = _read_json(marker)
     actual_token = state.get("token")
@@ -180,13 +192,34 @@ def _validated_marker(target: Path, *, token=None, protected=False, require_read
                 _assert_admin_file(path)
     if not isinstance(state.get("backup_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", state["backup_sha256"]):
         raise UpdateVerificationError("Readiness backup checksum is invalid.")
-    verify_file(target, state["sha256"])
+    if not isinstance(state.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", state["sha256"]):
+        raise UpdateVerificationError("Readiness executable checksum is invalid.")
     _assert_plain_path(backup)
+    if restored:
+        if (state.get("ready", False) is not False or backup.exists()
+                or state["sha256"] == state["backup_sha256"]):
+            raise UpdateVerificationError("Previous update still has pending recovery state.")
+        verify_file(target, state["backup_sha256"])
+        return state, backup
+    verify_file(target, state["sha256"])
     if backup.exists():
         verify_file(backup, state["backup_sha256"])
     elif state.get("ready") is not True:
         raise UpdateVerificationError("An unacknowledged update is missing its recovery backup.")
     return state, backup
+
+
+def _finalize_previous_locked(target: Path, *, protected=False) -> bool:
+    """Clear completed readiness or a verified rollback's leftover marker."""
+    marker = readiness_path(target)
+    if _read_json(marker).get("ready") is True:
+        return _finalize_ready_locked(target, protected=protected)
+    _validated_marker(target, protected=protected, require_ready=False, restored=True)
+    try:
+        marker.unlink()
+        return True
+    except OSError:
+        return False
 
 
 def _finalize_ready_locked(target: Path, *, token=None, protected=False) -> bool:
@@ -246,7 +279,7 @@ def _install_verified_locked(staged, target, expected_sha256, launch, *, protect
             raise UpdateVerificationError("Installer target must be the current Panacea.exe.")
         for path in (target, staged, target.parent, marker, backup, candidate):
             _assert_plain_path(path)
-        if marker.exists() and not _finalize_ready_locked(target, protected=protected):
+        if marker.exists() and not _finalize_previous_locked(target, protected=protected):
             raise UpdateVerificationError("Previous readiness cleanup is still locked; keep its backup and retry later.")
         if not target.is_file():
             raise UpdateVerificationError("The current executable does not exist.")

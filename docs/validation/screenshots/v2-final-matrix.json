@@ -1,0 +1,809 @@
+{
+  "method": "Actual source GUI captures. CTk widget scaling simulation, Windows DPI unchanged. Read-only system queries active; no maintenance actions invoked.",
+  "matrices": [
+    {
+      "directory": "docs/validation/screenshots/v2-final-1366x768-100",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.0
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/dashboard.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "c3923989e10fb534caa3355cf6754ef06adbf1d50467c28898e90d86a9991ba2"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/cleaning.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "38f9c89532b9e9f9d6bc32391ef6756af7452aeb9cb1362a35e85125a6de9ec9"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/disk.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "64bafa24c1bffedc9ab49eaf5530223a04f9b1d69ebf4b6045752391f4351e1b"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/tools.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "111eeace38064aae03f2e801a49a59dc8207b24f77ed3b13ca886ac91365133e"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/apps.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "bb09d3a04713d0169d0eb1a28354602fb18021c43edcd51da11ffb6764fc8b9e"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/turbo.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "78c955f3e3efda2579e4175c6e34fbbeece06fc522a7bdf0fb461076aa28ac53"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-100/resurrect.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "4ccd981373bf4a9bd64f39296e3d5e34c10ad7465a4a8136ca37885abb88796c"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/v2-final-1366x768-125",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.25
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/dashboard.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "11c5d343b076b7f52dcab6f1f67a8499bb3523c5df77e755d3c6cc17a55e88f4"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/cleaning.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "c0cf74ae13395da3e5cb74e9d0b5841feb7de37d93a9b2c99b10efa05cf797ca"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/disk.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "96b80703c48846ca33a49e10d2e24d81845236ea9ef9a77e9214bf0ea408b671"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/tools.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "4adbb1704f65c95a51dec0d2397d2eda53fddcf2be2aa5eda51bf55a30b37588"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/apps.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "8039ace9cb82587950636897ee1cd04fe1a8d9ff0f124de9221b74f258ad4dc5"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/turbo.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "ad3d21c3d1abad639ff5f2adc42f493e2e059bf1c2230d16245a1d483424635b"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-125/resurrect.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "d4cca6b7fb9d55d37684c592c42410fde5b1593840a508f3ac3e2e00764202bf"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/v2-final-1366x768-150",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1366,
+              768
+            ],
+            "widget_scale": 1.5
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/dashboard.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "01a230be50de30a1409868df99fb29d89e6a111977645371ad1a79a0ac83002c"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/cleaning.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "5dbdf4c6f109bb41d2addfcbf0cfa57c946d0ab0edba50f129b2385306d25fb4"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/disk.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "f27977bbd4c21512593c3f0a95c108959054b6c26920cec398ae1ea5ab2e3b22"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/tools.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "c1b990fc3f62cd4ef7a05378ac98725a1b689a429fcd21dfa7b71a588bfe62db"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/apps.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "6c369aa661a60017d5532153239b1e33493a3e746283abb40a4ec49454771d0a"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/turbo.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "13273f35c53e32662d9ebc932509347e626590849feeed6a6be69acce54afceb"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1366x768-150/resurrect.png",
+          "pixels": [
+            1366,
+            768
+          ],
+          "sha256": "aeb6c12cf5e6b732071afbe69dad54a29f0479d153577f2a660d353fe44b4522"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/v2-final-1920x1080-100",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.0
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/dashboard.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "8cf61ae750a487319131a4282f16017a3586ec4bc5bd0cc175d06f1a6e39b8e2"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/cleaning.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "fa547e81c861af6b177fa1a0dcdc4506a2d50829236e4b823e721978df4d8c97"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/disk.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "615b839d757cb5c49195b7c9593a9ce0dd17beca9506e318e4fc268fac3b2070"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/tools.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "21f552065683773cd6d7bfd9457d21f2a6f2aedf0fba7ecb04fc1746ca5a679f"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/apps.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "e95a87cc1ef6c5fa1591d9556be8b2771f78eded878ff1317ad25c99931d1859"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/turbo.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "301cc050f5c9b9c4ad249d0a18b3c137562e33c92051e5dfa1890290a91aa71d"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-100/resurrect.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "7d4f67f3497a25b5387bd2d255cb3f6210d9cb0c9dfbc77dea94219b82e6e656"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/v2-final-1920x1080-125",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.25
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/dashboard.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "edea4e12a20bd9b88dc090b545503b9801cae5fa3d881e6b5bce242222c99319"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/cleaning.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "f21b91c118374a6e345762ae962c554ca8e842fe36d8a3c89e92fa1a34d37090"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/disk.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "f9e2d7d4c99ba4589c55126085e00b72e8bf3866aa1e45c20db0f3bce1796f97"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/tools.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "d08f95f4a7b049b6c2607dcbeaf87e6f565447e15ff63e602c3e63f14b3bffc2"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/apps.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "9a81feefc623c3b1443de6e18ea8bdbfde7738fd4d98412c1f0f3f95dec24d45"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/turbo.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "f9e7d27e6b3f091ebf1f4bd6b74ce08b2d2f4bbaa055449020f3c6445012dda4"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-125/resurrect.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "818879c2cb9d2704123232fa32970c57fc6dbd6a4cda51760db6f666c8bd046f"
+        }
+      ]
+    },
+    {
+      "directory": "docs/validation/screenshots/v2-final-1920x1080-150",
+      "observations": {
+        "views": [
+          {
+            "section": "Dashboard",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Cleaning",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Disk",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Tools",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Apps",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Turbo",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          },
+          {
+            "section": "Resurrect",
+            "pixels": [
+              1920,
+              1080
+            ],
+            "widget_scale": 1.5
+          }
+        ],
+        "callback_errors": [],
+        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+        "native_window_dpi": 96,
+        "screen_pixels": [
+          2560,
+          1440
+        ],
+        "source_sha256": {
+          "panacea_ui.py": "7c1f12092768ff0553c7ca1c8c79d24f6873ba6d0f07552e4362c56b8eb43aca",
+          "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7",
+          "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+          "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3"
+        }
+      },
+      "images": [
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/dashboard.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "d5f8aef5bbb6bf07c6cc3d453780ee73cbef2e6d806990fca2f01a02fee92826"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/cleaning.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "b09730d5903c2429e796f8634f12ea641cb6fa56024af2b0512b7ec256bbf244"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/disk.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "569fa5431f3bbb53f8f07e20e63675a9fdc32e8861c812eb5dcba1cb7d8aefae"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/tools.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "edb2fc0f3220698d77013abdaa3d308a349f91c6580026a29166d25340c6eec1"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/apps.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "afdcfd56f0c342a467a67f7a9fd58e0787fe8b65cda98b9be0158bb4256fa01a"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/turbo.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "2d7d0b0fb7ecb1692c05379b09d48e1f11a8358deb0e5a60c711d25f846ce20a"
+        },
+        {
+          "path": "docs/validation/screenshots/v2-final-1920x1080-150/resurrect.png",
+          "pixels": [
+            1920,
+            1080
+          ],
+          "sha256": "5d664da275fafe82dd78fc9e31e7a60a34d6783e20e9a4370e8f1f6b8266f0f1"
+        }
+      ]
+    }
+  ]
+}

@@ -162,7 +162,8 @@ class PerformanceManager:
             else:
                 raise ValueError('Unapproved Turbo command')
             args[0] = system_executable(args[0] + '.exe')
-            result = subprocess.run(args, shell=False, capture_output=True, text=True, timeout=30,
+            result = subprocess.run(args, shell=False, stdin=subprocess.DEVNULL,
+                                    capture_output=True, text=True, timeout=30,
                                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if hide else 0)
             return result.returncode == 0, (result.stdout or '') + (result.stderr or '')
         except Exception as exc:
@@ -229,6 +230,8 @@ class PerformanceManager:
             self._load_state()
             if self._state_error:
                 return False, f'Cannot safely change settings: {self._state_error}'
+            if not activate and key not in self._state:
+                return True, f'No saved {key} change to restore.'
             current = read()
             if current is None:
                 return False, f'Current {key} state is unknown; no change was made.'
@@ -242,8 +245,6 @@ class PerformanceManager:
                         return False, f'Cannot save original {key} state: {exc}'
                 target = active_value
             else:
-                if key not in self._state:
-                    return True, f'No saved {key} change to restore.'
                 target = self._state[key]
             if current != target:
                 success, message = write(target)
@@ -290,6 +291,18 @@ class PerformanceManager:
     def set_wsearch(self, enable=True): return self.set_service('WSearch', start=enable)
     def get_spooler_status(self): return self.get_service_status('Spooler')
     def set_spooler(self, enable=True): return self.set_service('Spooler', start=enable)
+
+    def get_saved_settings(self):
+        """Return recoverable setting keys, or None if the record is unreadable.
+
+        Pending originals survive partial activation/restoration and are separate
+        from whether every live setting currently matches the Turbo profile.
+        """
+        try:
+            with self._transaction():
+                return None if self._state_error else tuple(self._state)
+        except OSError:
+            return None
 
     def is_turbo_active(self):
         try:

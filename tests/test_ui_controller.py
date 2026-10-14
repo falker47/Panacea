@@ -139,12 +139,25 @@ def test_preview_reports_incomplete_inspection_as_partial():
     app.preview_label = Mock()
     app.operation_label = Mock()
     app.select_frame = Mock()
-    app.cleanup_mgr.preview_temp_files = lambda: (0, 0)
+    app.cleanup_mgr.preview_temp_files = lambda **kwargs: (0, 0)
     app.cleanup_mgr.last_result = SimpleNamespace(errors=['invalid root'], skipped=[], ok=False)
-    app._request_operation = lambda name, work, show: show(work())
+    app._request_operation = lambda name, work, show, **kwargs: show(work()) or True
     app.run_preview_temp()
     status = app.operation_label.configure.call_args.kwargs['text']
     assert 'partial' in status.lower() or 'failed' in status.lower()
+
+def test_analysis_results_update_the_dashboard_summary():
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.dash_preview_status = Mock()
+    app.select_frame = Mock()
+    app.cleanup_mgr.preview_temp_files = lambda **kwargs: (12, 1572864)
+    app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], ok=True)
+    app._request_operation = lambda name, work, show, **kwargs: show(work()) or True
+    app.run_preview_temp()
+    assert '12 candidates' in app.dash_preview_status.configure.call_args.kwargs['text']
+    assert '1.5 MB' in app.dash_preview_status.configure.call_args.kwargs['text']
+
 
 def test_centering_preserves_requested_geometry_when_it_fits():
     assert PanaceaApp._fit_window_size(1100, 700, 1920, 1080, 1.0) == (1100, 700)
@@ -157,7 +170,7 @@ def test_centering_clamps_large_geometry_to_scaled_work_area():
 def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch):
     app = app_without_window()
     calls = []
-    app._request_operation = lambda name, work, done: work()
+    app._request_operation = lambda name, work, done, **kwargs: work()
     monkeypatch.setenv('USERPROFILE', r'C:\Users\A Name')
     monkeypatch.setattr(panacea_ui.subprocess, 'run', lambda args, **kwargs: calls.append((args, kwargs)))
     import modules.commands
@@ -165,6 +178,7 @@ def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch
     app.run_battery_report()
     assert calls[0][0] == [r'C:\Windows\System32\powercfg.exe', '/batteryreport', '/output', r'C:\Users\A Name\battery_report.html']
     assert calls[0][1]['shell'] is False
+    assert calls[0][1]['stdin'] == panacea_ui.subprocess.DEVNULL
 
 def test_navigation_builds_each_section_only_when_first_opened():
     app = app_without_window()
@@ -203,6 +217,7 @@ def test_background_release_check_does_not_block_maintenance():
 
 def _safe_real_app(monkeypatch):
     """Real Tk layout, with every system/network boundary replaced before init."""
+    monkeypatch.setattr(panacea_ui, 'MaintenanceGuard', lambda: SimpleNamespace(is_blocked=lambda: False, mark_unknown=lambda: True, last_error=''))
     for name in ('Logger', 'CleanupManager', 'DiskOptimizer', 'CommandRunner', 'SystemMonitor', 'RestoreManager', 'PerformanceManager'):
         monkeypatch.setattr(panacea_ui, name, lambda: SimpleNamespace())
     for name in ('update_dashboard', '_load_metadata', 'refresh_drives', '_load_turbo_states', '_check_updates_thread', '_check_app_update'):
@@ -214,7 +229,9 @@ def _destroy_real_app(app):
     app._shutdown.set()
     app.workers.close()
     for callback_id in app.tk.call('after', 'info'):
-        app.after_cancel(callback_id)
+        # Cancel scheduling without deleting another widget's registered Tcl
+        # command. Its owning widget releases that command during destroy().
+        app.tk.call('after', 'cancel', callback_id)
     app.destroy()
 
 
@@ -284,6 +301,181 @@ def test_real_tk_user_resize_after_mapping_respects_minimum(monkeypatch):
 import pytest
 
 
+def _native_widgets(parent, kind):
+    for child in parent.winfo_children():
+        if isinstance(child, kind):
+            yield child
+        yield from _native_widgets(child, kind)
+
+
+def _native_bounds(widget):
+    return (widget.winfo_rootx(), widget.winfo_rooty(),
+            widget.winfo_rootx() + widget.winfo_width(),
+            widget.winfo_rooty() + widget.winfo_height())
+
+
+@pytest.mark.parametrize('width,height,scale', [
+    (1366, 768, 1.0), (1366, 768, 1.25), (1366, 768, 1.5),
+    (1920, 1080, 1.0), (1920, 1080, 1.25), (1920, 1080, 1.5),
+])
+@isolated_tk_test
+def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, height, scale):
+    panacea_ui.ctk.set_widget_scaling(scale)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    problems = []
+
+    def expect(condition, message):
+        if not condition:
+            problems.append(message)
+
+    def font_metric(rendered, metric):
+        # Font(font=...) recreates the font through `font actual`, which can
+        # round pixel sizes to points. Query the exact rendered description.
+        return int(rendered.tk.call('font', 'metrics', rendered.cget('font'),
+                                    '-displayof', rendered, '-' + metric))
+
+    def baseline(label):
+        rendered = label._label
+        return (rendered.winfo_rooty() + (rendered.winfo_height() - font_metric(rendered, 'linespace')) / 2
+                + font_metric(rendered, 'ascent'))
+
+    def inside(widget, container, name):
+        left, top, right, bottom = _native_bounds(widget)
+        bounds = _native_bounds(container)
+        expect(bounds[0] - 2 <= left < right <= bounds[2] + 2
+               and bounds[1] - 2 <= top < bottom <= bounds[3] + 2, f'{name} clipped: {(left, top, right, bottom)} vs {bounds}')
+
+    try:
+        app.update()
+        footer_insets = []
+        for window_width, window_height in ((width, height), (width - 160, height - 96), (width, height)):
+            panacea_ui.tk.Tk.maxsize(app, width, height)
+            panacea_ui.tk.Tk.geometry(app, f'{window_width}x{window_height}')
+            app.select_frame('Dashboard')
+            app.update()
+            dashboard_canvas = app.card_sys.master._parent_canvas
+            dashboard_canvas.yview_moveto(0)
+            app.update()
+            labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
+            version = next(label for label in labels if f'v{panacea_ui.VERSION}' in label.cget('text'))
+            copyright_label = next(label for label in labels if '©' in label.cget('text'))
+            expect(copyright_label.cget('text') == f'© {panacea_ui.datetime.now().year} falker47',
+                   'Footer must identify the repository author')
+            expect(abs(baseline(version) - baseline(copyright_label)) <= 2 * scale, 'Footer text must share one baseline')
+            expect('\n' not in version.cget('text') + copyright_label.cget('text'), 'Footer must stay on one line')
+            expect(_native_bounds(copyright_label)[2] <= _native_bounds(version)[0],
+                   'Footer author must be left of the version without overlap')
+            sidebar = _native_bounds(app.sidebar_frame)
+            footer_bottom = max(_native_bounds(label)[3] for label in (version, copyright_label))
+            insets = (_native_bounds(copyright_label)[0] - sidebar[0],
+                      sidebar[2] - _native_bounds(version)[2], sidebar[3] - footer_bottom)
+            footer_insets.append(insets)
+            expect(all(0 <= inset <= 20 * scale for inset in insets), f'Footer edge insets too large: {insets}')
+            for label in (version, copyright_label):
+                inside(label, app.sidebar_frame, 'Footer')
+            title = next(label for label in labels if label.cget('text') == 'Panacea')
+            tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
+            gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
+            expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
+            expect(all(icon.cget('size') == (24, 24) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
+            for name in ('cpu', 'memory', 'drive'):
+                expect(app.action_icons[name].cget('size') == (22, 22), f'{name} metric icon was resized')
+            dashboard_labels = list(_native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel))
+            for name in ('scan', 'restore', 'updates'):
+                icon = next(label for label in dashboard_labels if label.cget('image') is app.action_icons[name])
+                image_height = int(app.tk.call('image', 'height', icon._label.cget('image')))
+                text_labels = [label for label in _native_widgets(icon.master, panacea_ui.ctk.CTkLabel) if label.cget('text')]
+                text_top = min(label._label.winfo_rooty() for label in text_labels)
+                text_bottom = max(label._label.winfo_rooty() + label._label.winfo_height() for label in text_labels)
+                expect(image_height >= 0.65 * (text_bottom - text_top), f'{name} image too small for its text group')
+                stacked = sorted(text_labels, key=lambda label: label._label.winfo_rooty())
+                for upper, lower in zip(stacked, stacked[1:]):
+                    text_gap = lower._label.winfo_rooty() - _native_bounds(upper._label)[3]
+                    line_height = font_metric(lower._label, 'linespace')
+                    expect(-1 <= text_gap <= line_height * 0.65 + 2,
+                           f'{name} title/detail gap is not compact or overlaps: {text_gap}')
+                inside(icon, icon.master, name + ' icon')
+                for label in text_labels:
+                    inside(label, icon.master, name + ' text')
+                    expect(_native_bounds(icon)[2] <= _native_bounds(label)[0] + 2, name + ' icon overlaps text')
+                for button in _native_widgets(icon.master, panacea_ui.ctk.CTkButton):
+                    inside(button, icon.master, name + ' action')
+                    expect(max(_native_bounds(label)[2] for label in text_labels) <= _native_bounds(button)[0] + 2,
+                           name + ' text overlaps its action')
+            if window_height < height:
+                # Smaller than the requested display matrix: actions may scroll,
+                # but must remain reachable without disturbing the fixed footer.
+                dashboard_canvas.yview_moveto(1)
+                app.update()
+            inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
+            app.select_frame('Cleaning')
+            app.update()
+            card = app.preview_label.master
+            analyze = next(button for button in _native_widgets(card, panacea_ui.ctk.CTkButton)
+                           if button.cget('text') in ('Analyze', 'Preview'))
+            expect(analyze.cget('text') == 'Analyze', 'Cleanup analysis action should be named Analyze')
+            button_bounds, card_bounds = _native_bounds(analyze), _native_bounds(card)
+            expect(abs((button_bounds[1] + button_bounds[3]) - (card_bounds[1] + card_bounds[3])) <= 8 * scale,
+                   'Analyze is not centered across the complete result card')
+            inside(analyze, card, 'Analyze')
+            inside(card, app.frame_cleaning, 'Cleanup analysis card')
+            app.select_frame('Resurrect')
+            app.update()
+            resurrection_canvas = app.god_log.master.master._parent_canvas
+            resurrection_canvas.yview_moveto(0)
+            app.update()
+            for widget, label in ((app.btn_resurrect_start, 'Start sequence'),
+                                  (app.lbl_status, 'Resurrection status'),
+                                  (app.progress_bar, 'Resurrection progress')):
+                inside(widget, resurrection_canvas, label)
+            status_bounds = _native_bounds(app.lbl_status)
+            start_bounds = _native_bounds(app.btn_resurrect_start)
+            expect(status_bounds[2] <= start_bounds[0] or start_bounds[2] <= status_bounds[0]
+                   or status_bounds[3] <= start_bounds[1] or start_bounds[3] <= status_bounds[1],
+                   'Resurrection status overlaps Start sequence')
+            expect(len(app._resurrection_rows) == len(app.RESURRECTION_STEPS) == 10,
+                   'Every Resurrection phase must have a visible status')
+            for name, status in app._resurrection_rows.items():
+                phase = status.master
+                phase_labels = list(_native_widgets(phase, panacea_ui.ctk.CTkLabel))
+                for label in phase_labels:
+                    inside(label, phase, f'{name} phase text')
+                    rendered = label._label
+                    text_width = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                      '-displayof', rendered, label.cget('text')))
+                    line_height = font_metric(rendered, 'linespace')
+                    expect(text_width <= rendered.winfo_width() + 2,
+                           f'{name} phase text is horizontally clipped: {label.cget("text")}; '
+                           f'required={text_width}px, available={rendered.winfo_width()}px')
+                    expect(line_height <= rendered.winfo_height() + 2,
+                           f'{name} phase text is vertically clipped: '
+                           f'required={line_height}px, available={rendered.winfo_height()}px')
+                ordered = sorted(phase_labels, key=lambda label: label.winfo_rootx())
+                for previous, following in zip(ordered, ordered[1:]):
+                    expect(_native_bounds(previous)[2] <= _native_bounds(following)[0] + 2,
+                           f'{name} phase labels overlap')
+                if window_height == height:
+                    inside(phase, resurrection_canvas, name + ' phase')
+            if window_height < height:
+                resurrection_canvas.yview_moveto(1)
+                app.update()
+                for name in (app.RESURRECTION_STEPS[4], app.RESURRECTION_STEPS[-1]):
+                    inside(app._resurrection_rows[name].master, resurrection_canvas, name + ' phase after scroll')
+            output_panel = app.god_log.master
+            output_toggle = next(button for button in output_panel.winfo_children()
+                                 if isinstance(button, panacea_ui.ctk.CTkButton))
+            inside(output_panel, resurrection_canvas, 'Full sequence panel')
+            inside(output_toggle, resurrection_canvas, 'Full sequence output toggle')
+        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1, 2)),
+               f'Footer insets drift on resize: {footer_insets}')
+        assert not problems, '\n'.join(problems)
+    finally:
+        _destroy_real_app(app)
+        panacea_ui.ctk.set_widget_scaling(1.0)
+        panacea_ui.ctk.set_window_scaling(1.0)
+
+
 @pytest.mark.parametrize('width,height,scale', [(1366, 768, 1.5), (1020, 680, 1.0)])
 @isolated_tk_test
 def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monkeypatch, width, height, scale):
@@ -321,7 +513,7 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
                     result.extend(buttons_in(child))
             return result
         actions = buttons_in(app.card_sys)
-        assert len(actions) == 3
+        assert len(actions) == 2  # Analyze and restore; sidebar already opens Cleanup.
         for widget in [app.dash_cpu_val, app.dash_ram_perc, app.dash_disk_perc, *actions]:
             assert widget.winfo_rooty() >= top
             assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{widget.cget("text")} below viewport'
@@ -357,3 +549,432 @@ def test_update_replacement_guard_keeps_monitor_running_when_close_is_refused():
     app.monitor.close.assert_not_called()
     app.destroy.assert_not_called()
     assert not app._shutdown.is_set()
+
+
+@pytest.mark.parametrize('method,manager,backend', [
+    ('run_cleanmgr', 'cleanup_mgr', 'open_disk_cleanup'),
+    ('run_dfrgui', 'disk_opt', 'open_optimize_gui'),
+])
+def test_failed_windows_tool_launch_has_visible_error(method, manager, backend):
+    app = app_without_window()
+    setattr(app, manager, SimpleNamespace(**{backend: lambda: False}))
+    app._show_toast = Mock()
+    app.operation_label = Mock()
+    getattr(app, method)()
+    assert app._show_toast.call_args.args[2] == 'error'
+
+
+def test_resurrection_targets_windows_system_drive(monkeypatch):
+    app = app_without_window()
+    monkeypatch.setenv('SystemDrive', 'D:')
+    monkeypatch.setattr('modules.commands.system_executable', lambda name: 'D:\\Windows\\System32\\' + name)
+    app._run_resurrection_sequence()
+    assert app.disk_opt.analyze_optimize_drive.call_args.args[0] == 'D:'
+    commands = [call.args[0] for call in app.cmd_runner.run_command_stream.call_args_list]
+    assert 'chkdsk D: /scan /perf' in commands
+
+
+def test_completed_resurrection_step_updates_only_its_actual_result():
+    app = app_without_window()
+    app._resurrection_states = {}
+    app._resurrection_rows = {}
+    app._set_resurrection_step('Restore point', 'completed', 'Verified checkpoint')
+    app._set_resurrection_step('Browser caches', 'failed', 'One locked file')
+    assert app._resurrection_states == {
+        'Restore point': ('completed', 'Verified checkpoint'),
+        'Browser caches': ('failed', 'One locked file'),
+    }
+
+
+def test_cancelled_resurrection_marks_unattempted_steps_without_success():
+    app = app_without_window()
+    app._resurrection_states = {'Restore point': ('completed', 'Verified')}
+    app._resurrection_rows = {}
+    app.lbl_status = Mock()
+    app.operation_label = Mock()
+    result = {'status': 'cancelled', 'steps': [
+        {'name': 'Restore point', 'success': True, 'message': 'Verified'}], 'total': 10}
+    app._finish_resurrection(result)
+    assert app._resurrection_states['Restore point'][0] == 'completed'
+    assert app._resurrection_states['Browser caches'][0] == 'not run'
+    assert app.last_resurrection_result == result
+
+
+def test_restore_saved_turbo_is_available_after_partial_activation():
+    app = app_without_window()
+    app.btn_restore_turbo = Mock()
+    app.turbo_saved_label = Mock()
+    app._update_installing = False
+    app._apply_saved_turbo(('power',))
+    assert app.btn_restore_turbo.configure.call_args.kwargs['state'] == 'normal'
+    assert '1' in app.turbo_saved_label.configure.call_args.kwargs['text']
+
+
+def test_no_drives_disables_optimization_without_selecting_fake_drive():
+    app = app_without_window()
+    app.drive_menu = Mock()
+    app.selected_drive = Mock(get=lambda: 'C:')
+    app.btn_optimize_drive = Mock()
+    app.drive_detail = Mock()
+    app._update_installing = False
+    app._set_drives([])
+    assert app.selected_drive.set.call_args.args == ('No drives',)
+    assert app.btn_optimize_drive.configure.call_args.kwargs['state'] == 'disabled'
+
+
+@pytest.mark.parametrize('width,height,scale', [(1366, 768, 1.5)])
+@isolated_tk_test
+def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch, width, height, scale):
+    panacea_ui.ctk.set_widget_scaling(scale)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, width, height)
+        panacea_ui.tk.Tk.geometry(app, f'{width}x{height}')
+        def actions(widget):
+            found = []
+            for child in widget.winfo_children():
+                if isinstance(child, (panacea_ui.ctk.CTkButton, panacea_ui.ctk.CTkSwitch)):
+                    if child.winfo_ismapped():
+                        found.append(child)
+                else:
+                    found.extend(actions(child))
+            return found
+        for name in ('Cleaning', 'Disk', 'Tools', 'Apps', 'Turbo', 'Resurrect'):
+            app.select_frame(name)
+            app.update()
+            frame = app.frames[name]
+            left, top = frame.winfo_rootx(), frame.winfo_rooty()
+            right, bottom = left + frame.winfo_width(), top + frame.winfo_height()
+            widgets = actions(frame)
+            if name == 'Resurrect':
+                widgets += list(app._resurrection_rows.values())
+            for widget in widgets:
+                assert widget.winfo_rooty() >= top
+                assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{name}: {widget.cget("text")} below viewport'
+                assert widget.winfo_rootx() >= left
+                assert widget.winfo_rootx() + widget.winfo_width() <= right, f'{name}: {widget.cget("text")} outside viewport'
+            if name == 'Cleaning':
+                log = app.clean_log
+                toggle = next(child for child in log.master.winfo_children()
+                              if isinstance(child, panacea_ui.ctk.CTkButton))
+                assert not log.winfo_manager()
+                toggle.invoke()
+                app.update()
+                assert log.winfo_ismapped()
+                canvas = log.master.master._parent_canvas
+                before = canvas.yview()
+                assert before[1] < 1.0, 'Expanded details should overflow the compact viewport'
+                canvas.event_generate('<MouseWheel>', delta=-120)
+                app.update()
+                assert canvas.yview()[0] > before[0]
+                toggle.invoke()
+                app.update()
+                assert not log.winfo_manager()
+    finally:
+        _destroy_real_app(app)
+
+
+def test_unavailable_metrics_do_not_render_zero_or_healthy():
+    app = app_without_window()
+    names = ('dash_uptime_val', 'dash_cpu_val', 'cpu_graph', 'ram_graph', 'dash_ram_val', 'dash_ram_perc',
+             'dash_disk_bar', 'dash_disk_state', 'dash_disk_val', 'dash_disk_perc', 'dash_battery')
+    for name in names:
+        setattr(app, name, Mock())
+    app._update_fast_gui({'ram': None, 'disk': None, 'cpu': None, 'uptime': 'Unknown', 'battery': (None, 'Unknown')})
+    assert app.dash_cpu_val.configure.call_args.kwargs['text'] == '—'
+    assert app.dash_disk_state.configure.call_args.kwargs['text'] == 'Unavailable'
+    app.cpu_graph.add_value.assert_not_called()
+    app.ram_graph.add_value.assert_not_called()
+
+
+def test_battery_report_open_failure_preserves_saved_result(monkeypatch, tmp_path):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    monkeypatch.setattr(panacea_ui.os, 'startfile', Mock(side_effect=OSError('No HTML association')), raising=False)
+    app._request_operation = lambda name, work, success, **kwargs: success(tmp_path / 'battery_report.html')
+    app.run_battery_report()
+    text = app.operation_label.configure.call_args.kwargs['text']
+    assert 'saved' in text.lower() and 'battery_report.html' in text
+    assert app._show_toast.call_args.args[2] == 'warning'
+
+
+def test_callback_drain_does_not_reschedule_after_queued_shutdown():
+    app = app_without_window()
+    app.after = Mock()
+    app.dispatcher.post(app._shutdown.set)
+    app._drain_callbacks()
+    app.after.assert_not_called()
+
+
+def test_close_defers_until_owned_maintenance_finishes(monkeypatch):
+    monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
+    app = app_without_window()
+    app._update_installing = False
+    app._update_cancel = threading.Event()
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    app.monitor = SimpleNamespace(close=Mock())
+    app.destroy = Mock()
+    entered, release = threading.Event(), threading.Event()
+    def maintenance():
+        entered.set()
+        release.wait(3)
+        return True
+    try:
+        assert app._request_operation('fixture', maintenance)
+        assert entered.wait(3)
+        app._on_close()
+        app.destroy.assert_not_called()
+        assert app._resurrect_cancel.is_set()
+        release.set()
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.destroy.assert_called_once()
+        app.monitor.close.assert_called_once()
+    finally:
+        release.set()
+        app.workers.join(3)
+
+
+@pytest.mark.parametrize('target', ['ms-settings:appsfeatures', 'ms-settings:startupapps',
+                                   'ms-settings:windowsupdate', 'ms-settings:windowsupdate-optionalupdates'])
+def test_windows_settings_routes_exact_destination_without_claiming_completion(monkeypatch, target):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.apps_status = Mock()
+    opened = []
+    monkeypatch.setattr(panacea_ui.os, 'startfile', opened.append, raising=False)
+    app.run_launch(target, 'Windows settings')
+    assert opened == [target]
+    assert app.operation_label.configure.call_args.kwargs['text'].startswith('Opened')
+
+
+def test_windows_settings_failure_replaces_previous_success(monkeypatch):
+    app = app_without_window()
+    app.operation_label = Mock()
+    app.apps_status = Mock()
+    app._show_toast = Mock()
+    monkeypatch.setattr(panacea_ui.os, 'startfile', Mock(side_effect=OSError('unavailable')), raising=False)
+    app.run_launch('ms-settings:appsfeatures', 'Apps settings')
+    assert 'Failed' in app.operation_label.configure.call_args.kwargs['text']
+    assert 'unavailable' in app.apps_status.configure.call_args.kwargs['text']
+
+
+def test_resurrection_stops_after_command_completion_becomes_unknown():
+    app = app_without_window()
+    def timed_out(*args, **kwargs):
+        app.cmd_runner.completion_unknown = True
+        return False
+    app.cmd_runner.run_command_stream.side_effect = timed_out
+    result = app._run_resurrection_sequence()
+    assert result['status'] == 'partial'
+    assert len(result['steps']) == 5
+    assert 'unknown' in result['steps'][-1]['message'].lower()
+    app.disk_opt.analyze_optimize_drive.assert_not_called()
+
+
+def test_unknown_command_completion_blocks_further_maintenance():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_uncertain = True
+    app._show_toast = Mock()
+    assert app._request_operation('Another repair', Mock()) is False
+    assert 'restart' in app._show_toast.call_args.args[1].lower()
+
+
+def test_component_cleanup_routes_command_output_to_cleanup_details(monkeypatch):
+    app = app_without_window()
+    app.log_msg = Mock()
+    app.log_tools_msg = Mock()
+    app._show_result = Mock()
+    app._request_operation = lambda name, work, done, **kwargs: done(work())
+    monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
+    app.cmd_runner.run_command_stream.side_effect = lambda cmd, name, callback: callback('fixture output') or True
+    app.run_deep_clean()
+    app.log_msg.assert_any_call('fixture output')
+    app.log_tools_msg.assert_not_called()
+
+
+@pytest.mark.parametrize('raises', [False, True])
+def test_timeout_guard_is_saved_before_result_delivery_and_blocks_reopen(tmp_path, raises):
+    from modules.maintenance_guard import MaintenanceGuard
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    path = tmp_path / 'guard'
+    app.maintenance_guard = MaintenanceGuard(path, lambda: 'windows-boot-id:10')
+    def work():
+        app.cmd_runner.completion_unknown = True
+        if raises:
+            raise RuntimeError('fixture failed after timeout')
+        return False
+    assert app._request_operation('fixture command', work)
+    app.workers.join(3)
+    assert MaintenanceGuard(path, lambda: 'windows-boot-id:10').is_blocked()
+    app.dispatcher.drain()
+    assert app._maintenance_uncertain
+    assert 'restart' in app.operation_label.configure.call_args.kwargs['text'].lower()
+    assert app._request_operation('Another command', Mock()) is False
+
+
+def test_timeout_guard_save_failure_stays_visible_and_blocks_session():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    app.maintenance_guard = SimpleNamespace(mark_unknown=Mock(return_value=False), last_error='Could not save the recovery guard: denied')
+    def work():
+        app.disk_opt.completion_unknown = True
+        return False
+    assert app._request_operation('fixture timeout', work)
+    app.workers.join(3)
+    app.dispatcher.drain()
+    app.maintenance_guard.mark_unknown.assert_called_once()
+    assert app._maintenance_uncertain
+    assert 'Could not save' in app.operation_label.configure.call_args.kwargs['text']
+
+
+@isolated_tk_test
+def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        app.focus_force()
+        for index, name in enumerate(app.frames, 1):
+            app.event_generate(f'<Control-Key-{index}>')
+            app.update()
+            assert app.active_frame == name
+        button = app.nav_buttons['Dashboard']
+        button._canvas.focus_force()
+        app.update()
+        button._canvas.event_generate('<Return>')
+        app.update()
+        assert app.active_frame == 'Dashboard'
+        button._canvas.event_generate('<Tab>')
+        app.update()
+        assert app.focus_get() != button._canvas
+        app.select_frame('Disk')
+        app._set_drives([{'letter': 'C:'}, {'letter': 'D:'}])
+        app.update()
+        app.drive_menu._canvas.focus_force()
+        app.drive_menu._canvas.event_generate('<Down>')
+        app.update()
+        assert app.selected_drive.get() == 'D:'
+        app.select_frame('Turbo')
+        invoked = []
+        switch = app.turbo_switches['power']
+        switch.configure(state='normal', command=lambda: invoked.append(True))
+        app.update()
+        switch._canvas.focus_force()
+        switch._canvas.event_generate('<space>')
+        app.update()
+        assert invoked == [True]
+        switch.configure(state='disabled')
+        switch._canvas.event_generate('<Return>')
+        app.update()
+        assert invoked == [True]
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypatch):
+    panacea_ui.ctk.set_widget_scaling(1.5)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    entered, emit_late, late_sent, release = (threading.Event() for _ in range(4))
+    runs = []
+
+    def analyze(*, progress_callback):
+        runs.append(True)
+        for index in range(60):
+            progress_callback(f'Fixture analysis line {index}')
+        entered.set()
+        assert emit_late.wait(5)
+        progress_callback('Fixture late message')
+        late_sent.set()
+        assert release.wait(5)
+        return 7, 1572864
+
+    def activate(button):
+        button._canvas.focus_force()
+        app.update()
+        button._canvas.event_generate('<Return>')
+        app.update()
+
+    try:
+        app.cleanup_mgr.preview_temp_files = analyze
+        app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], skipped_counts={})
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, 1366, 768)
+        panacea_ui.tk.Tk.geometry(app, '1366x768')
+        app.select_frame('Cleaning')
+        app.update()
+        analyze_button = next(button for button in _native_widgets(app.preview_label.master, panacea_ui.ctk.CTkButton)
+                              if button.cget('text') == 'Analyze')
+        log = app.clean_log
+        toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
+        assert not log.winfo_manager()
+        activate(analyze_button)
+        assert entered.wait(3)
+        app.dispatcher.drain()
+        app.update()
+        assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
+        assert 'Fixture analysis line 59' in log.get('1.0', 'end')
+        viewport = log.master.master._parent_canvas
+        assert _native_bounds(log)[3] <= _native_bounds(viewport)[3] + 2, (
+            f'Opened output lies below the viewport: log={_native_bounds(log)}, '
+            f'viewport={_native_bounds(viewport)}, scroll={viewport.yview()}')
+        log._textbox.focus_force()
+        app.update()
+        before = log._textbox.yview()
+        log._textbox.event_generate('<Prior>')
+        app.update()
+        assert log._textbox.yview()[0] < before[0], 'Keyboard PageUp must scroll readable output'
+        reading_position = log._textbox.yview()
+        app.event_generate('<Control-Key-1>')
+        app.update()
+        assert app.active_frame == 'Dashboard'
+        app.event_generate('<Control-Key-2>')
+        app.update()
+        assert app.active_frame == 'Cleaning'
+        assert log.winfo_ismapped()
+        assert log._textbox.yview() == pytest.approx(reading_position)
+        activate(toggle)
+        assert not log.winfo_manager()
+        emit_late.set()
+        assert late_sent.wait(3)
+        app.dispatcher.drain()
+        app.update()
+        assert not log.winfo_manager(), 'Late worker output must respect a manual close'
+        release.set()
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.update()
+        assert not app.workers.busy()
+        assert not log.winfo_manager(), 'Completion must preserve manual closure'
+        assert 'Analysis completed' in app.preview_label.cget('text')
+        activate(analyze_button)
+        app.workers.join(3)
+        app.dispatcher.drain()
+        app.update()
+        assert len(runs) == 2
+        assert log.winfo_ismapped(), 'A new explicit run must reopen output and leave it open at completion'
+        app.select_frame('Dashboard')
+        app.select_frame('Cleaning')
+        app.update()
+        assert log.winfo_ismapped()
+    finally:
+        emit_late.set()
+        release.set()
+        app.workers.join(3)
+        _destroy_real_app(app)
+        panacea_ui.ctk.set_widget_scaling(1)
+        panacea_ui.ctk.set_window_scaling(1)

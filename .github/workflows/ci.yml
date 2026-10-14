@@ -50,6 +50,27 @@ jobs:
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged GUI smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke failed: $($process.ExitCode)" }
 
+      - name: Ensure Inno Setup compiler is available on the disposable runner
+        shell: pwsh
+        run: |
+          $pf32 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+          $compiler = Join-Path $pf32 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup' }
+          }
+          if (-not (Test-Path -LiteralPath $compiler)) { throw 'ISCC.exe is missing' }
+          "PANACEA_ISCC=$compiler" >> $env:GITHUB_ENV
+
+      - name: Build checksum-verified per-machine installer
+        shell: pwsh
+        run: |
+          python scripts/build_installer.py --iscc "$env:PANACEA_ISCC" --exe dist/Panacea.exe --checksum dist/Panacea.exe.sha256 --out dist
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          $actual = (Get-FileHash -LiteralPath dist/PanaceaSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = (Get-Content -LiteralPath dist/PanaceaSetup.exe.sha256 -Raw).Trim()
+          if ($manifest -cne "$actual  PanaceaSetup.exe") { throw 'Setup SHA-256 mismatch' }
+
       - name: Save candidate executable and checksum
         uses: actions/upload-artifact@v4
         with:
@@ -57,4 +78,91 @@ jobs:
           path: |
             dist/Panacea.exe
             dist/Panacea.exe.sha256
+            dist/PanaceaSetup.exe
+            dist/PanaceaSetup.exe.sha256
           if-no-files-found: error
+
+  windows-isolated-integration:
+    name: Disposable Windows image/cleanup integration
+    # Never exercise privileged Windows probes for untrusted fork contributions.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: windows-smoke
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Download the exact CI-built executable
+        uses: actions/download-artifact@v4
+        with:
+          name: Panacea-Windows-candidate
+          path: build/hosted-probe/new
+
+      - name: Retrieve official v1.47 executable only into isolated runner fixture
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path build/hosted-probe/legacy | Out-Null
+          gh release download v1.47 --repo falker47/Panacea --pattern Panacea.exe --dir build/hosted-probe/legacy
+
+      - name: Guarded native fixture cleanup and packaged V1-to-V2 replacement
+        shell: pwsh
+        run: |
+          python scripts/hosted_windows_release_probe.py --candidate build/hosted-probe/new/Panacea.exe --checksum build/hosted-probe/new/Panacea.exe.sha256 --legacy build/hosted-probe/legacy/Panacea.exe --output build/hosted-probe/report.json
+
+      - name: Retain scoped results, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-disposable-Windows-integration
+          path: build/hosted-probe/report.json
+          if-no-files-found: warn
+
+  windows-installer-integration:
+    name: Protected installer / update / uninstall
+    needs: windows-smoke
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install probe dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Retrieve exact CI-built assets
+        uses: actions/download-artifact@v4
+        with:
+          name: Panacea-Windows-candidate
+          path: build/installer-probe
+      - name: Install, restart, rollback and uninstall on disposable Windows
+        shell: pwsh
+        run: |
+          python scripts/hosted_installer_probe.py --setup build/installer-probe/PanaceaSetup.exe --setup-checksum build/installer-probe/PanaceaSetup.exe.sha256 --portable build/installer-probe/Panacea.exe --checksum build/installer-probe/Panacea.exe.sha256 --report build/installer-probe/report.json
+          if ($LASTEXITCODE -ne 0) { throw 'Installer native integration did not pass' }
+      - name: Retain installer test results even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-installer-Windows-integration
+          path: build/installer-probe/report.json
+          if-no-files-found: warn

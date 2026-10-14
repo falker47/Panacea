@@ -5,7 +5,11 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The current codebase is the **1.49.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
+The current codebase is the **2.0.0 release candidate**. Public releases remain authoritative; a local candidate or CI artifact does not imply stable publication.
+
+See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
+The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.
+The [Round 2 visual polish report](docs/validation/v2-round2-report.md) records the latest candidate, tighter Dashboard spacing, focused Resurrection layout and updated sidebar footer.
 
 ## What it does
 
@@ -24,10 +28,23 @@ The current codebase is the **1.49.0 release candidate**. Public releases remain
 
 Locked/in-use files are skipped. Cleanup is irreversible once files or Recycle Bin contents are deleted.
 
+**Analyze** is optional and read-only: it reports candidates and potential recovery,
+with an explicit “No files deleted” result. **Clean now** asks for confirmation and
+checks/deletes eligible files in one traversal, without a required preliminary
+scan. An earlier analysis never authorizes deletion and filesystem changes can
+change the result. **View reasons** retains all original skipped/error details;
+the live output summarizes reasons proven by the backend. Byte totals describe
+the logical size of eligible/deleted files, not a measured drive free-space delta.
+Windows Disk Cleanup's **Open utility** only opens the external Windows tool.
+
+Cleanup, optimization, command and Resurrection output opens at an accepted
+explicit start and remains available after completion and navigation. Closing a
+panel during execution is respected until the next explicit operation.
+
 Cleanup accepts the conventional local-user Temp and explicit browser cache roots, verifies opened Windows objects and refuses junctions, hardlinks and unverifiable paths. Protected cleanup and Turbo snapshot storage require native identity/case-sensitivity support (Windows 10 version 1803 or newer, or Windows 11); unsupported filesystems and queries fail closed. Redirected or unconventional user storage may require using Windows' own tools.
 
 ### Disk optimization
-- enumerates available drive letters;
+- enumerates local fixed drives and their capacity/availability;
 - runs Windows `defrag <drive> /O`, which lets Windows choose the appropriate optimization for the media;
 - can open the native **Defragment and Optimize Drives** interface.
 
@@ -38,15 +55,15 @@ Panacea exposes commands including:
 - `DISM /Online /Cleanup-Image /RestoreHealth`;
 - `ipconfig /flushdns`;
 - `netsh winsock reset`;
-- `chkdsk C: /scan /perf` inside the multi-step maintenance protocol.
+- `chkdsk <Windows drive>: /scan /perf` inside the multi-step maintenance protocol.
 
 ### Restore points
-Panacea requests a restore point through PowerShell and verifies that its sequence actually advanced. System Restore is not enabled implicitly. Unknown, unchanged or failed verification is reported as failure; Windows may throttle creation. Enable protection explicitly through Windows before using Resurrection if it is disabled.
+Panacea requests a restore point through PowerShell and verifies a newer sequence with the unique description of this exact request. System Restore is not enabled implicitly. Unknown, unchanged or failed verification is reported as failure; Windows may throttle creation. Enable protection explicitly through Windows before using Resurrection if it is disabled.
 
 ### Turbo Mode
 Turbo Mode can change:
 - the active Windows power plan;
-- the current user's `VisualFXSetting` registry value;
+- the current user's `VisualFXSetting` registry preference (immediate animation changes are not claimed);
 - the running state of `SysMain`, `WSearch` and `Spooler`.
 
 The controls save the original power scheme, service running state and visual preference before changing them. Turning a control off restores that saved value; failures and unavailable state remain explicit. Windows policies and external changes can still prevent restoration.
@@ -57,7 +74,7 @@ The automated protocol currently sequences:
 2. browser-cache cleanup;
 3. temp-file and Recycle Bin cleanup;
 4. DNS/Winsock reset;
-5. `defrag /O` on `C:`;
+5. `defrag /O` on the Windows system drive;
 6. online CHKDSK scan;
 7. DISM health check;
 8. SFC scan.
@@ -77,6 +94,25 @@ Using native Windows commands does **not** make every operation risk-free. Befor
 - avoid stopping services you actively depend on (for example Print Spooler while printing).
 
 The project does not implement a registry cleaner or automatic driver updater. It **does** write one documented visual-effects registry setting and can stop/start selected Windows services.
+
+## Installer and future updates
+
+Download the recommended `PanaceaSetup.exe` plus its separately published SHA-256
+manifest to install Panacea as an administrator-protected per-machine application
+in `Program Files\Panacea`. Inno Setup registers the Windows uninstaller and
+creates a Start Menu shortcut, with a desktop shortcut optionally available.
+
+The installer does not touch existing portable V1 executables. Older v1.47
+users should close the app and install V2 manually, not use the unverified
+legacy in-app Install banner.
+
+The V2 updater can offer checksum-verified, user-confirmed in-place updates
+for this protected installation. Desktop/Downloads copies deliberately cannot
+perform elevated in-place replacement; portable copies stay supported with
+manual updates and keep the existing ZEROfilez stable `Panacea.exe` link.
+
+Installation does not mean automatic silent background update. The runtime
+asks for approval and must satisfy protected-file and directory checks.
 
 ## Updates
 
@@ -117,7 +153,7 @@ python -m pytest -q tests
 python -m ruff check .
 ```
 
-The **Prepare Windows release** workflow accepts an immutable reviewed commit SHA and an exact tag matching `version.py`. It executes the checks and attaches `Panacea.exe` plus its checksum to a **draft** GitHub Release. Stable publication is a separate human approval gate after real Windows, prior-version update/restart, rollback and security checks. See [release notes](docs/releases/1.49.0.md) and [validation evidence](docs/validation).
+The **Prepare Windows release** workflow accepts an immutable reviewed commit SHA and an exact tag matching `version.py`. It executes the checks and attaches `Panacea.exe` plus its checksum to a **draft** GitHub Release. Stable publication is a separate human approval gate after real Windows, prior-version update/restart, rollback and security checks. See [release notes](docs/releases/2.0.0.md) and [validation evidence](docs/validation).
 
 This is a build/smoke gate, not a substitute for manual testing of elevated Windows maintenance operations on representative Windows 10/11 systems.
 

@@ -2,6 +2,8 @@ import ctypes
 from types import SimpleNamespace
 from modules.system_monitor import SystemMonitor
 import modules.system_monitor as monitoring
+import json
+import os
 
 
 def bare_monitor():
@@ -71,14 +73,14 @@ import pytest
 
 
 @pytest.mark.parametrize('method,output,expected', [
-    ('_fetch_ram_info', b'{"Speed":3200,"SMBIOSMemoryType":26}', 'DDR4 @ 3200 MHz (1 modules)'),
+    ('_fetch_ram_info', b'{"ConfiguredClockSpeed":3200,"SMBIOSMemoryType":26}', 'DDR4 @ 3200 MHz (1 module)'),
     ('_fetch_disk_model', b'Example Disk|SSD', 'SSD Example Disk'),
-    ('get_windows_update_status', b'2,1', (2, 1, '2 Required, 1 Optional')),
+    ('get_windows_update_status', b'{"ResultCode":2,"Recommended":2,"Optional":1}', (2, 1, '2 recommended, 1 optional')),
 ])
 def test_monitor_queries_launch_trusted_powershell_and_preserve_results(monkeypatch, method, output, expected):
     trusted = r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
     monkeypatch.setenv('PATH', r'C:\Attacker\fakebin')
-    monkeypatch.setattr(monitoring, 'system_executable', lambda name: trusted if name == 'powershell.exe' else None, raising=False)
+    monkeypatch.setattr(monitoring, 'system_executable', lambda name: trusted if name == 'powershell.exe' else r'C:\Windows\System32\cmd.exe', raising=False)
     monkeypatch.setattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
     calls = []
     def popen(arguments, **kwargs):
@@ -333,3 +335,242 @@ def test_native_timeout_reaps_fixture_and_closes_its_pipes(tmp_path, monkeypatch
             process.wait(timeout=3)
             process.stdout.close()
             process.stderr.close()
+
+
+def test_failed_memory_api_is_unavailable_not_zero_usage(monkeypatch):
+    def failed(pointer):
+        # A failed API call can leave stale output fields: ignore them all.
+        pointer._obj.ullTotalPhys = 16 * 1024**3
+        pointer._obj.ullAvailPhys = 16 * 1024**3
+        return 0
+    monkeypatch.setattr(monitoring.ctypes, 'windll', SimpleNamespace(
+        kernel32=SimpleNamespace(GlobalMemoryStatusEx=failed)), raising=False)
+    assert bare_monitor().get_ram_usage() is None
+
+
+@pytest.mark.parametrize('total,available,expected', [
+    (16 * 1024**3, 4 * 1024**3, (16.0, 4.0, 75.0)),
+    (0, 0, None),
+    (4 * 1024**3, 8 * 1024**3, None),
+])
+def test_memory_metrics_reject_invalid_capacity(monkeypatch, total, available, expected):
+    def read(pointer):
+        pointer._obj.ullTotalPhys = total
+        pointer._obj.ullAvailPhys = available
+        return 1
+    monkeypatch.setattr(monitoring.ctypes, 'windll', SimpleNamespace(
+        kernel32=SimpleNamespace(GlobalMemoryStatusEx=read)), raising=False)
+    assert bare_monitor().get_ram_usage() == expected
+
+
+def test_failed_cpu_api_preserves_last_valid_baseline(monkeypatch):
+    monitor = bare_monitor()
+    monitor._prev_idle, monitor._prev_total = 100, 200
+    monkeypatch.setattr(monitoring.ctypes, 'windll', SimpleNamespace(
+        kernel32=SimpleNamespace(GetSystemTimes=lambda *args: 0)), raising=False)
+    assert monitor.get_cpu_usage() is None
+    assert (monitor._prev_idle, monitor._prev_total) == (100, 200)
+
+
+@pytest.mark.parametrize('previous,idle,kernel,user,expected', [
+    ((0, 0), 100, 200, 100, None),
+    ((100, 300), 120, 260, 140, 80.0),
+    ((100, 300), 100, 200, 100, None),
+    ((100, 300), 99, 200, 110, None),
+    ((100, 300), 200, 210, 100, None),
+])
+def test_cpu_delta_needs_valid_elapsed_ticks(monkeypatch, previous, idle, kernel, user, expected):
+    monitor = bare_monitor()
+    monitor._prev_idle, monitor._prev_total = previous
+    def read(idle_pointer, kernel_pointer, user_pointer):
+        idle_pointer._obj.value = idle
+        kernel_pointer._obj.value = kernel
+        user_pointer._obj.value = user
+        return 1
+    monkeypatch.setattr(monitoring.ctypes, 'windll', SimpleNamespace(
+        kernel32=SimpleNamespace(GetSystemTimes=read)), raising=False)
+    assert monitor.get_cpu_usage() == expected
+
+
+def test_disk_usage_queries_actual_windows_volume_not_c(monkeypatch):
+    monkeypatch.setattr(monitoring, 'system_executable', lambda name: r'D:\Windows\System32\cmd.exe')
+    requested = []
+    def usage(path):
+        requested.append(path)
+        return 100 * 1024**3, 75 * 1024**3, 25 * 1024**3
+    monkeypatch.setattr(monitoring.shutil, 'disk_usage', usage)
+    monitor = bare_monitor()
+    assert monitor.get_disk_usage() == (100.0, 25.0, 75.0)
+    assert requested == ['D:\\']
+    assert monitor.sample_fast()['system_drive'] == 'D:'
+
+
+@pytest.mark.parametrize('capacity', [(0, 0, 0), (10, 20, -10), (10, 0, 20)])
+def test_invalid_disk_capacity_is_unavailable(monkeypatch, capacity):
+    monkeypatch.setattr(monitoring, 'system_executable', lambda name: r'D:\Windows\System32\cmd.exe')
+    monkeypatch.setattr(monitoring.shutil, 'disk_usage', lambda path: capacity)
+    assert bare_monitor().get_disk_usage() is None
+
+
+def test_disk_failure_is_unavailable(monkeypatch):
+    def denied(path):
+        raise OSError('volume unavailable')
+    monkeypatch.setattr(monitoring.shutil, 'disk_usage', denied)
+    assert bare_monitor().get_disk_usage() is None
+
+
+@pytest.mark.parametrize('output', [b'', b'0,0', b'null', b'{}',
+    b'{"ResultCode":2,"Recommended":-1,"Optional":0}',
+    b'{"ResultCode":2,"Recommended":true,"Optional":0}',
+    b'{"ResultCode":2,"Recommended":0.0,"Optional":0}'])
+def test_empty_or_invalid_update_result_is_never_success(monkeypatch, output):
+    monitor = bare_monitor()
+    monkeypatch.setattr(monitor, '_query_output', lambda *args, **kwargs: output)
+    recommended, optional, status = monitor.get_windows_update_status()
+    assert (recommended, optional) == (-1, -1)
+    assert status != 'System Up to Date'
+
+
+@pytest.mark.parametrize('code', [0, 1, 3, 4, 5])
+def test_partial_or_failed_update_search_is_not_a_healthy_zero(monkeypatch, code):
+    monitor = bare_monitor()
+    output = json.dumps({'ResultCode': code, 'Recommended': 0, 'Optional': 0}).encode()
+    monkeypatch.setattr(monitor, '_query_output', lambda *args, **kwargs: output)
+    assert monitor.get_windows_update_status()[:2] == (-1, -1)
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Isolated PowerShell fixture requires Windows')
+@pytest.mark.parametrize('updates,expected', [
+    ([], (0, 0, 'No available updates')),
+    ([{'IsInstalled': False, 'IsHidden': False, 'BrowseOnly': False, 'AutoSelectOnWebSites': False},
+      {'IsInstalled': False, 'IsHidden': False, 'BrowseOnly': True, 'AutoSelectOnWebSites': True},
+      {'IsInstalled': False, 'IsHidden': True, 'BrowseOnly': False, 'AutoSelectOnWebSites': True},
+      {'IsInstalled': True, 'IsHidden': False, 'BrowseOnly': False, 'AutoSelectOnWebSites': True}],
+     (1, 1, '1 recommended, 1 optional')),
+])
+def test_actual_update_script_classifies_isolated_fixture_without_com(monkeypatch, updates, expected):
+    monitor = bare_monitor()
+    fixture = json.dumps({'ResultCode': 2, 'Updates': updates})
+    prefix = """
+$script:fixture = ConvertFrom-Json '%s'
+$script:searcher = [pscustomobject]@{}
+$script:searcher | Add-Member -MemberType ScriptMethod -Name Search -Value {
+    param($criteria)
+    if ($criteria -ne 'IsInstalled=0 and IsHidden=0') { throw 'Wrong search criteria' }
+    return $script:fixture
+}
+function New-Object {
+    param([string]$ComObject)
+    if ($ComObject -ne 'Microsoft.Update.Session') { throw 'Unexpected COM request' }
+    $session = [pscustomobject]@{}
+    $session | Add-Member -MemberType ScriptMethod -Name CreateUpdateSearcher -Value { return $script:searcher }
+    return $session
+}
+""" % fixture
+    def isolated_query(arguments, timeout):
+        try:
+            result = monitoring.subprocess.run(arguments[:-1] + [prefix + arguments[-1]],
+                capture_output=True, stdin=monitoring.subprocess.DEVNULL, timeout=timeout,
+                creationflags=getattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception as exc:
+            pytest.fail(f'Cannot execute isolated PowerShell fixture: {exc!r}')
+        if result.returncode:
+            pytest.fail(f'Isolated PowerShell fixture failed: {result.stderr!r}')
+        return result.stdout
+    monkeypatch.setattr(monitor, '_query_output', isolated_query)
+    assert monitor.get_windows_update_status() == expected
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Isolated PowerShell fixture requires Windows')
+def test_disk_model_script_targets_same_actual_system_volume(monkeypatch):
+    monitor = bare_monitor()
+    trusted_resolver = monitoring.system_executable
+    monkeypatch.setattr(monitoring, 'system_executable', lambda name:
+        r'D:\Windows\System32\cmd.exe' if name == 'cmd.exe' else trusted_resolver(name))
+    prefix = """
+function Get-Partition { param([string]$DriveLetter)
+    if ($DriveLetter -ne 'D') { throw 'Wrong Windows volume' }
+    [pscustomobject]@{DiskNumber=7}
+}
+function Get-Disk { process { [pscustomobject]@{FriendlyName='Fixture disk'; MediaType='SSD'} } }
+"""
+    def isolated_query(arguments, timeout):
+        try:
+            result = monitoring.subprocess.run(arguments[:-1] + [prefix + arguments[-1]],
+                capture_output=True, stdin=monitoring.subprocess.DEVNULL, timeout=timeout,
+                creationflags=getattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception as exc:
+            pytest.fail(f'Cannot execute isolated PowerShell fixture: {exc!r}')
+        if result.returncode:
+            pytest.fail(f'Isolated PowerShell fixture failed: {result.stderr!r}')
+        return result.stdout
+    monkeypatch.setattr(monitor, '_query_output', isolated_query)
+    assert monitor.get_disk_model() == 'SSD Fixture disk'
+
+
+@pytest.mark.parametrize('modules,expected', [
+    ([{'ConfiguredClockSpeed': 2400, 'Speed': 3200, 'SMBIOSMemoryType': 26}],
+     'DDR4 @ 2400 MHz (1 module)'),
+    ([{'ConfiguredClockSpeed': 0, 'SMBIOSMemoryType': 0}],
+     'Unknown type @ Unknown speed (1 module)'),
+    ([{'ConfiguredClockSpeed': 3200, 'SMBIOSMemoryType': 26},
+      {'ConfiguredClockSpeed': 4800, 'SMBIOSMemoryType': 34}],
+     'Mixed types @ Mixed speeds (2 modules)'),
+    ([{'ConfiguredClockSpeed': 3200, 'SMBIOSMemoryType': 26},
+      {'ConfiguredClockSpeed': 0, 'SMBIOSMemoryType': 26}],
+     'DDR4 @ Unknown speed (2 modules)'),
+])
+def test_ram_metadata_uses_configured_values_and_does_not_invent_type(monkeypatch, modules, expected):
+    monitor = bare_monitor()
+    monkeypatch.setattr(monitor, '_query_output', lambda *args, **kwargs: json.dumps(modules).encode())
+    assert monitor.get_ram_info() == expected
+
+
+def test_cpu_registry_handle_closes_when_frequency_lookup_fails(monkeypatch):
+    key = object()
+    closed = []
+    def read(handle, name):
+        if name == '~MHz':
+            raise OSError('frequency unavailable')
+        return 'Fixture CPU', 1
+    monkeypatch.setitem(sys.modules, 'winreg', SimpleNamespace(HKEY_LOCAL_MACHINE=1,
+        OpenKey=lambda *args: key, QueryValueEx=read, CloseKey=lambda handle: closed.append(handle)))
+    monkeypatch.setattr(monitoring.platform, 'processor', lambda: 'Fallback CPU')
+    assert bare_monitor().get_cpu_info() == 'Fallback CPU'
+    assert closed == [key]
+
+
+def test_cpu_does_not_present_one_processor_group_as_whole_system(monkeypatch):
+    monitor = bare_monitor()
+    monitor._prev_idle, monitor._prev_total = 100, 300
+    def read(idle_pointer, kernel_pointer, user_pointer):
+        idle_pointer._obj.value = 120
+        kernel_pointer._obj.value = 260
+        user_pointer._obj.value = 140
+        return 1
+    monkeypatch.setattr(monitoring.ctypes, 'windll', SimpleNamespace(kernel32=SimpleNamespace(
+        GetActiveProcessorGroupCount=lambda: 2, GetSystemTimes=read)), raising=False)
+    assert monitor.get_cpu_usage() is None
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Isolated PowerShell fixture requires Windows')
+def test_ram_query_selects_configured_clock_from_isolated_cim_fixture(monkeypatch):
+    monitor = bare_monitor()
+    prefix = """
+function Get-CimInstance { param([string]$ClassName)
+    if ($ClassName -ne 'Win32_PhysicalMemory') { throw 'Unexpected CIM class' }
+    [pscustomobject]@{ConfiguredClockSpeed=2400; Speed=3200; SMBIOSMemoryType=26}
+}
+"""
+    def isolated_query(arguments, timeout):
+        try:
+            result = monitoring.subprocess.run(arguments[:-1] + [prefix + arguments[-1]],
+                capture_output=True, stdin=monitoring.subprocess.DEVNULL, timeout=timeout,
+                creationflags=getattr(monitoring.subprocess, 'CREATE_NO_WINDOW', 0))
+        except Exception as exc:
+            pytest.fail(f'Cannot execute isolated PowerShell fixture: {exc!r}')
+        if result.returncode:
+            pytest.fail(f'Isolated PowerShell fixture failed: {result.stderr!r}')
+        return result.stdout
+    monkeypatch.setattr(monitor, '_query_output', isolated_query)
+    assert monitor.get_ram_info() == 'DDR4 @ 2400 MHz (1 module)'

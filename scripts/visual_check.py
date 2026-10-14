@@ -2,6 +2,8 @@
 import argparse
 import json
 import logging
+import hashlib
+import ctypes
 import sys
 from pathlib import Path
 
@@ -29,6 +31,12 @@ def main():
     names = ["Dashboard", "Cleaning", "Disk", "Tools", "Apps", "Turbo", "Resurrect"]
     observations = []
     errors = []
+    class DispatchErrors(logging.Handler):
+        def emit(self, record):
+            errors.append(record.getMessage())
+    handler = DispatchErrors(level=logging.ERROR)
+    dispatch_logger = logging.getLogger('modules.ui_dispatch')
+    dispatch_logger.addHandler(handler)
     app.report_callback_exception = lambda kind, error, traceback: errors.append(str(error))
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -49,11 +57,19 @@ def main():
         if index + 1 < len(names):
             app.after(50, lambda: capture(index + 1))
         else:
-            (args.output / "observations.json").write_text(json.dumps({"views": observations, "callback_errors": errors}, indent=2), encoding="utf-8")
+            dpi = ctypes.windll.user32.GetDpiForWindow(app.winfo_id()) if sys.platform == 'win32' else None
+            sources = ['panacea_ui.py', 'version.py', 'modules/system_monitor.py', 'modules/ui_icons.py']
+            evidence = {"views": observations, "callback_errors": errors,
+                        "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
+                        "native_window_dpi": dpi,
+                        "screen_pixels": [app.winfo_screenwidth(), app.winfo_screenheight()],
+                        "source_sha256": {name: hashlib.sha256((args.source / name).read_bytes()).hexdigest() for name in sources}}
+            (args.output / "observations.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
             app._on_close()
 
     app.after(args.settle_ms, lambda: capture(0))
     app.mainloop()
+    dispatch_logger.removeHandler(handler)
     if errors:
         raise RuntimeError("GUI callback errors: " + "; ".join(errors))
 

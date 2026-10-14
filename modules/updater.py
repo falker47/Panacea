@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -239,7 +240,7 @@ class UpdateClient:
             if exc.code in (403, 429):
                 raise UpdateRateLimitError("GitHub denied or rate-limited the update check. Try again later.") from exc
             raise UpdateNetworkError(f"GitHub update request failed (HTTP {exc.code}).") from exc
-        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
             raise UpdateNetworkError("Cannot contact GitHub. Check the connection and retry.") from exc
 
     def _validate_release(self, release: Release, tag: str | None = None):
@@ -269,7 +270,7 @@ class UpdateClient:
             manifest = json.loads(data)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise UpdateManifestError("GitHub returned invalid release metadata.") from exc
-        except (OSError, TimeoutError) as exc:
+        except (OSError, TimeoutError, http.client.HTTPException) as exc:
             raise UpdateNetworkError("Release metadata download was interrupted.") from exc
         if not isinstance(manifest, dict):
             raise UpdateManifestError("GitHub release metadata is not an object.")
@@ -305,7 +306,7 @@ class UpdateClient:
         try:
             with self._request(release.sha256_url, asset=True) as response:
                 return parse_checksum(_read_bounded(response, MAX_CHECKSUM_SIZE))
-        except (OSError, TimeoutError) as exc:
+        except (OSError, TimeoutError, http.client.HTTPException) as exc:
             raise UpdateNetworkError("Checksum download was interrupted.") from exc
 
     def download(self, release: Release, directory: str | Path,
@@ -353,7 +354,7 @@ class UpdateClient:
             temporary.unlink()
             completed = True
             return verified
-        except (OSError, TimeoutError) as exc:
+        except (OSError, TimeoutError, http.client.HTTPException) as exc:
             raise UpdateNetworkError("Download was interrupted or could not be written.") from exc
         finally:
             temporary.unlink(missing_ok=True)

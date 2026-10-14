@@ -5,6 +5,7 @@ from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import threading
@@ -13,21 +14,69 @@ from modules.commands import system_executable
 from modules.logger import Logger
 
 
+@dataclass(frozen=True)
+class CleanupIssue:
+    """One original diagnostic with an evidence-based, locale-independent cause."""
+    kind: str
+    reason: str
+    path: str
+    detail: str
+    winerror: int | None = None
+
+
 @dataclass
 class CleanupResult:
+    """Current-pass counts: logical file bytes, never a previous preview estimate."""
     count: int = 0
     bytes: int = 0
     skipped: list = field(default_factory=list)
     errors: list = field(default_factory=list)
     preview: bool = False
+    issues: list[CleanupIssue] = field(default_factory=list)
 
     @property
     def ok(self):
         return not self.errors and not self.skipped
 
+    def _issue_counts(self, kind, diagnostics):
+        counts = {}
+        for issue in self.issues:
+            if issue.kind == kind:
+                counts[issue.reason] = counts.get(issue.reason, 0) + 1
+        # Legacy callers may still provide only diagnostic strings. Do not infer
+        # causes from localized text, or lose those entries from grouped counts.
+        unmatched = len(diagnostics) - sum(counts.values())
+        if unmatched > 0:
+            counts['unknown'] = counts.get('unknown', 0) + unmatched
+        return counts
+
+    @property
+    def skipped_counts(self):
+        """Counts diagnostic entries, including directories, not unseen files."""
+        return self._issue_counts('skipped', self.skipped)
+
+    @property
+    def error_counts(self):
+        return self._issue_counts('error', self.errors)
+
+    def add_issue(self, kind, path, error, *, reason=None, detail=None):
+        code = getattr(error, 'winerror', None)
+        reason = reason or getattr(error, 'reason', None)
+        if reason is None:
+            reason = {2: 'disappeared', 3: 'disappeared', 5: 'access_denied',
+                      32: 'locked', 33: 'locked'}.get(code)
+        if reason is None:
+            reason = 'filesystem_error' if isinstance(error, OSError) else 'unexpected_error'
+        path = str(path) if path is not None else ''
+        detail = detail if detail is not None else f'{path}: {error}' if path else str(error)
+        self.issues.append(CleanupIssue(kind, reason, path, detail, code))
+        (self.skipped if kind == 'skipped' else self.errors).append(detail)
+
 
 class UnsafePath(OSError):
-    pass
+    def __init__(self, message, *, reason='identity_unverified'):
+        super().__init__(message)
+        self.reason = reason
 
 
 class _FileInfo(ctypes.Structure):
@@ -38,14 +87,19 @@ class _FileInfo(ctypes.Structure):
                 ('index_high', wintypes.DWORD), ('index_low', wintypes.DWORD)]
 
 
+class _RecycleBinInfo(ctypes.Structure):
+    _fields_ = [('cbSize', wintypes.DWORD), ('i64Size', ctypes.c_longlong),
+                ('i64NumItems', ctypes.c_longlong)]
+
+
 def _lexical_path(path):
     """Immutable DOS identity: never resolve through an untrusted ancestor."""
     full = os.path.abspath(path)
     drive, tail = os.path.splitdrive(full)
     if len(drive) != 2 or drive[1] != ':' or not drive[0].isalpha() or not tail.startswith('\\'):
-        raise UnsafePath('Only local DOS paths are supported')
+        raise UnsafePath('Only local DOS paths are supported', reason='unsupported_path')
     if any(part.endswith((' ', '.')) or ':' in part for part in tail.split('\\') if part):
-        raise UnsafePath('Ambiguous file name refused')
+        raise UnsafePath('Ambiguous file name refused', reason='ambiguous_path')
     return full
 
 
@@ -56,20 +110,20 @@ def _validate_handle(kernel, handle, path):
     if not kernel.GetFileInformationByHandle(handle, ctypes.byref(info)):
         raise ctypes.WinError(ctypes.get_last_error())
     if info.attributes & 0x400:
-        raise UnsafePath(f'Reparse point refused: {path}')
+        raise UnsafePath(f'Reparse point refused: {path}', reason='reparse_point')
     if info.attributes & 0x10:
         flags = wintypes.DWORD()
         if not kernel.GetFileInformationByHandleEx(handle, 23, ctypes.byref(flags), ctypes.sizeof(flags)):
             raise UnsafePath(f'Cannot verify directory case sensitivity: {path}')
         if flags.value & 1:
-            raise UnsafePath(f'Case-sensitive directory refused: {path}')
+            raise UnsafePath(f'Case-sensitive directory refused: {path}', reason='case_sensitive')
     buffer = ctypes.create_unicode_buffer(32768)
     length = kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 0)
     if not length or length >= len(buffer):
         raise UnsafePath(f'Cannot verify final file identity: {path}')
     actual = buffer.value
     if not actual.startswith('\\\\?\\') or actual.startswith('\\\\?\\UNC\\'):
-        raise UnsafePath(f'Unsupported final file namespace: {path}')
+        raise UnsafePath(f'Unsupported final file namespace: {path}', reason='unsupported_path')
     if os.path.normcase(actual[4:].rstrip('\\')) != os.path.normcase(expected.rstrip('\\')):
         raise UnsafePath(f'Opened object left its approved path: {path}')
     return info
@@ -99,7 +153,7 @@ def _windows_handle(path, delete=False):
     prevent reparse conversion. Final-path binding is the mutation boundary.
     """
     if os.name != 'nt':
-        raise UnsafePath('Protected cleanup requires Windows file handles')
+        raise UnsafePath('Protected cleanup requires Windows file handles', reason='unsupported_platform')
     kernel = _kernel_api()
     kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
                                   wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
@@ -127,7 +181,7 @@ def _guard_path(path):
         for item in [*reversed(full.parents), full]:
             kernel, handle, info = stack.enter_context(_windows_handle(item))
             if not info.attributes & 0x10:
-                raise UnsafePath(f'Not a directory: {item}')
+                raise UnsafePath(f'Not a directory: {item}', reason='not_directory')
             guards.append((kernel, handle, item))
         _validate_guards(guards)
         yield guards
@@ -164,12 +218,14 @@ class CleanupManager:
         paths = []
         if os.environ.get('TEMP'):
             paths.append(os.environ['TEMP'])
+        elif self._local_root():
+            paths.append(os.path.join(self._local_root(), 'Temp'))
         windows = self._windows_root()
         if windows:
             candidate = os.path.join(windows, 'Temp')
             if os.path.isdir(candidate):
                 paths.append(candidate)
-        return list(dict.fromkeys(paths))
+        return list({self._normalized(path): path for path in paths}.values())
 
     def _approved_temp(self, path):
         if not isinstance(path, (str, os.PathLike)) or not os.path.isabs(path):
@@ -182,10 +238,24 @@ class CleanupManager:
     def _browser_paths(self):
         local = self._local_root()
         if not local:
+            self.last_result.add_issue('skipped', None, 'User cache location could not be verified.',
+                                       reason='location_unavailable')
             return []
-        targets = [os.path.join(local, vendor, browser, 'User Data', 'Default', cache)
-                   for vendor, browser in (('Google', 'Chrome'), ('Microsoft', 'Edge'))
-                   for cache in ('Cache', 'Code Cache')]
+        targets = []
+        for vendor, browser in (('Google', 'Chrome'), ('Microsoft', 'Edge')):
+            user_data = os.path.join(local, vendor, browser, 'User Data')
+            if not os.path.lexists(user_data):
+                continue
+            try:
+                with _guard_path(user_data) as guards:
+                    _validate_guards(guards)
+                    names = os.listdir(user_data)
+                    _validate_guards(guards)
+                    targets.extend(os.path.join(user_data, name, cache) for name in names
+                                   if name == 'Default' or re.fullmatch(r'Profile [0-9]+', name)
+                                   for cache in ('Cache', 'Code Cache'))
+            except OSError as exc:
+                self.last_result.add_issue('skipped', user_data, exc)
         profiles = os.path.join(local, 'Mozilla', 'Firefox', 'Profiles')
         if os.path.isdir(profiles):
             try:
@@ -195,13 +265,14 @@ class CleanupManager:
                     _validate_guards(guards)
                     targets.extend(os.path.join(profiles, name, 'cache2') for name in names)
             except OSError as exc:
-                self.last_result.skipped.append(f'{profiles}: {exc}')
+                self.last_result.add_issue('skipped', profiles, exc)
         return [path for path in targets if os.path.lexists(path)]
 
     def _delete_file(self, path, preview):
         with _windows_handle(path, delete=not preview) as (kernel, handle, info):
             if info.attributes & 0x10 or info.links != 1:
-                raise UnsafePath(f'Directory or multiply linked file refused: {path}')
+                raise UnsafePath(f'Directory or multiply linked file refused: {path}',
+                                 reason='not_regular' if info.attributes & 0x10 else 'hard_link')
             size = (info.size_high << 32) | info.size_low
             if not preview:
                 _validate_handle(kernel, handle, path)
@@ -219,14 +290,14 @@ class CleanupManager:
                     names = [entry.name for entry in entries]
                 _validate_handle(kernel, handle, directory)
         except OSError as exc:
-            self.last_result.errors.append(f'{directory}: {exc}')
+            self.last_result.add_issue('error', directory, exc)
             return
         for name in names:
             path = os.path.join(directory, name)
             try:
                 info = os.lstat(path)
                 if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
-                    raise UnsafePath(f'Reparse point refused: {path}')
+                    raise UnsafePath(f'Reparse point refused: {path}', reason='reparse_point')
                 if stat.S_ISDIR(info.st_mode):
                     with _windows_handle(path) as (_, _, held):
                         if not held.attributes & 0x10:
@@ -237,27 +308,53 @@ class CleanupManager:
                     self.last_result.count += 1
                     self.last_result.bytes += size
                     if progress_callback and self.last_result.count % 50 == 0:
-                        progress_callback(f'Deleted {self.last_result.count} files...')
+                        progress_callback(f'Found {self.last_result.count} eligible files...' if preview
+                                          else f'Deleted {self.last_result.count} files...')
                 else:
-                    raise UnsafePath(f'Nonregular file refused: {path}')
+                    raise UnsafePath(f'Nonregular file refused: {path}', reason='not_regular')
             except OSError as exc:
-                self.last_result.skipped.append(f'{path}: {exc}')
+                self.last_result.add_issue('skipped', path, exc)
             except Exception as exc:
-                self.last_result.errors.append(f'{path}: {exc}')
+                self.last_result.add_issue('error', path, exc)
 
     def _process_root(self, path, preview=False, progress_callback=None):
         try:
             with _guard_path(path):
                 self._walk_directory(path, preview, progress_callback)
+        except FileNotFoundError:
+            # A validated, approved cache root may legitimately not exist yet.
+            # A file disappearing after enumeration is still diagnosed per-file.
+            return
         except OSError as exc:
-            self.last_result.skipped.append(f'{path}: {exc}')
+            self.last_result.add_issue('skipped', path, exc)
+
+    def _safe_progress(self, callback):
+        if callback is None:
+            return None
+        failed = False
+        def report(message):
+            nonlocal failed
+            if failed:
+                return
+            try:
+                callback(message)
+            except Exception as exc:
+                failed = True
+                self.last_result.add_issue('error', None, exc, reason='progress_callback')
+        return report
 
     def _temp_operation(self, preview, progress_callback=None):
         with self._lock:
             self.last_result = CleanupResult(preview=preview)
-            for path in self.get_temp_paths():
+            progress_callback = self._safe_progress(progress_callback)
+            paths = self.get_temp_paths()
+            if not paths:
+                self.last_result.add_issue('skipped', None, 'Temporary file locations could not be verified.',
+                                           reason='location_unavailable')
+            for path in paths:
                 if not self._approved_temp(path):
-                    self.last_result.skipped.append(f'Unapproved temporary root: {path}')
+                    self.last_result.add_issue('skipped', path, '', reason='unapproved_root',
+                                               detail=f'Unapproved temporary root: {path}')
                     continue
                 if progress_callback:
                     progress_callback(f'Scanning {path}...')
@@ -270,8 +367,8 @@ class CleanupManager:
     def clean_temp_files(self, progress_callback=None):
         return self._temp_operation(False, progress_callback)
 
-    def preview_temp_files(self):
-        return self._temp_operation(True)
+    def preview_temp_files(self, progress_callback=None):
+        return self._temp_operation(True, progress_callback)
 
     def clean_browser_caches(self):
         with self._lock:
@@ -288,14 +385,24 @@ class CleanupManager:
             if approved:
                 self._process_root(folder_path)
             else:
-                self.last_result.skipped.append(f'Unapproved cleanup root: {folder_path}')
+                self.last_result.add_issue('skipped', folder_path, '', reason='unapproved_root',
+                                           detail=f'Unapproved cleanup root: {folder_path}')
             return self.last_result.count, self.last_result.bytes
 
     def empty_recycle_bin(self):
         try:
             result = ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 7)
-            if result in (0, -2147418113):
-                return True, 'Recycle bin emptied.' if result == 0 else 'Recycle bin was already empty.'
+            if result == 0:
+                return True, 'Recycle bin emptied.'
+            if result == -2147418113:
+                # E_UNEXPECTED is an error, not proof that every bin is empty.
+                info = _RecycleBinInfo()
+                info.cbSize = ctypes.sizeof(info)
+                query = ctypes.windll.shell32.SHQueryRecycleBinW
+                query.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(_RecycleBinInfo)]
+                query.restype = wintypes.LONG
+                if query(None, ctypes.byref(info)) == 0 and info.i64NumItems == 0:
+                    return True, 'Recycle bin is empty (verified).'
             return False, f'Recycle bin operation returned code {result}.'
         except Exception as exc:
             self.logger.log(f'Failed to empty recycle bin: {exc}', 'ERROR')

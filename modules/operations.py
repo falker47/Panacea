@@ -33,8 +33,12 @@ def run_sequence(steps, cancel=None, progress=None):
     steps = list(steps)
     results = []
     for step in steps:
-        if cancel is not None and (cancel.is_set() if hasattr(cancel, 'is_set') else cancel()):
-            return OperationResult('cancelled', results)
+        try:
+            if cancel is not None and (cancel.is_set() if hasattr(cancel, 'is_set') else cancel()):
+                return OperationResult('cancelled', results)
+        except Exception as exc:
+            return OperationResult('partial' if any(item.success for item in results) else 'failed', results,
+                                   f'Cancellation check failed: {exc}')
         try:
             value = step.action()
             if type(value) is bool:

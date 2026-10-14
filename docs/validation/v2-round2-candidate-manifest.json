@@ -1,0 +1,155 @@
+{
+  "version": "2.0.0",
+  "branch": "feat/panacea-brand-dashboard-20261013",
+  "baseline_commit": "4f58bae05f6e19c24da6a0405b4f1e07074f1fa5",
+  "source_revision": "The commit containing this manifest; the runtime/build digests below bind the local pre-commit build. Exact final commit is also recorded in the candidate VALIDATION.md and PR #3.",
+  "local_executable": "dist/v2.0.0-round2/Panacea.exe",
+  "size_bytes": 24298564,
+  "sha256": "3088e81faea0253f0b775ed562229a9ee7eefd09c2d6b0b450c3f2864ad9efe6",
+  "file_version": "2.0.0",
+  "product_version": "2.0.0",
+  "environment": "Windows-11-10.0.26300-SP0",
+  "python": "3.14.3",
+  "pyinstaller": "6.22.3",
+  "published": false,
+  "note": "Local Windows/Python 3.14 build. CI independently builds Windows/Python 3.12, with a separate checksum. No merge, tag or release.",
+  "source_sha256": {
+    "assets/icons/apps.png": "aab814772eb7ae7897b4f9e612e544b4563c47f7dfc0555b8adc375e5b0f1b96",
+    "assets/icons/boost.png": "f5d03a7e70e40af011444eb52887f52579dc5eda64a233187d2f5dcaa733dc61",
+    "assets/icons/clean.png": "f4ef2fcae5ce3802cd01b37d7d9b564fa2f78509ac6348ceacd571ba15853e77",
+    "assets/icons/dashboard.png": "477ca6330d56e6fbfb6ac65410a9fb14f45dbde9f98b13f4bbe280784f95047c",
+    "assets/icons/disk.png": "08b99f7bd62ec8ab47fedfc2b0c3ed19f604c377458152c8aa0c318b2ad8ddc7",
+    "assets/icons/lucide/LICENSE": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+    "assets/icons/lucide/manifest.json": "224ab3335fac62491ba2f4f227f8edc82fd76388524e40d8d12ee9bc254d9c6d",
+    "assets/icons/lucide/png/brush-cleaning.png": "3c72f3b159015d7847372295d8b4852e6b2c1454545c1a24a9ff06750994a9b2",
+    "assets/icons/lucide/png/cpu.png": "5dbe31855ffa161fe309eb59f4e9c29cb3a31ab8929d8df4ccfbe72f52fe031b",
+    "assets/icons/lucide/png/file-search.png": "c7dc1fefee6aece5148c6ed9c4d7a761c4df3ba78c2f0e995e1b74ff5e999b95",
+    "assets/icons/lucide/png/hard-drive.png": "6a8ce61312961a2fc53204142782e890f2b1dd73dd778672ba40229f954d53d2",
+    "assets/icons/lucide/png/layout-dashboard.png": "1d6917c4c5a4e5abf05d25ce8281d34a23f84e6e41a2449cfc95bf654e750fce",
+    "assets/icons/lucide/png/layout-grid.png": "3afe763e9098c7a5f5f8180a9a333032e9528b0baf301b51c8978ceb1db567ea",
+    "assets/icons/lucide/png/memory-stick.png": "6481b275c72d13edd27ab79a09b3337d63e8908851b839f5d5b57d273db53067",
+    "assets/icons/lucide/png/refresh-cw.png": "e946b85e2c16db0559a58e89600964fc0788d3be7693647a8836be4666a50e68",
+    "assets/icons/lucide/png/shield-plus.png": "a43ef329e80fbfdaec220b82be20a55ebe929dada47c1ccb4d663c28faba5c36",
+    "assets/icons/lucide/png/wrench.png": "20b6f4d0824080c591619657bfa06c72c10ccc6e5df716cf1b0f2f3acebfa64b",
+    "assets/icons/lucide/png/zap.png": "0862839131bcf4b662dfc6f88d8e98253bf20702609500c8d53ee211e82e709d",
+    "assets/icons/lucide/README.md": "ca07ab55bcdf07ed5e25363bc240437f81973672c48b9dc6a8a6fa02603f1f65",
+    "assets/icons/lucide/rendered.json": "79b92928369dd8c5627bb7d70f8e3c3f6facd7cba56c0a6be372baf006ee30ee",
+    "assets/icons/lucide/svg/brush-cleaning.svg": "16501b23a40f7d446d4047deaaa92b99236ae4caebe5b2e9eb47169a12a6a4a1",
+    "assets/icons/lucide/svg/cpu.svg": "ec83bb69ec029d367d749afc445b39c8e95891ebf99b0400652677c2b149b99c",
+    "assets/icons/lucide/svg/file-search.svg": "6cfea3242132f7f0ae32d66110f9f3ba93a22c16f53a776d77accc6b5a3a31e7",
+    "assets/icons/lucide/svg/hard-drive.svg": "324363c40f54e4ca843de0ad1d023b063b70a26a83bb2e0a9e9f4aad9af37378",
+    "assets/icons/lucide/svg/layout-dashboard.svg": "281ab865b4c04dab32a04023473e448f58be6a7ad90769450ac3349d79dc4aed",
+    "assets/icons/lucide/svg/layout-grid.svg": "b8903f61d09b1d75e55c71158277d26570962f69c2099446a251871e0a2d6678",
+    "assets/icons/lucide/svg/memory-stick.svg": "9214439ac142c10156434542908436087fb174c71c46e30cfb46971c56ba33d2",
+    "assets/icons/lucide/svg/refresh-cw.svg": "2e10dd403c85a24f163d59fc6151aa21147fe9402e1305dfc8979208caee8944",
+    "assets/icons/lucide/svg/shield-plus.svg": "0352cbbaa149b1f808dba3c704f40aed04500702f1b7c41b99d09500c18b2a72",
+    "assets/icons/lucide/svg/wrench.svg": "b5f3bf792743edb9e81b543dd1b13ccc26d3afe1d33500a1cd8dee2e052d6197",
+    "assets/icons/lucide/svg/zap.svg": "4c395891eab4d1e5627c5d414a16db037317cb2f12453de0f3a1130964c6d444",
+    "assets/icons/resurrect.png": "635f2cd39853bc75751612a5aec25ed24fb97c8c586551138daed4a91b9f4629",
+    "assets/icons/tools.png": "7930df46f275d8d3cfde963f0a72738706357fb5c7166c35f906d7fa5586d3d7",
+    "assets/icons/turbo.png": "4d7832ee13f43f37977042efd702550f0304ac081fe0e6ba2b3337f6c88bae60",
+    "assets/panacea.png": "48ebe6b575e67ebc8603b2fdebaee17390392c728fb11cdfe2798de04e95d1c3",
+    "assets/panacea.webp": "744bc2eb3308c4332e9948730587b11c190081d9af4a8e843543f7093544e8d7",
+    "assets/panacea_icon.ico": "0f09504a21e8df1e81112277c57032667547294a2637584bf6488244a6e4204e",
+    "assets/panacea_icon.png": "635f2cd39853bc75751612a5aec25ed24fb97c8c586551138daed4a91b9f4629",
+    "assets/panacea_icon_negative.png": "fdef0ca52719bbc80a6d41d0ce3b7fbcb235d61a45d97830c24d54659172112d",
+    "main.py": "51cec670312e3d650fb77f48afc8e578dddcdea891c1fb609260cf31aebb40ef",
+    "modules/cleanup.py": "e25cd75d0c6bdc940e25a2272fc5439b3b3f36b42d90b6749d3b33d6ea471621",
+    "modules/commands.py": "91c9abe56fcb479bfed8eedbc5f5e66d004771e5776c068219d82a8e0b5717de",
+    "modules/disk.py": "455d5c9734772f36ccb571fae84c3370094c2fa7471da3a5f719ed0b462d2d31",
+    "modules/logger.py": "e374c6dad37da563636bb6f16dc31411fd3b6aa01395fe1c6ff5364825441554",
+    "modules/maintenance_guard.py": "2b7e077c29b01f9be8db98c59c127dd25c7444eafc9397de2d97ee093c3d243a",
+    "modules/operations.py": "74e0d26e506f1a64961c7dc10b1b91ee3f39cd5e4d0e075ade2d1a537c4c15ba",
+    "modules/performance.py": "2aab58a6d1607f181ac65ced72d6841b2e3deaab1de191760b3336f9f1970bc3",
+    "modules/protected_files.py": "dfd4c33032a8967f569a3a69f283e043201c6239382acfe87c37870a90b29a91",
+    "modules/restore.py": "e99e631156ccca67c2862988f7227a6880a96557e772381f4da944b68cbfbfd6",
+    "modules/system_monitor.py": "01b2e4bc3d0de0c047b2a349417c639c7d886cd92ee6f68249b274747a59fa0d",
+    "modules/ui_dispatch.py": "621a24da3d5b0ef00c78d00edd903d71ca09f359a986f97cedf4e4b227e7f783",
+    "modules/ui_icons.py": "1ca2bfce419c8eaaa4aa305913a24dedb92fe0ce166112673cdd791e3d87ebb3",
+    "modules/update_install.py": "86bdb552ea989a2dcfd90ccadd023bc8dab1dfaf562bd05c6f6db5ab7c66a25a",
+    "modules/updater.py": "51a0ad228438d556478fbb2b5cedf741ae8b73b425b4693156aaaf1906e1ac8f",
+    "modules/utils.py": "88fa525a6986fd71ff13170f2945deaac420e8e88e55cb4552348b7f10f32555",
+    "Panacea.spec": "4d2041d9bbe4a9d77ffe486747ad27cab95050a9f317816e08fcdcc148aa6388",
+    "panacea_ui.py": "83e6515d05ab0f69f485823ad7521d0f86631637e520979e37d7e62cd0a4f705",
+    "requirements-dev.txt": "58dd3654519f79a5b73830c745f313e3e2432161d11938d3b716315aa10d0e88",
+    "requirements.txt": "ac21c593c267911fc5b7add8f416b5ac29d8786fdf180418ac07ec82d12cdc39",
+    "scripts/build.py": "7f98473d0aac225d31fe15be90aa68d7419edea1c5b40282af53aafa6f57796f",
+    "scripts/release_tools.py": "9c9719d94b8b5c2046f767ef2327b69b50ff65320fc9082455e2048ec4799383",
+    "version.py": "0d0b505a4444db81bf1654a271116cc50701c38a1725cb0df97d4ee7720f72c7"
+  },
+  "packaged_probe": {
+    "environment": "Windows-11-10.0.26300-SP0",
+    "python_harness": "3.14.3",
+    "executable": "C:\\Users\\Falker\\Desktop\\Code\\Panacea\\dist\\v2.0.0-round2\\Panacea.exe",
+    "sha256": "3088e81faea0253f0b775ed562229a9ee7eefd09c2d6b0b450c3f2864ad9efe6",
+    "method": "Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.",
+    "samples": [
+      {
+        "sample": 1,
+        "mapped_window_seconds": 2.1585229999982403,
+        "window": {
+          "pid": 11460,
+          "client_pixels": [
+            1020,
+            680
+          ]
+        },
+        "total_smoke_seconds": 4.076206499998079,
+        "exit_code": 0
+      },
+      {
+        "sample": 2,
+        "mapped_window_seconds": 2.013127900001564,
+        "window": {
+          "pid": 10208,
+          "client_pixels": [
+            1020,
+            680
+          ]
+        },
+        "total_smoke_seconds": 3.9122989999996207,
+        "exit_code": 0
+      },
+      {
+        "sample": 3,
+        "mapped_window_seconds": 1.9978804000020318,
+        "window": {
+          "pid": 24216,
+          "client_pixels": [
+            1020,
+            680
+          ]
+        },
+        "total_smoke_seconds": 3.8319909000019834,
+        "exit_code": 0
+      },
+      {
+        "sample": 4,
+        "mapped_window_seconds": 1.7227519000007305,
+        "window": {
+          "pid": 26896,
+          "client_pixels": [
+            1020,
+            680
+          ]
+        },
+        "total_smoke_seconds": 3.635133899999346,
+        "exit_code": 0
+      },
+      {
+        "sample": 5,
+        "mapped_window_seconds": 2.3794435000017984,
+        "window": {
+          "pid": 14664,
+          "client_pixels": [
+            1020,
+            680
+          ]
+        },
+        "total_smoke_seconds": 4.313561599999957,
+        "exit_code": 0
+      }
+    ],
+    "median_mapped_window_seconds": 2.013127900001564
+  }
+}

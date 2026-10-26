@@ -147,3 +147,22 @@ def test_natural_dynamic_update_and_maintenance_text_never_mix_languages():
     assert text == '2 file · 1.5 MB liberati · 0 ignorati · 0 errori'
     assert translate('Running · Guided Maintenance', 'it') == (
         'In esecuzione · Manutenzione guidata')
+
+
+@pytest.mark.parametrize(('source', 'expected'), [
+    ('Running · Guided Maintenance', 'In esecuzione · Manutenzione guidata'),
+    ('Partial · 3/10 steps finished', 'Parziale · 3/10 passaggi terminati'),
+    ('Update failed: Executable SHA-256 does not match the release.',
+     "Aggiornamento non riuscito: Lo SHA-256 dell'eseguibile non corrisponde a quello della release."),
+    ('Download and verify Panacea 2.0.3?\nThe app stays open if verification or installation fails.',
+     "Scaricare e verificare Panacea 2.0.3?\nL'app resterà aperta se la verifica o l'installazione non riesce."),
+    ('Recycle bin operation returned code 3.', 'Svuotamento del Cestino terminato con codice 3.'),
+    ('Battery report saved to C:\\Temp\\battery_report.html',
+     'Report della batteria salvato in C:\\Temp\\battery_report.html'),
+    ('System Restore state could not be verified. Check protection and administrator access.',
+     'Impossibile verificare lo stato di Ripristino configurazione di sistema. '
+     'Controlla Protezione sistema e i permessi di amministratore.'),
+])
+def test_system_operations_and_updater_errors_keep_information_in_italian(source, expected):
+    assert translate(source, 'it') == expected
+    assert translate(source, 'en') == source

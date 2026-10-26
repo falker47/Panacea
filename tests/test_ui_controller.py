@@ -1155,6 +1155,13 @@ def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch
         app.select_frame('Tools')
         app.update()
         assert app.frame_disk.winfo_ismapped()
+        restore = next(button for button in _native_widgets(
+            app.frame_tools, panacea_ui.ctk.CTkButton)
+            if button.cget('text') == 'Crea punto di ripristino')
+        glyph = restore._text_label
+        required = int(glyph.tk.call('font', 'measure', glyph.cget('font'),
+                                     '-displayof', glyph, restore.cget('text')))
+        assert required <= glyph.winfo_width() + 3
         seen = []
         monkeypatch.setattr(panacea_ui.messagebox, 'askyesno',
                             lambda title, detail, **kwargs: (seen.append((title, detail)), False)[1])

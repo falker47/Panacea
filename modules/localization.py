@@ -290,6 +290,114 @@ switches show the current Windows state => gli interruttori mostrano lo stato Wi
 Automatic steps attempted => Passaggi automatici tentati
 No cleanup started => Pulizia non avviata
 No further sequence steps will start => Non verranno avviati altri passaggi
+Running => In esecuzione
+Stopped => Interrotto
+Partial => Parziale
+Cancelled => Annullato
+The app stays open if verification or installation fails. => L'app resterà aperta se la verifica o l'installazione non riesce.
+Unknown Model => Modello sconosciuto
+Temporary-file results could not be verified. => Impossibile verificare i risultati della pulizia dei file temporanei.
+Starting Windows component-store cleanup (DISM). => Avvio della pulizia dei componenti Windows (DISM).
+DISM completion unknown; further maintenance is blocked. => Impossibile verificare il completamento di DISM: le altre operazioni di manutenzione sono bloccate.
+Component cleanup completed; Windows restart required. => Pulizia dei componenti completata; è necessario riavviare Windows.
+Component cleanup completed. => Pulizia dei componenti completata.
+Component cleanup failed. => Pulizia dei componenti non riuscita.
+Recycle bin emptied. => Cestino svuotato.
+Recycle bin is empty (verified). => Cestino vuoto (verificato).
+Invalid restore point description. => Descrizione del punto di ripristino non valida.
+System Restore state could not be verified. Check protection and administrator access. => Impossibile verificare lo stato di Ripristino configurazione di sistema. Controlla Protezione sistema e i permessi di amministratore.
+Restore point creation failed => Creazione del punto di ripristino non riuscita
+Restore point verified => Punto di ripristino verificato
+A positive finite process timeout is required => È richiesto un limite di tempo positivo e finito per il processo
+Process completion could not be verified => Impossibile verificare la conclusione del processo
+Process cleanup could not be verified => Impossibile verificare la chiusura del processo
+Command is not an approved maintenance operation => Il comando non è autorizzato come operazione di manutenzione
+Windows boot identity is unavailable or invalid => Identificativo dell'avvio di Windows non disponibile o non valido
+Windows boot counter is unavailable or invalid => Contatore degli avvii di Windows non disponibile o non valido
+An absolute maintenance guard path is required => È necessario un percorso assoluto per il controllo di sicurezza della manutenzione
+Maintenance guard storage is unavailable => Memorizzazione del controllo di sicurezza della manutenzione non disponibile
+Too many maintenance guard records to verify safely => Troppi record di sicurezza della manutenzione da verificare in sicurezza
+Unsafe maintenance guard record => Record di sicurezza della manutenzione non sicuro
+Invalid maintenance guard record => Record di sicurezza della manutenzione non valido
+Maintenance guard identity does not match its record => Identità del controllo di sicurezza della manutenzione diversa da quella registrata
+The maintenance guard write was interrupted before its record was saved => Il salvataggio del controllo di sicurezza della manutenzione è stato interrotto prima del completamento
+The original Windows boot is unknown; maintenance completion cannot be verified => L'avvio originale di Windows è sconosciuto: impossibile verificare il completamento della manutenzione
+Concurrent maintenance record could not be verified => Impossibile verificare il record di manutenzione concorrente
+Release version is invalid. => Versione della release non valida.
+Release URL is missing. => Indirizzo della release mancante.
+Release URL has an invalid port. => Porta non valida nell'indirizzo della release.
+Release URLs must be plain repository-owned HTTPS URLs. => Gli indirizzi delle release devono essere URL HTTPS diretti appartenenti al repository.
+Update paths cannot traverse links or reparse points. => I percorsi degli aggiornamenti non possono attraversare collegamenti o punti di reindirizzamento.
+Update response exceeds its size limit. => La risposta dell'aggiornamento supera il limite di dimensione.
+Checksum is not ASCII. => Il checksum non è in formato ASCII.
+Checksum must identify exactly Panacea.exe. => Il checksum deve identificare esattamente Panacea.exe.
+Expected SHA-256 is invalid. => SHA-256 atteso non valido.
+Executable exceeds its advertised size. => L'eseguibile supera la dimensione dichiarata.
+Executable size does not match the release. => La dimensione dell'eseguibile non corrisponde alla release.
+Executable SHA-256 does not match the release. => Lo SHA-256 dell'eseguibile non corrisponde a quello della release.
+Executable has no valid DOS/PE header. => L'eseguibile non contiene un'intestazione DOS/PE valida.
+Executable PE header is outside the file. => L'intestazione PE dell'eseguibile è fuori dal file.
+Executable PE signature is invalid. => La firma PE dell'eseguibile non è valida.
+PE header does not describe a supported executable image. => L'intestazione PE non descrive un eseguibile supportato.
+Executable optional/section headers are invalid or truncated. => Le intestazioni opzionali o delle sezioni dell'eseguibile non sono valide o sono incomplete.
+Executable must be a regular file. => L'eseguibile deve essere un file ordinario.
+Repository must be an owner/name pair. => Il repository deve essere indicato come proprietario/nome.
+Update redirect URL is invalid. => Indirizzo di reindirizzamento dell'aggiornamento non valido.
+Update redirect left trusted HTTPS GitHub hosts. => Il reindirizzamento dell'aggiornamento ha lasciato gli host HTTPS GitHub attendibili.
+Release metadata cannot come from the asset CDN. => I metadati della release non possono provenire dalla CDN dei file.
+Release metadata URL is outside this repository. => L'indirizzo dei metadati della release non appartiene a questo repository.
+Asset redirect is outside this repository. => Il reindirizzamento del file è esterno al repository.
+GitHub denied or rate-limited the update check. Try again later. => GitHub ha negato o limitato le richieste di verifica. Riprova più tardi.
+Cannot contact GitHub. Check the connection and retry. => Impossibile contattare GitHub. Controlla la connessione e riprova.
+A verified release manifest is required. => È necessario un manifesto di release verificato.
+Release is not a newer stable executable of valid size. => La release non è una versione stabile più recente con dimensione valida.
+Release page is outside the configured repository. => La pagina della release è esterna al repository configurato.
+Release page does not match its version. => La pagina della release non corrisponde alla versione.
+Release tag and page disagree. => Il tag e la pagina della release non corrispondono.
+Asset URL must identify the exact repository release asset. => L'URL del file deve identificare il file esatto della release del repository.
+GitHub returned invalid release metadata. => GitHub ha restituito metadati della release non validi.
+Release metadata download was interrupted. => Download dei metadati della release interrotto.
+GitHub release metadata is not an object. => I metadati della release GitHub non sono validi.
+Release stability fields are missing. => Mancano i campi che identificano la stabilità della release.
+Release assets are missing or malformed. => I file della release mancano o non sono validi.
+Checksum asset size is invalid. => La dimensione del file di checksum non è valida.
+Checksum download was interrupted. => Download del checksum interrotto.
+Update download cancelled. => Download dell'aggiornamento annullato.
+Download exceeds the advertised executable size. => Il download supera la dimensione dichiarata dell'eseguibile.
+Download was interrupted or could not be written. => Il download è stato interrotto oppure non è stato possibile salvare il file.
+Update state is too large. => I dati dello stato dell'aggiornamento superano il limite di dimensione.
+Update state is malformed. => I dati dello stato dell'aggiornamento non sono validi.
+Staged executable changed while it was opened. => L'eseguibile preparato è cambiato durante l'apertura.
+Staged executable exceeds the update size limit. => L'eseguibile preparato supera il limite di dimensione dell'aggiornamento.
+Cannot acquire the updater transaction guard; retry later. => Impossibile acquisire il blocco di sicurezza dell'aggiornamento; riprova più tardi.
+Another updater transaction is active; retry later. => È già in corso un'altra operazione di aggiornamento; riprova più tardi.
+Readiness marker does not match the recorded operation token. => Il marcatore di avvio non corrisponde al codice dell'operazione registrata.
+Readiness marker is not a completed update for this executable. => Il marcatore di avvio non indica un aggiornamento completato per questo eseguibile.
+Readiness backup checksum is invalid. => Checksum del backup di avvio non valido.
+Readiness executable checksum is invalid. => Checksum dell'eseguibile di avvio non valido.
+Previous update still has pending recovery state. => Un aggiornamento precedente ha ancora uno stato di ripristino in sospeso.
+An unacknowledged update is missing its recovery backup. => Manca il backup di ripristino di un aggiornamento non confermato.
+Installer target must be the current Panacea.exe. => La destinazione dell'installer deve essere l'eseguibile Panacea.exe corrente.
+Previous readiness cleanup is still locked; keep its backup and retry later. => La pulizia del precedente avvio è ancora bloccata; conserva il backup e riprova più tardi.
+The current executable does not exist. => L'eseguibile corrente non esiste.
+A generated update path already exists; no existing files were overwritten. => Il percorso generato per l'aggiornamento esiste già; nessun file esistente è stato sovrascritto.
+The new application exited before it acknowledged readiness. => La nuova applicazione si è chiusa prima di confermare l'avvio.
+Cannot verify update directory permissions. => Impossibile verificare i permessi della cartella degli aggiornamenti.
+Cannot read update directory permissions. => Impossibile leggere i permessi della cartella degli aggiornamenti.
+Automatic executable updates require Windows. => Gli aggiornamenti automatici dell'eseguibile richiedono Windows.
+The installed executable must be owned and writable only by administrators. => L'eseguibile installato deve essere di proprietà degli amministratori e modificabile soltanto da loro.
+Cannot create protected executable permissions. => Impossibile configurare i permessi protetti dell'eseguibile.
+Cannot create protected update permissions. => Impossibile configurare i permessi protetti dell'aggiornamento.
+Cannot create an administrator-protected update workspace. => Impossibile creare una cartella di aggiornamento protetta dagli amministratori.
+Source execution opens the verified release page for manual installation. => L'esecuzione da sorgente apre la pagina della release verificata per l'installazione manuale.
+Update helper must run from its prepared protected workspace. => Il processo ausiliario di aggiornamento deve essere eseguito dalla cartella protetta predisposta.
+Updater operation state changed; preserve the recovery backup. => Lo stato dell'aggiornamento è cambiato; conserva il backup di ripristino.
+Prepared target is outside the helper's installation directory. => La destinazione preparata è esterna alla cartella di installazione del processo ausiliario.
+The authoritative release changed. Check again before installing. => La release ufficiale è cambiata. Verifica di nuovo prima di installare.
+The new application exited before startup readiness. => La nuova applicazione si è chiusa prima di confermare l'avvio.
+Updater operation changed before its readiness deadline. => L'operazione di aggiornamento è cambiata prima del termine previsto per la verifica di avvio.
+The new application did not acknowledge startup readiness in time. => La nuova applicazione non ha confermato l'avvio entro il tempo previsto.
+Recovery state belongs to another operation. => Lo stato di ripristino appartiene a un'altra operazione.
 Quick cleanup or individual tools. Protected files are skipped. => Pulizia rapida o strumenti singoli. I file protetti vengono ignorati.
 Windows uses the appropriate optimization method for each drive. => Windows usa il metodo di ottimizzazione adatto a ogni unità.
 Disk · Let Windows use the optimization appropriate for the drive. => Disco · Windows usa il metodo di ottimizzazione adatto all'unità.
@@ -426,8 +534,8 @@ PATTERNS = [
     (r"^Run Windows optimization on (.+)\?$", r"Eseguire l'ottimizzazione Windows su \1?"),
     (r"^Downloading · (.+)%$", r"Download · \1%"),
     (r"^(.+) available for restoration$", r"\1 disponibili per il ripristino"),
-    (r"^Update check failed: (.+)$", r"Controllo aggiornamenti non riuscito: \1"),
-    (r"^Update failed: (.+)$", r"Aggiornamento non riuscito: \1"),
+    (r"^Update check failed: (.+)$", lambda match: f"Controllo aggiornamenti non riuscito: {translate(match.group(1), 'it')}"),
+    (r"^Update failed: (.+)$", lambda match: f"Aggiornamento non riuscito: {translate(match.group(1), 'it')}"),
     (r"^Drive query failed: (.+)$", r"Ricerca unità non riuscita: \1"),
     (r"^Drive information unavailable: (.+)$", r"Informazioni unità non disponibili: \1"),
     (r"^Metrics unavailable: (.+)$", r"Metriche non disponibili: \1"),
@@ -438,6 +546,24 @@ PATTERNS = [
     (r"^Stopped · (.+)$", r"Interrotto · \1"),
     (r"^Completed · (.+)$", r"Completato · \1"),
     (r"^(.+) failed$", lambda match: f"{translate(match.group(1), 'it')} non riuscito"),
+    (r"^(.+) completed; errors repaired \(exit code 1\)\.$", lambda match:
+     f"{translate(match.group(1), 'it')} completato: errori riparati (codice 1)."),
+    (r"^(.+) completed; restart required to finish applying changes\.$", lambda match:
+     f"{translate(match.group(1), 'it')} completato: riavvio necessario per applicare le modifiche."),
+    (r"^(.+) failed with exit code (\d+)\.$", lambda match:
+     f"{translate(match.group(1), 'it')} non riuscito (codice {match.group(2)})."),
+    (r"^Recycle bin operation returned code (\d+)\.$", r"Svuotamento del Cestino terminato con codice \1."),
+    (r"^Battery report saved to (.+)$", r"Report della batteria salvato in \1"),
+    (r"^Could not open the report: (.+)$", r"Impossibile aprire il report: \1"),
+    (r"^GitHub update request failed \(HTTP (\d+)\)\.$",
+     r"Richiesta di aggiornamento GitHub non riuscita (HTTP \1)."),
+    (r"^Release must contain exactly one (.+) asset\.$",
+     r"La release deve contenere esattamente un file \1."),
+    (r"^Maintenance guard records cannot be verified: (.+)$",
+     r"Impossibile verificare i record di sicurezza della manutenzione: \1"),
+    (r"^([^:]+): (.+)$", lambda match:
+     f"{translate(match.group(1), 'it')}: {translate(match.group(2), 'it')}"
+     if translate(match.group(1), 'it') != match.group(1) else match.group(0)),
     (r"^Quick cleanup: (.+)$", lambda match: f"Pulizia rapida: {translate(match.group(1), 'it')}"),
     (r"^Quick cleanup failed: (.+)$", r"Pulizia rapida non riuscita: \1"),
     (r"^(\d+)/(\d+) attempted$", r"\1/\2 tentati"),

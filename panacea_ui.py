@@ -398,11 +398,14 @@ class PanaceaApp(ctk.CTk):
             icon_key = next(icon for root, _, icon, _ in self.NAV_GROUPS if root == key)
             selected = key == group
             colors = self.icons_active if selected else self.icons
-            self.nav_buttons[key].configure(
-                fg_color='#263a56' if selected else 'transparent',
-                border_color=COL_GOLD if selected else '#0e192b',
-                text_color=TEXT if selected else MUTED,
-                image=colors[icon_key])
+            settings = {
+                'fg_color': '#263a56' if selected else 'transparent',
+                'border_color': COL_GOLD if selected else '#0e192b',
+                'text_color': TEXT if selected else MUTED,
+            }
+            if icon_key in colors:
+                settings['image'] = colors[icon_key]
+            self.nav_buttons[key].configure(**settings)
 
     def _prebuild_next_group(self):
         """Amortize first-open widget creation during idle periods; never touch maintenance."""

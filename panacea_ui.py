@@ -231,7 +231,7 @@ class PanaceaApp(ctk.CTk):
             for index, page in enumerate(pages):
                 button = self._button(strip, self.SUBVIEW_LABELS[page],
                                       lambda p=page: self.select_frame(p),
-                                      secondary=True, height=30, width=166)
+                                      secondary=True, height=26, width=166)
                 button.grid(row=0, column=index, padx=(0, 8))
                 self.subnav_buttons[page] = button
             self.subnav_frames[group] = strip
@@ -250,7 +250,7 @@ class PanaceaApp(ctk.CTk):
         for root, strip in self.__dict__.get('subnav_frames', {}).items():
             strip.grid_forget()
             if root == group:
-                strip.grid(row=1, column=1, sticky='w', padx=(24, 12), pady=(6, 3))
+                strip.grid(row=1, column=1, sticky='w', padx=(24, 12), pady=(3, 0))
         for page, button in self.__dict__.get('subnav_buttons', {}).items():
             active = page == name
             button.configure(fg_color='#263a56' if active else SURFACE_ALT,
@@ -505,7 +505,7 @@ class PanaceaApp(ctk.CTk):
     def _setup_cleaning_frame(self):
         body = self._section_body(self.frame_cleaning, 'Cleanup', 'Analyze if you wish, or clean now. Locked and protected files stay untouched.')
         preview = self._card(body)
-        preview.pack(fill='x', pady=(0, 8))
+        preview.pack(fill='x', pady=(0, 4))
         preview.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(preview, text='', image=self.icons_active['clean'], width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
         ctk.CTkLabel(preview, text='Temporary files', height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew', pady=(12, 0))

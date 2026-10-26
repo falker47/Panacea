@@ -732,7 +732,7 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
                 toggle.invoke()
                 app.update()
                 assert log.winfo_ismapped()
-                canvas = log.master.master._parent_canvas
+                canvas = app.group_scroll['Cleaning']._parent_canvas
                 before = canvas.yview()
                 assert before[1] < 1.0, 'Expanded details should overflow the compact viewport'
                 canvas.event_generate('<MouseWheel>', delta=-120)
@@ -1007,7 +1007,7 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.update()
         assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
         assert 'Fixture analysis line 59' in log.get('1.0', 'end')
-        viewport = log.master.master._parent_canvas
+        viewport = app.group_scroll['Cleaning']._parent_canvas
         assert _native_bounds(log)[3] <= _native_bounds(viewport)[3] + 2, (
             f'Opened output lies below the viewport: log={_native_bounds(log)}, '
             f'viewport={_native_bounds(viewport)}, scroll={viewport.yview()}')

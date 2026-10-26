@@ -536,11 +536,16 @@ class PanaceaApp(ctk.CTk):
             ])
 
     def _section_body(self, frame, title, detail):
-        """Child of a shared-scroll card, not a second scrollable pane."""
+        """Paired cards share one scroller; standalone maintenance keeps its own."""
         self._header(frame, title, detail, compact=True)
-        frame.grid_rowconfigure(1, weight=0)
-        body = ctk.CTkFrame(frame, fg_color='transparent')
-        body.grid(row=1, column=0, sticky='ew', padx=16, pady=(0, 16))
+        frame.grid_rowconfigure(1, weight=1)
+        if frame is self.frame_resurrect:
+            # This standalone screen can exceed the viewport on compact displays.
+            body = ctk.CTkScrollableFrame(frame, fg_color=BG, corner_radius=0)
+            body.grid(row=1, column=0, sticky='nsew', padx=14, pady=(0, 8))
+        else:
+            body = ctk.CTkFrame(frame, fg_color='transparent')
+            body.grid(row=1, column=0, sticky='ew', padx=16, pady=(0, 16))
         body.grid_columnconfigure(0, weight=1)
         return body
 

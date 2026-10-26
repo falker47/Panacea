@@ -579,6 +579,7 @@ class PanaceaApp(ctk.CTk):
             self.select_frame(section)
         entry = self.__dict__.get('_section_logs', {}).get(attribute)
         if entry:
+            log = entry[0]
             body = entry[3]
             if not isinstance(body, ctk.CTkScrollableFrame):
                 group = next((root for root, _, _, pages in self.NAV_GROUPS

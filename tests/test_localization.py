@@ -179,3 +179,14 @@ def test_expandable_output_labels_translate_the_visible_prefix():
     assert translate('+ Cleanup details', 'it') == '+ Dettagli pulizia'
     assert translate('− Command output', 'it') == '− Output dei comandi'
     assert translate('+ Cleanup details', 'en') == '+ Cleanup details'
+
+
+def test_analysis_summary_and_diagnostic_detail_translate_as_displayed():
+    assert translate('Analysis completed · No files deleted', 'it') == (
+        'Analisi completata · Nessun file eliminato')
+    assert translate('SKIPPED · Outside authorized paths: 2', 'it') == (
+        'IGNORATO · Fuori dalle cartelle autorizzate: 2')
+    assert translate('ERROR · Access denied by Windows: 1', 'it') == (
+        'ERRORE · Accesso negato da Windows: 1')
+    assert translate('Analysis completed · No files deleted', 'en') == (
+        'Analysis completed · No files deleted')

@@ -1594,7 +1594,7 @@ class PanaceaApp(ctk.CTk):
         state = state or ('failed' if errors and not count else 'partial' if partial else 'completed')
         title = f'{"Analysis" if preview else "Cleanup"} {state}'
         if preview:
-            title += ' — No files deleted'
+            title += ' · No files deleted'
         amount = f'{size / 1024**3:.2f} GB' if size >= 1024**3 else f'{size / 1024**2:.1f} MB'
         totals = f'{count:,} candidates · about {amount} recoverable' if preview else f'{count:,} files deleted · {amount} freed'
         issues = f'{len(skipped):,} skipped · {len(errors):,} errors'
@@ -1649,7 +1649,7 @@ class PanaceaApp(ctk.CTk):
         dialog.transient(self)
         text = ctk.CTkTextbox(dialog, wrap='word', font=self._font(12))
         text.pack(fill='both', expand=True, padx=12, pady=12)
-        text.insert('1.0', '\n'.join(details))
+        text.insert('1.0', '\n'.join(self._t(item) for item in details))
         text.configure(state='disabled')
         text._textbox.configure(takefocus=1)
         dialog.bind('<Escape>', lambda event: dialog.destroy())

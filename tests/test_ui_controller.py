@@ -1097,7 +1097,16 @@ def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch):
             assert host.winfo_ismapped()
             assert not hasattr(app, 'subnav_frames')
             assert all(app.frames[page].winfo_ismapped() for page in pages)
-            assert app.frames[pages[0]].winfo_rooty() < app.frames[pages[1]].winfo_rooty()
+            first, second = (app.frames[page] for page in pages)
+            canvas = app.group_scroll[group]._parent_canvas
+            available = canvas.winfo_width() / app.group_scroll[group]._get_widget_scaling()
+            stacked = app._group_requires_stack(group, available)
+            assert app._group_stacked[group] == stacked
+            if stacked:
+                assert first.winfo_rooty() < second.winfo_rooty()
+            else:
+                assert abs(first.winfo_rooty() - second.winfo_rooty()) <= 2
+                assert first.winfo_rootx() < second.winfo_rootx()
             assert app.frames[pages[0]].master is app.frames[pages[1]].master
             assert app.frames[pages[0]].master is app.group_scroll[group]
             assert not any(isinstance(widget, panacea_ui.ctk.CTkScrollableFrame)

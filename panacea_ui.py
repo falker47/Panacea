@@ -1773,12 +1773,15 @@ class PanaceaApp(ctk.CTk):
                 self._set_resurrection_step(name, 'pending')
             self.btn_resurrect_start.configure(text='Maintenance running…')
             self.btn_resurrect_cancel.configure(state='normal', text='Cancel after current step')
+            stacked_actions = self.__dict__.get('_resurrection_action_stacked', False)
             self.btn_resurrect_cancel.pack(
-                side='top' if self._resurrection_action_stacked else 'left',
-                fill='x' if self._resurrection_action_stacked else 'none',
-                padx=0 if self._resurrection_action_stacked else (12, 0))
+                side='top' if stacked_actions else 'left',
+                fill='x' if stacked_actions else 'none',
+                padx=0 if stacked_actions else (12, 0))
             self.progress_bar.set(0)
-            self.resurrection_step_count.configure(text='0 / 10 steps')
+            counter = self.__dict__.get('resurrection_step_count')
+            if counter is not None:
+                counter.configure(text='0 / 10 steps')
             self.lbl_status.configure(text='Starting · Verifying restore point', text_color=MUTED)
 
     def _check_app_update(self):

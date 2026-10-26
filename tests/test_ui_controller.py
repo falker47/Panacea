@@ -378,7 +378,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
-            expect(all(icon.cget('size') == (24, 24) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
+            expect(all(icon.cget('size') == (29, 29) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
             for name in ('cpu', 'memory', 'drive'):
                 expect(app.action_icons[name].cget('size') == (22, 22), f'{name} metric icon was resized')
             dashboard_labels = list(_native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel))
@@ -411,15 +411,24 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
             app.select_frame('Cleaning')
             app.update()
-            card = app.preview_label.master
-            analyze = next(button for button in _native_widgets(card, panacea_ui.ctk.CTkButton)
-                           if button.cget('text') in ('Analyze', 'Preview'))
-            expect(analyze.cget('text') == 'Analyze', 'Cleanup analysis action should be named Analyze')
-            button_bounds, card_bounds = _native_bounds(analyze), _native_bounds(card)
-            expect(abs((button_bounds[1] + button_bounds[3]) - (card_bounds[1] + card_bounds[3])) <= 8 * scale,
-                   'Analyze is not centered across the complete result card')
-            inside(analyze, card, 'Analyze')
-            inside(card, app.frame_cleaning, 'Cleanup analysis card')
+            # Quick cleanup is the first visible action; individual tools stay
+            # available on demand without crowding the initial viewport.
+            quick = app.quick_cleanup_card
+            expect(not app.cleanup_individuals_frame.winfo_manager(),
+                   'Individual cleanup tools must start collapsed')
+            inside(app.quick_cleanup_button, quick, 'Quick cleanup action')
+            inside(quick, app.frame_cleaning, 'Quick cleanup card')
+            app._toggle_cleanup_tools()
+            app.update()
+            expect(bool(app.cleanup_individuals_frame.winfo_manager()),
+                   'Individual cleanup tools should expand')
+            preview = app.preview_label.master
+            analyze = next(button for button in _native_widgets(preview, panacea_ui.ctk.CTkButton)
+                           if button.cget('text') == 'Analyze')
+            expect(analyze.cget('text') == 'Analyze',
+                   'Optional analysis remains available in individual tools')
+            app._toggle_cleanup_tools()
+            app.update()
             app.select_frame('Resurrect')
             app.update()
             resurrection_canvas = app.god_log.master.master._parent_canvas
@@ -438,7 +447,8 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                    'Every Resurrection phase must have a visible status')
             for name, status in app._resurrection_rows.items():
                 phase = status.master
-                phase_labels = list(_native_widgets(phase, panacea_ui.ctk.CTkLabel))
+                phase_labels = [label for label in _native_widgets(phase, panacea_ui.ctk.CTkLabel)
+                                if label.winfo_ismapped()]
                 for label in phase_labels:
                     inside(label, phase, f'{name} phase text')
                     rendered = label._label
@@ -921,6 +931,7 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         panacea_ui.tk.Tk.maxsize(app, 1366, 768)
         panacea_ui.tk.Tk.geometry(app, '1366x768')
         app.select_frame('Cleaning')
+        app._toggle_cleanup_tools()
         app.update()
         analyze_button = next(button for button in _native_widgets(app.preview_label.master, panacea_ui.ctk.CTkButton)
                               if button.cget('text') == 'Analyze')

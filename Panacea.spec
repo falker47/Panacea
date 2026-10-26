@@ -17,6 +17,7 @@ datas = [
     ('assets/panacea_icon.ico', 'assets'),
     ('assets/panacea_icon.png', 'assets'),
     ('assets/icons/lucide/png', 'assets/icons/lucide/png'),
+    ('assets/icons/lucide/LICENSE', 'assets/icons/lucide'),
 ]
 binaries = []
 hiddenimports = []

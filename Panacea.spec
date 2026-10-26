@@ -12,7 +12,12 @@ version_file = project_root / 'build' / 'version-info.txt'
 version_file.parent.mkdir(parents=True, exist_ok=True)
 version_file.write_text(version_resource(VERSION), encoding='utf-8')
 
-datas = [('assets', 'assets')]
+# Bundle only runtime references. Source artwork/licensing files remain in Git.
+datas = [
+    ('assets/panacea_icon.ico', 'assets'),
+    ('assets/panacea_icon.png', 'assets'),
+    ('assets/icons/lucide/png', 'assets/icons/lucide/png'),
+]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('customtkinter')

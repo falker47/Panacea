@@ -96,7 +96,7 @@ def pending_operation(app, **kwargs):
 
 
 def test_analysis_is_read_only_and_shows_potential_recovery_not_freed_space(app, monkeypatch):
-    log = app._section_log(None, 'clean_log')
+    app._section_log(None, 'clean_log')
     confirmation = Mock(return_value=False)
     monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', confirmation)
     app.run_preview_temp()
@@ -110,11 +110,11 @@ def test_analysis_is_read_only_and_shows_potential_recovery_not_freed_space(app,
     confirmation.assert_not_called()
     app.cleanup_mgr.preview_temp_files.assert_called_once()
     app.cleanup_mgr.clean_temp_files.assert_not_called()
-    assert log.winfo_manager()
+    assert app.clean_log.winfo_manager()
 
 
 def test_clean_now_can_run_without_analysis_but_still_requires_confirmation(app, monkeypatch):
-    log = app._section_log(None, 'clean_log')
+    app._section_log(None, 'clean_log')
     confirmation = Mock(return_value=True)
     monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', confirmation)
     app.run_clean_temp()
@@ -125,12 +125,12 @@ def test_clean_now_can_run_without_analysis_but_still_requires_confirmation(app,
     result = visible_result(app)
     assert 'cleanup completed' in result
     assert '3 files deleted' in result and 'freed' in result
-    assert log.winfo_manager()
+    assert app.clean_log.winfo_manager()
 
 
 @pytest.mark.parametrize('analyzed', [False, True])
 def test_rejected_cleanup_never_deletes_and_analysis_never_grants_consent(app, monkeypatch, analyzed):
-    log = app._section_log(None, 'clean_log')
+    app._section_log(None, 'clean_log')
     if analyzed:
         app.run_preview_temp()
         complete(app)
@@ -141,7 +141,7 @@ def test_rejected_cleanup_never_deletes_and_analysis_never_grants_consent(app, m
     complete(app)
     confirmation.assert_called_once()
     app.cleanup_mgr.clean_temp_files.assert_not_called()
-    assert not log.winfo_manager()
+    assert not (app.clean_log and app.clean_log.winfo_manager())
 
 
 def test_partial_analysis_keeps_no_deletion_and_reason_counts_explicit(app):
@@ -226,9 +226,10 @@ def test_view_reasons_keeps_all_original_diagnostics_beyond_live_log_limit(app, 
 
 @pytest.mark.parametrize('attribute', ['clean_log', 'disk_log', 'tools_log', 'god_log'])
 def test_output_starts_closed_then_opens_for_an_accepted_explicit_operation(app, attribute):
-    log = app._section_log(None, attribute)
-    assert not log.winfo_manager()
+    app._section_log(None, attribute)
+    assert app.__dict__[attribute] is None
     release = pending_operation(app, output=attribute)
+    log = app.__dict__[attribute]
     assert log.winfo_manager()
     release.set()
     complete(app)
@@ -236,8 +237,9 @@ def test_output_starts_closed_then_opens_for_an_accepted_explicit_operation(app,
 
 
 def test_manual_close_survives_messages_and_next_accepted_operation_reopens(app):
-    log = app._section_log(None, 'tools_log')
+    app._section_log(None, 'tools_log')
     release = pending_operation(app, output='tools_log')
+    log = app.tools_log
     app._set_section_log_open('tools_log', False)
     app._log_section('tools_log', 'First streamed line')
     app.dispatcher.drain()
@@ -253,11 +255,11 @@ def test_manual_close_survives_messages_and_next_accepted_operation_reopens(app)
 
 
 def test_rejected_concurrent_operation_does_not_reopen_manually_closed_output(app):
-    log = app._section_log(None, 'tools_log')
+    app._section_log(None, 'tools_log')
     release = pending_operation(app)
     rejected_work = Mock()
     assert app._request_operation('Rejected operation', rejected_work, output='tools_log') is False
-    assert not log.winfo_manager()
+    assert app.tools_log is None
     rejected_work.assert_not_called()
     release.set()
     complete(app)
@@ -266,9 +268,28 @@ def test_rejected_concurrent_operation_does_not_reopen_manually_closed_output(ap
 def test_background_messages_do_not_open_a_lazily_created_output(app):
     app._log_section('clean_log', 'Background message before first navigation')
     app.dispatcher.drain()
-    log = app._section_log(None, 'clean_log')
-    assert log.lines == ['Background message before first navigation']
-    assert not log.winfo_manager()
+    app._section_log(None, 'clean_log')
+    assert app.clean_log is None
+    assert len(app._pending_logs['clean_log']) == 1
+    app._set_section_log_open('clean_log', True)
+    assert app.clean_log.lines == ['Background message before first navigation']
+    app._set_section_log_open('clean_log', False)
+    assert not app.clean_log.winfo_manager()
+
+
+def test_collapsed_output_allocates_one_textbox_only_when_requested(app):
+    created = []
+    def allocation(parent, **kwargs):
+        created.append(parent)
+        return Widget()
+    app._create_log_textbox = allocation
+    app._section_log(None, 'tools_log')
+    assert app.tools_log is None and not created
+    app._set_section_log_open('tools_log', True)
+    assert len(created) == 1
+    app._set_section_log_open('tools_log', False)
+    app._set_section_log_open('tools_log', True)
+    assert len(created) == 1
 
 
 def test_explicit_operation_open_is_remembered_until_lazy_section_is_built(app):
@@ -282,7 +303,7 @@ def test_explicit_operation_open_is_remembered_until_lazy_section_is_built(app):
 
 @pytest.mark.parametrize('opened', [False, True])
 def test_navigation_preserves_manual_output_visibility(app, opened):
-    log = app._section_log(None, 'clean_log')
+    app._section_log(None, 'clean_log')
     app._set_section_log_open('clean_log', opened)
     pages = [page for _, _, _, group_pages in app.NAV_GROUPS for page in group_pages]
     app.frames = {page: Widget() for page in pages}
@@ -294,7 +315,7 @@ def test_navigation_preserves_manual_output_visibility(app, opened):
     app._setup_functions = {}
     app.select_frame('Tools')
     app.select_frame('Cleaning')
-    assert bool(log.winfo_manager()) is opened
+    assert bool(app.clean_log and app.clean_log.winfo_manager()) is opened
 
 
 @pytest.mark.parametrize(('action', 'attribute'), [
@@ -303,7 +324,7 @@ def test_navigation_preserves_manual_output_visibility(app, opened):
 ])
 def test_real_action_routes_accepted_start_to_its_output(app, monkeypatch, action, attribute):
     monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
-    log = app._section_log(None, attribute)
+    app._section_log(None, attribute)
     if action == 'tools':
         app.run_cmd('ipconfig /flushdns', 'DNS flush')
     elif action == 'disk':
@@ -321,7 +342,7 @@ def test_real_action_routes_accepted_start_to_its_output(app, monkeypatch, actio
         app.progress_bar = Widget()
         app.run_god_mode()
     complete(app)
-    assert log.winfo_manager()
+    assert app.__dict__[attribute].winfo_manager()
 
 
 @pytest.mark.parametrize('preview', [False, True])
@@ -380,7 +401,7 @@ def test_interrupted_cleanup_keeps_only_actual_current_pass_counts_and_reasons(a
 @pytest.mark.parametrize('fails', [False, True])
 def test_tools_secondary_actions_open_output_and_record_success_or_failure(app, monkeypatch, action, fails):
     monkeypatch.setattr(panacea_ui.messagebox, 'askyesno', lambda *args, **kwargs: True)
-    log = app._section_log(None, 'tools_log')
+    app._section_log(None, 'tools_log')
     if action == 'restore':
         backend = app.restore_mgr.create_restore_point
         backend.return_value = (True, 'Verified fixture restore point')
@@ -396,6 +417,7 @@ def test_tools_secondary_actions_open_output_and_record_success_or_failure(app, 
     run()
     complete(app)
     backend.assert_called_once()
+    log = app.tools_log
     assert log.winfo_manager(), 'Accepted Tools actions must open their output'
     output = '\n'.join(log.lines).lower()
     assert ('restore point' if action == 'restore' else 'battery report') in output

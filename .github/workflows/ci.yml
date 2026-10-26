@@ -106,6 +106,25 @@ jobs:
           $manifest = (Get-Content -LiteralPath dist/PanaceaSetup.exe.sha256 -Raw).Trim()
           if ($manifest -cne "$actual  PanaceaSetup.exe") { throw 'Setup SHA-256 mismatch' }
 
+      - name: Measure packaged window startup and binary sizes
+        shell: pwsh
+        run: |
+          python scripts/packaged_probe.py --exe dist/Panacea.exe --output build/perf/packaged.json --samples 5
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged startup probe failed' }
+          @{
+            portable_bytes = (Get-Item dist/Panacea.exe).Length
+            installer_bytes = (Get-Item dist/PanaceaSetup.exe).Length
+          } | ConvertTo-Json | Set-Content build/perf/package-sizes.json -Encoding utf8
+
+      - name: Preserve packaged performance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Windows-packaged-performance
+          path: |
+            build/perf/packaged.json
+            build/perf/package-sizes.json
+          if-no-files-found: error
+
       - name: Save candidate executable and checksum
         uses: actions/upload-artifact@v4
         with:

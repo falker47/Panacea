@@ -505,7 +505,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app.update()
             app.select_frame('Resurrect')
             app.update()
-            resurrection_canvas = app.god_log.master.master._parent_canvas
+            resurrection_canvas = app._section_log_hosts['god_log'].master._parent_canvas
             resurrection_canvas.yview_moveto(0)
             app.update()
             for widget, label in ((app.btn_resurrect_start, 'Start sequence'),
@@ -550,7 +550,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app.update()
             inside(app._resurrection_rows[app.RESURRECTION_STEPS[-1]].master,
                    resurrection_canvas, 'Last step after scrolling')
-            output_panel = app.god_log.master
+            output_panel = app._section_log_hosts['god_log']
             output_toggle = next(button for button in output_panel.winfo_children()
                                  if isinstance(button, panacea_ui.ctk.CTkButton))
             inside(output_panel, resurrection_canvas, 'Full sequence panel')
@@ -762,12 +762,13 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
                 else:
                     assert widget.winfo_rooty() >= top
             if name == 'Cleaning':
-                log = app.clean_log
-                toggle = next(child for child in log.master.winfo_children()
+                assert app.clean_log is None
+                panel = app._section_log_hosts['clean_log']
+                toggle = next(child for child in panel.winfo_children()
                               if isinstance(child, panacea_ui.ctk.CTkButton))
-                assert not log.winfo_manager()
                 toggle.invoke()
                 app.update()
+                log = app.clean_log
                 assert log.winfo_ismapped()
                 canvas = app.group_scroll['Cleaning']._parent_canvas
                 before = canvas.yview()
@@ -1029,9 +1030,9 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.select_frame('Cleaning')
         app._toggle_cleanup_tools()
         app.update()
-        log = app.clean_log
-        toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
-        assert not log.winfo_manager()
+        assert app.clean_log is None
+        panel = app._section_log_hosts['clean_log']
+        toggle = next(button for button in panel.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
         # Analysis remains accessible from Overview, not the individual-cleanup panel.
         app.select_frame('Dashboard')
         app.update()
@@ -1042,6 +1043,7 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.dispatcher.drain()
         app.select_frame('Cleaning')
         app.update()
+        log = app.clean_log
         assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
         assert 'Fixture analysis line 59' in log.get('1.0', 'end')
         viewport = app.group_scroll['Cleaning']._parent_canvas
@@ -1273,8 +1275,8 @@ def test_real_tk_compact_polish_prevents_duplicate_headings_and_vertical_voids(m
 
         app.select_frame('Resurrect')
         app.update()
-        canvas = app.god_log.master.master._parent_canvas
-        width = canvas.winfo_width() / app.god_log.master.master._get_widget_scaling()
+        canvas = app._section_log_hosts['god_log'].master._parent_canvas
+        width = canvas.winfo_width() / app._section_log_hosts['god_log'].master._get_widget_scaling()
         # The timeline has its own 16px horizontal inset.
         expected_layout = app._step_layout_mode(width - 16)
         assert app._resurrection_layout_mode == expected_layout
@@ -1326,7 +1328,7 @@ def test_five_by_two_guided_grid_preserves_order_and_expandable_information(monk
                    if b.cget('text') == 'i']
         assert len(buttons) == 10
         assert not any(b.cget('text') == 'Details' for b in buttons)
-        assert not app._resurrection_info_labels['Restore point'].winfo_manager()
+        assert app._resurrection_info_labels['Restore point'] is None
         app._toggle_resurrection_info('Restore point')
         app.update()
         assert app._resurrection_info_labels['Restore point'].winfo_ismapped()

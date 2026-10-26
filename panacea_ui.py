@@ -674,30 +674,38 @@ class PanaceaApp(ctk.CTk):
         return body
 
     def _section_log(self, parent, attribute, title='Activity details'):
+        """Display the log toggle immediately, deferring its hidden textbox."""
         panel = self._card(parent)
         panel.pack(fill='x', pady=(4, 0))
-        log = self._create_log_textbox(panel, height=160)
         def toggle():
-            self._set_section_log_open(attribute, not bool(log.winfo_manager()))
+            opened = self.__dict__.get('_section_log_open', {}).get(attribute, False)
+            self._set_section_log_open(attribute, not opened)
         button = self._button(panel, f'+ {title}', toggle, secondary=True, anchor='w', height=26)
         button.pack(fill='x', padx=6, pady=4)
-        setattr(self, attribute, log)
-        self.__dict__.setdefault('_section_logs', {})[attribute] = (log, button, title, parent)
+        setattr(self, attribute, None)
+        self.__dict__.setdefault('_section_log_hosts', {})[attribute] = panel
+        self.__dict__.setdefault('_section_logs', {})[attribute] = (None, button, title, parent)
         self._set_section_log_open(attribute, self.__dict__.get('_section_log_open', {}).get(attribute, False))
-        self._flush_section_log(attribute)
-        return log
+        return self.__dict__[attribute]
 
     def _set_section_log_open(self, attribute, opened):
-        """UI-thread state; delivery of worker messages never changes visibility."""
+        """Allocate a textbox on first request, preserving buffered worker logs."""
         self.__dict__.setdefault('_section_log_open', {})[attribute] = opened
         entry = self.__dict__.get('_section_logs', {}).get(attribute)
         if entry:
-            log, button, title, _ = entry
-            if opened:
-                log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
-            else:
-                log.pack_forget()
+            log, button, title, parent = entry
+            if opened and log is None:
+                log = self._create_log_textbox(self._section_log_hosts[attribute], height=160)
+                setattr(self, attribute, log)
+                self._section_logs[attribute] = (log, button, title, parent)
+                self._flush_section_log(attribute)
+            if log is not None:
+                if opened:
+                    log.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+                else:
+                    log.pack_forget()
             button.configure(text=f'{"−" if opened else "+"} {title}')
+
 
     def _open_operation_output(self, attribute):
         self._set_section_log_open(attribute, True)
@@ -1176,25 +1184,20 @@ class PanaceaApp(ctk.CTk):
             detail_button.grid(
                 row=0, column=2, rowspan=2,
                 padx=(4, 8), pady=8, sticky='e')
-            explanation = LLabel(
-                phase, text=self.RESURRECTION_HELP[name],
-                font=self._font(11), height=54,
-                text_color=MUTED, anchor='w', justify='left')
-            explanation.grid(
-                row=2, column=1, columnspan=2,
-                sticky='ew', padx=(0, 8), pady=(0, 8))
-            explanation.grid_remove()
-            def fit_step(event, heading=title, info=explanation):
+            # Ten initially hidden help labels are unnecessary on first navigation.
+            def fit_step(event, heading=title, step_name=name):
                 available = event.width / max(heading._get_widget_scaling(), .01)
                 width = max(90, int((available - 80) // 8) * 8)
                 if getattr(heading, '_fit_wrap', None) != width:
                     heading._fit_wrap = width
                     heading.configure(wraplength=width)
-                    info.configure(wraplength=max(115, available - 50))
+                    info = self._resurrection_info_labels.get(step_name)
+                    if info is not None:
+                        info.configure(wraplength=max(115, available - 50))
             phase.bind('<Configure>', fit_step, add='+')
             self._resurrection_rows[name] = status
             self._resurrection_cards[name] = phase
-            self._resurrection_info_labels[name] = explanation
+            self._resurrection_info_labels[name] = None
             self._resurrection_phases.append(phase)
         self._resurrection_timeline = timeline
         self._resurrection_layout_mode = None
@@ -1244,15 +1247,26 @@ class PanaceaApp(ctk.CTk):
                 columnspan=span, sticky='nsew', padx=4, pady=4)
 
     def _toggle_resurrection_info(self, name):
+        phase = self._resurrection_cards.get(name)
+        if phase is None:
+            return
         label = self._resurrection_info_labels.get(name)
         if label is None:
-            return
-        if label.winfo_manager():
+            label = LLabel(
+                phase, text=self.RESURRECTION_HELP[name],
+                font=self._font(11), height=54,
+                text_color=MUTED, anchor='w', justify='left')
+            width = phase.winfo_width() / max(label._get_widget_scaling(), .01)
+            label.configure(wraplength=max(115, width - 50))
+            label.grid(row=2, column=1, columnspan=2,
+                       sticky='ew', padx=(0, 8), pady=(0, 8))
+            self._resurrection_info_labels[name] = label
+        elif label.winfo_manager():
             label.grid_remove()
         else:
             label.grid()
-        for name, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
-            self._set_resurrection_step(name, state, detail)
+        for step_name, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
+            self._set_resurrection_step(step_name, state, detail)
 
     def _create_log_textbox(self, parent, height=150):
         log = ctk.CTkTextbox(parent, height=height, font=ctk.CTkFont(family='Consolas', size=12), fg_color='#121820', text_color=TEXT, border_width=1, border_color=BORDER, corner_radius=6, wrap='word')

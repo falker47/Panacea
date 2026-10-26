@@ -641,7 +641,7 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
                 else:
                     found.extend(actions(child))
             return found
-        for name in ('Cleaning', 'Disk', 'Tools', 'Apps', 'Turbo', 'Resurrect'):
+        for name in ('Cleaning', 'Apps', 'Tools', 'Disk', 'Turbo', 'Startup', 'Resurrect'):
             app.select_frame(name)
             app.update()
             frame = app.frames[name]
@@ -847,10 +847,15 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
     try:
         app.update()
         app.focus_force()
-        for index, name in enumerate(app.frames, 1):
+        for index, (name, _, _, _) in enumerate(app.NAV_GROUPS, 1):
             app.event_generate(f'<Control-Key-{index}>')
             app.update()
             assert app.active_frame == name
+        app.select_frame('Tools')
+        app.subnav_buttons['Disk'].invoke()
+        app.update()
+        assert app.active_frame == 'Disk'
+        assert app.active_group == 'Tools'
         button = app.nav_buttons['Dashboard']
         button._canvas.focus_force()
         app.update()

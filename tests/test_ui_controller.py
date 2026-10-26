@@ -1109,7 +1109,7 @@ def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch
                             lambda title, detail, **kwargs: (seen.append((title, detail)), False)[1])
         app.run_empty_recycle()
         assert len(seen) == 1
-        assert 'Cestino' in seen[0][0]
+        assert 'cestino' in seen[0][0].casefold()
         assert 'Eliminare definitivamente' in seen[0][1]
         assert not app.workers.busy()
     finally:

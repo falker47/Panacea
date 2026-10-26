@@ -109,6 +109,19 @@ def child(output):
         "cold": {}, "warm": {}, "idle": {}, "disk_trace": disk_trace,
     }
     failures = []
+    event_loop_delays = []
+    expected_heartbeat = time.perf_counter() + 0.025
+
+    def heartbeat():
+        nonlocal expected_heartbeat
+        if app._shutdown.is_set():
+            return
+        now = time.perf_counter()
+        event_loop_delays.append(max(0.0, (now - expected_heartbeat) * 1000))
+        expected_heartbeat = now + 0.025
+        app.after(25, heartbeat)
+
+    app.after(25, heartbeat)
     app.report_callback_exception = lambda kind, exc, tb: failures.append(str(exc))
     agenda = [(name, "cold") for name in COLD] + [(name, "warm") for name in WARM]
 
@@ -117,6 +130,7 @@ def child(output):
             app.after(2800, begin_idle)
             return
         name, kind = agenda[index]
+        before_cpu = time.process_time()
         before = time.perf_counter()
         app.select_frame(name)
         callback = 1000 * (time.perf_counter() - before)
@@ -130,6 +144,8 @@ def child(output):
             "total_ms": round(callback + geometry, 2),
             "setup_ms": setup_times.get(name),
             "disk_setup_ms": setup_times.get("Disk") if name == "Tools" else None,
+            "process_cpu_ms": round((time.process_time() - before_cpu) * 1000, 2),
+            "disk_controls_ready": name != 'Tools' or bool(app.drive_menu.winfo_exists()),
             "resident_mb": round(resident, 2),
         }
         app.after(90, navigate, index + 1)
@@ -147,6 +163,12 @@ def child(output):
             "cpu_percent_total_machine": round(max(0, cpu), 3),
             "resident_mb": round(second[2], 2),
             "seconds": round(wall, 2),
+        }
+        delays = sorted(event_loop_delays)
+        result['event_loop'] = {
+            'max_lag_ms': round(max(delays, default=0.0), 2),
+            'p95_lag_ms': round(delays[int((len(delays) - 1) * .95)], 2) if delays else 0.0,
+            'p99_lag_ms': round(delays[int((len(delays) - 1) * .99)], 2) if delays else 0.0,
         }
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -194,6 +216,10 @@ def main():
             for key in samples[0]["disk_trace"]
         },
         "disk_setup_median_ms": median([sample["cold"]["Tools"].get("disk_setup_ms") for sample in samples]),
+        "event_loop_median_ms": {
+            key: median([sample['event_loop'][key] for sample in samples])
+            for key in samples[0]['event_loop']
+        },
         "idle_median_cpu_percent": median([s["idle"]["cpu_percent_total_machine"] for s in samples]),
         "idle_median_resident_mb": median([s["idle"]["resident_mb"] for s in samples]),
         "samples": samples,
@@ -203,7 +229,7 @@ def main():
             name: {field: median([s[kind][name][field] for s in samples
                                   if s[kind][name][field] is not None])
                    for field in ("callback_ms", "geometry_flush_ms", "total_ms",
-                                 "setup_ms", "resident_mb")}
+                                 "setup_ms", "resident_mb", "process_cpu_ms")}
             for name in samples[0][kind]
         }
     args.output.parent.mkdir(parents=True, exist_ok=True)

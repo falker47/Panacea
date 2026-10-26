@@ -997,6 +997,35 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
 
 
 @isolated_tk_test
+def test_real_tk_drive_picker_opens_native_listbox_and_preserves_selection(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.select_frame('Tools')
+        app.update()
+        app._set_drives([{'letter': 'C:'}, {'letter': 'D:'}])
+        picker = app.drive_menu
+        assert isinstance(picker, panacea_ui._DrivePicker)
+        assert picker.cget('state') == 'normal'
+        picker.invoke()
+        app.update()
+        choices = picker._popup_listbox
+        assert isinstance(choices, panacea_ui.tk.Listbox)
+        choices.selection_clear(0, 'end')
+        choices.selection_set(1)
+        choices.event_generate('<Return>')
+        app.update()
+        assert app.selected_drive.get() == 'D:'
+        assert picker.cget('text').startswith('D:')
+        assert picker._popup is None
+        app._set_drives([])
+        assert picker.cget('state') == 'disabled'
+        picker.invoke()
+        assert picker._popup is None
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
 def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypatch):
     panacea_ui.ctk.set_widget_scaling(1.5)
     panacea_ui.ctk.set_window_scaling(1)

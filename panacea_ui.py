@@ -77,6 +77,110 @@ class LButton(_LocalizedText, ctk.CTkButton):
     pass
 
 
+class _DrivePicker(LButton):
+    """Drive selector without CTkOptionMenu's costly native menu setup.
+
+    A standard Tk listbox is created only when the user requests the choices.
+    Keyboard navigation and the selected StringVar remain unchanged.
+    """
+
+    def __init__(self, master, *, variable, values, command, **kwargs):
+        self._drive_variable = variable
+        self._drive_options = list(values)
+        self._drive_command = command
+        self._popup = None
+        self._popup_listbox = None
+        self._drive_trace = None
+        super().__init__(
+            master, text=f'{variable.get()}  ▾', command=self._open_popup,
+            anchor='w', **kwargs)
+        self._drive_trace = variable.trace_add('write', self._sync_caption)
+
+    def configure(self, *args, **kwargs):
+        if 'values' in kwargs:
+            self._drive_options = list(kwargs.pop('values'))
+        if kwargs.get('state') == 'disabled':
+            self._close_popup()
+        return super().configure(*args, **kwargs)
+
+    def _sync_caption(self, *_):
+        if self.winfo_exists():
+            self.configure(text=f'{self._drive_variable.get()}  ▾')
+
+    def _open_popup(self):
+        if self.cget('state') == 'disabled' or not self._drive_options:
+            return
+        if self._popup is not None:
+            self._close_popup()
+            return
+        popup = tk.Toplevel(self)
+        popup.withdraw()
+        popup.overrideredirect(True)
+        popup.transient(self.winfo_toplevel())
+        popup.configure(bg=SURFACE_ALT)
+        choices = tk.Listbox(
+            popup, height=min(8, len(self._drive_options)),
+            font=self.cget('font'), fg=TEXT, bg=SURFACE_ALT,
+            selectforeground=TEXT, selectbackground='#263a56',
+            borderwidth=1, relief='flat', activestyle='dotbox',
+            highlightthickness=1, highlightcolor=COL_BLUE,
+            highlightbackground=BORDER, exportselection=False, cursor='hand2')
+        for letter in self._drive_options:
+            choices.insert(tk.END, letter)
+        choices.pack(fill='both', expand=True, padx=2, pady=2)
+        choices.bind('<ButtonRelease-1>', self._choose_from_popup)
+        choices.bind('<Return>', self._choose_from_popup)
+        choices.bind('<Escape>', lambda event: self._close_popup())
+        choices.bind('<FocusOut>', lambda event: self.after_idle(self._close_if_unfocused))
+        active = (self._drive_options.index(self._drive_variable.get())
+                  if self._drive_variable.get() in self._drive_options else 0)
+        choices.selection_set(active)
+        choices.activate(active)
+        popup.update_idletasks()
+        width = max(112, self.winfo_width())
+        height = choices.winfo_reqheight() + 4
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        if y + height > self.winfo_screenheight():
+            y = max(0, self.winfo_rooty() - height)
+        popup.geometry(f'{width}x{height}+{x}+{y}')
+        self._popup = popup
+        self._popup_listbox = choices
+        popup.deiconify()
+        popup.lift()
+        choices.focus_force()
+
+    def _choose_from_popup(self, _event=None):
+        choice = self._popup_listbox
+        if choice is None or not choice.curselection():
+            return
+        selected = choice.get(choice.curselection()[0])
+        self._close_popup()
+        self._drive_variable.set(selected)
+        self._drive_command(selected)
+        self._canvas.focus_set()
+
+    def _close_if_unfocused(self):
+        popup = self._popup
+        if popup is None or not popup.winfo_exists():
+            return
+        focus = popup.focus_get()
+        if focus is None or focus.winfo_toplevel() is not popup:
+            self._close_popup()
+
+    def _close_popup(self):
+        popup, self._popup, self._popup_listbox = self._popup, None, None
+        if popup is not None and popup.winfo_exists():
+            popup.destroy()
+
+    def destroy(self):
+        self._close_popup()
+        if self._drive_trace is not None:
+            self._drive_variable.trace_remove('write', self._drive_trace)
+            self._drive_trace = None
+        return super().destroy()
+
+
 class LSwitch(_LocalizedText, ctk.CTkSwitch):
     pass
 
@@ -838,11 +942,17 @@ class PanaceaApp(ctk.CTk):
         row.pack(fill='x', padx=14, pady=12)
         LLabel(row, text='', image=self.icons_active['disk'], width=28).pack(side='left', padx=(0, 8))
         self.selected_drive = tk.StringVar(value=self._t('Loading…'))
-        self.drive_menu = ctk.CTkOptionMenu(row, variable=self.selected_drive, values=[self._t('Loading…')], command=self._drive_selected, width=112, fg_color=SURFACE_ALT, button_color=BORDER, font=self._font(13))
+        self.drive_menu = _DrivePicker(
+            row, variable=self.selected_drive, values=[self._t('Loading…')],
+            command=self._drive_selected, width=112, height=32,
+            fg_color=SURFACE_ALT, hover_color='#304561', text_color=TEXT,
+            border_width=1, border_color=BORDER, font=self._font(13))
         self.drive_menu.pack(side='left')
         self.drive_menu._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
         self.drive_menu.bind('<Down>', lambda event: self._cycle_drive(1))
         self.drive_menu.bind('<Up>', lambda event: self._cycle_drive(-1))
+        self.drive_menu.bind('<Return>', lambda event: self.drive_menu.invoke())
+        self.drive_menu.bind('<space>', lambda event: self.drive_menu.invoke())
         self._button(row, 'Refresh', self.refresh_drives, secondary=True, width=85).pack(side='right')
         self.drive_detail = LLabel(card, text='Reading local drives…', anchor='w', justify='left', font=self._font(13), text_color=MUTED, wraplength=650)
         self.drive_detail.pack(fill='x', padx=14, pady=(0, 10))

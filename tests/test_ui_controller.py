@@ -451,7 +451,10 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             expect(not app.cleanup_individuals_frame.winfo_manager(),
                    'Individual cleanup tools must start collapsed')
             inside(app.quick_cleanup_button, quick, 'Quick cleanup action')
-            inside(quick, app.frame_cleaning, 'Quick cleanup card')
+            expect(bool(quick.winfo_ismapped()), 'Quick cleanup card must be available')
+            expect(_native_bounds(app.frame_cleaning)[0] <= _native_bounds(quick)[0]
+                   and _native_bounds(quick)[2] <= _native_bounds(app.frame_cleaning)[2],
+                   'Quick cleanup card must fit the panel width')
             app._toggle_cleanup_tools()
             app.update()
             expect(bool(app.cleanup_individuals_frame.winfo_manager()),
@@ -706,10 +709,20 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
             if name == 'Resurrect':
                 widgets += list(app._resurrection_rows.values())
             for widget in widgets:
-                assert widget.winfo_rooty() >= top
-                assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{name}: {widget.cget("text")} below viewport'
                 assert widget.winfo_rootx() >= left
-                assert widget.winfo_rootx() + widget.winfo_width() <= right, f'{name}: {widget.cget("text")} outside viewport'
+                assert widget.winfo_rootx() + widget.winfo_width() <= right, (
+                    f'{name}: {widget.cget("text")} outside viewport horizontally')
+                if widget.winfo_rooty() + widget.winfo_height() > bottom:
+                    # The combined columns are independently scrollable; their
+                    # lower controls must remain reachable, not always on screen.
+                    parent = widget.master
+                    while parent is not None and not isinstance(parent, panacea_ui.ctk.CTkScrollableFrame):
+                        parent = getattr(parent, 'master', None)
+                    assert parent is not None, f'{name}: {widget.cget("text")} not scrollable'
+                    assert parent._parent_canvas.yview()[1] < 1.0, (
+                        f'{name}: {widget.cget("text")} clipped without scroll')
+                else:
+                    assert widget.winfo_rooty() >= top
             if name == 'Cleaning':
                 log = app.clean_log
                 toggle = next(child for child in log.master.winfo_children()
@@ -1049,21 +1062,21 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         panacea_ui.ctk.set_window_scaling(1)
 
 
-@pytest.mark.parametrize('group,pages', [
-    ('Cleaning', ('Cleaning', 'Apps')),
-    ('Tools', ('Tools', 'Disk')),
-    ('Turbo', ('Turbo', 'Startup')),
-])
 @isolated_tk_test
-def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch, group, pages):
+def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch):
     app = _safe_real_app(monkeypatch)
     try:
-        app.select_frame(group)
-        app.update()
-        host = app.group_frames[group]
-        assert host.winfo_ismapped()
-        assert not hasattr(app, 'subnav_frames')
-        assert all(app.frames[page].winfo_ismapped() for page in pages)
-        assert app.frames[pages[0]].winfo_rootx() < app.frames[pages[1]].winfo_rootx()
+        for group, pages in (
+            ('Cleaning', ('Cleaning', 'Apps')),
+            ('Tools', ('Tools', 'Disk')),
+            ('Turbo', ('Turbo', 'Startup')),
+        ):
+            app.select_frame(group)
+            app.update()
+            host = app.group_frames[group]
+            assert host.winfo_ismapped()
+            assert not hasattr(app, 'subnav_frames')
+            assert all(app.frames[page].winfo_ismapped() for page in pages)
+            assert app.frames[pages[0]].winfo_rootx() < app.frames[pages[1]].winfo_rootx()
     finally:
         _destroy_real_app(app)

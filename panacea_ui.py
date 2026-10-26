@@ -714,6 +714,18 @@ class PanaceaApp(ctk.CTk):
 
     RESURRECTION_STEPS = ('Restore point', 'Browser caches', 'Temporary files', 'Recycle Bin', 'DNS cache',
                           'Network reset', 'Drive optimization', 'Disk health scan', 'Windows image health', 'System file scan')
+    RESURRECTION_HELP = {
+        'Restore point': 'Safety · Verify a new Windows restore point. Deleted files are NOT recoverable.',
+        'Browser caches': 'Cleanup · Remove temporary web browser cache data.',
+        'Temporary files': 'Cleanup · Remove eligible temporary files; protected items are skipped.',
+        'Recycle Bin': 'Cleanup · Permanently delete all items in the Recycle Bin.',
+        'DNS cache': 'Network · Refresh locally cached domain-name lookups.',
+        'Network reset': 'Network · Reset Winsock; a restart may be needed.',
+        'Drive optimization': 'Disk · Let Windows choose TRIM or defragmentation.',
+        'Disk health scan': 'Disk · Scan the file system for errors (online CHKDSK).',
+        'Windows image health': 'Repair · Check recorded corruption in the Windows component image.',
+        'System file scan': 'Repair · Scan and repair protected Windows files (SFC).',
+    }
 
     def _setup_resurrect_frame(self):
         body = self._section_body(self.frame_resurrect, 'Resurrection', '10 steps · Verified restore point required')
@@ -739,6 +751,7 @@ class PanaceaApp(ctk.CTk):
         timeline.pack(fill='x')
         timeline.grid_columnconfigure((0, 1), weight=1, uniform='phases')
         self._resurrection_rows = {}
+        self._resurrection_info_labels = {}
         for index, name in enumerate(self.RESURRECTION_STEPS):
             phase = self._card(timeline)
             phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
@@ -747,9 +760,29 @@ class PanaceaApp(ctk.CTk):
             display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
             ctk.CTkLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
             status = ctk.CTkLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
-            status.grid(row=0, column=2, padx=(4, 10))
+            status.grid(row=0, column=2, padx=(4, 5))
+            self._button(
+                phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
+                secondary=True, width=28, height=24).grid(row=0, column=3, padx=(0, 6), pady=2)
+            explanation = ctk.CTkLabel(
+                phase, text=self.RESURRECTION_HELP[name], font=self._font(10),
+                text_color=MUTED, anchor='w', justify='left', wraplength=230)
+            explanation.grid(row=1, column=1, columnspan=3, sticky='ew', padx=(0, 7), pady=(0, 7))
+            explanation.grid_remove()
+            phase.bind('<Configure>', lambda event, label=explanation: label.configure(
+                wraplength=max(90, event.width / label._get_widget_scaling() - 60)))
+            self._resurrection_info_labels[name] = explanation
             self._resurrection_rows[name] = status
         self._section_log(body, 'god_log', 'Full sequence output')
+
+    def _toggle_resurrection_info(self, name):
+        label = self._resurrection_info_labels.get(name)
+        if label is None:
+            return
+        if label.winfo_manager():
+            label.grid_remove()
+        else:
+            label.grid()
         for name, (state, detail) in self.__dict__.get('_resurrection_states', {}).copy().items():
             self._set_resurrection_step(name, state, detail)
 
@@ -1386,6 +1419,10 @@ class PanaceaApp(ctk.CTk):
             color = {'completed': COL_SUCCESS, 'failed': COL_RED, 'running': COL_GOLD}.get(state, MUTED)
             label.configure(text={'pending': 'Not started', 'running': 'Running…', 'completed': 'Completed',
                                   'failed': 'Failed / partial', 'not run': 'Not run'}.get(state, state), text_color=color)
+        explanation = self.__dict__.get('_resurrection_info_labels', {}).get(name)
+        if explanation is not None:
+            basic = self.RESURRECTION_HELP[name]
+            explanation.configure(text=f'{basic}\nResult: {detail}' if detail else basic)
 
     def _finish_resurrection(self, result):
         self.last_resurrection_result = result

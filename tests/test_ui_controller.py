@@ -378,7 +378,29 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
-            expect(all(icon.cget('size') == (29, 29) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
+            expect(all(icon.cget('size') == (31, 31) for icon in app.icons.values()), 'Sidebar navigation icons must be 31px')
+            expect(app.brand_icon.cget('size') == (68, 68), 'Original brand logo should render at 68px')
+            for branding in (app.brand_title, app.brand_tagline):
+                inside(branding, app.sidebar_frame, 'Sidebar branding')
+                rendered = branding._label
+                required = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                '-displayof', rendered, branding.cget('text')))
+                expect(required <= rendered.winfo_width() + 2,
+                       f'Branding text clips: {branding.cget("text")}')
+            expect(app.brand_title.cget('font').cget('size') == 28, 'Panacea title is undersized')
+            expect(app.brand_tagline.cget('font').cget('size') == 11, 'System maintenance subtitle is undersized')
+            for root, label, _, _ in app.NAV_GROUPS:
+                button = app.nav_buttons[root]
+                expect(button.cget('text') == label, f'{root} navigation label changed')
+                expect(button.cget('font').cget('size') == 15, f'{root} navigation font is undersized')
+                expect(button.cget('font').cget('family') == 'Segoe UI Semibold',
+                       f'{root} navigation font should be semibold')
+                inside(button, app.sidebar_frame, root + ' navigation')
+                rendered = button._text_label
+                required = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                '-displayof', rendered, label))
+                expect(required <= rendered.winfo_width() + 2,
+                       f'{root} navigation text clips: {required}px > {rendered.winfo_width()}px')
             for name in ('cpu', 'memory', 'drive'):
                 expect(app.action_icons[name].cget('size') == (22, 22), f'{name} metric icon was resized')
             dashboard_labels = list(_native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel))
@@ -422,11 +444,22 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app.update()
             expect(bool(app.cleanup_individuals_frame.winfo_manager()),
                    'Individual cleanup tools should expand')
-            preview = app.preview_label.master
-            analyze = next(button for button in _native_widgets(preview, panacea_ui.ctk.CTkButton)
-                           if button.cget('text') == 'Analyze')
-            expect(analyze.cget('text') == 'Analyze',
-                   'Optional analysis remains available in individual tools')
+            expect(not hasattr(app, 'preview_label') and not hasattr(app, 'cleanup_reasons_button'),
+                   'Individual tools must not create the duplicate analysis card')
+            visible_titles = [label.cget('text') for label in
+                              _native_widgets(app.cleanup_individuals_frame, panacea_ui.ctk.CTkLabel)
+                              if label.cget('text')]
+            expected = ('Delete temporary files', 'Recycle Bin', 'Component store',
+                        'Windows Disk Cleanup')
+            expect([title for title in visible_titles if title in expected] == list(expected),
+                   'Expanded cleanup tools must show exactly the four manual operations')
+            buttons = [button.cget('text') for button in
+                       _native_widgets(app.cleanup_individuals_frame, panacea_ui.ctk.CTkButton)]
+            expect(buttons == ['Clean now', 'Empty bin', 'Clean store', 'Open utility'],
+                   f'Unexpected individual cleanup actions: {buttons}')
+            expect(not any(label.cget('image') for label in
+                           _native_widgets(quick, panacea_ui.ctk.CTkLabel)),
+                   'Quick cleanup must remain icon-free')
             app._toggle_cleanup_tools()
             app.update()
             app.select_frame('Resurrect')

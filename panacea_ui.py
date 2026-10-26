@@ -136,10 +136,12 @@ class PanaceaApp(ctk.CTk):
         self._check_updates_thread()
         self._check_app_update()
 
-    def _font(self, size=13, bold=False):
-        key = size, bold
+    def _font(self, size=13, bold=False, semibold=False):
+        key = size, bold, semibold
         if key not in self._fonts:
-            self._fonts[key] = ctk.CTkFont(family='Segoe UI', size=size, weight='bold' if bold else 'normal')
+            family = 'Segoe UI Semibold' if semibold else 'Segoe UI'
+            self._fonts[key] = ctk.CTkFont(family=family, size=size,
+                                           weight='bold' if bold else 'normal')
         return self._fonts[key]
 
     def _button(self, parent, text, command, *, secondary=False, maintenance=False, **kwargs):
@@ -179,8 +181,8 @@ class PanaceaApp(ctk.CTk):
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
             idle = make_icon(name, '#a5b5cd', 96)
             active = make_icon(name, COL_GOLD, 96)
-            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(29, 29))
-            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(29, 29))
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(31, 31))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(31, 31))
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
@@ -188,30 +190,30 @@ class PanaceaApp(ctk.CTk):
             self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
-        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(61, 61))
+        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(68, 68))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=244, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        brand.grid(row=0, column=0, rowspan=2, padx=13, pady=(20, 28), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=61, height=61).grid(row=0, column=0, padx=(0, 8))
+        brand.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=(20, 30), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=68, height=68).grid(row=0, column=0, padx=(0, 8))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
         lettering.grid(row=0, column=1, sticky='w')
-        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=25, font=self._font(24, True), text_color=TEXT, anchor='w')
+        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=30, font=self._font(28, True), text_color=TEXT, anchor='w')
         self.brand_title.pack(anchor='w')
-        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(9), text_color=COL_GOLD, anchor='w')
+        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=17, font=self._font(11, semibold=True), text_color=COL_GOLD, anchor='w')
         self.brand_tagline.pack(anchor='w')
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=220, height=48, anchor='w',
+                                  secondary=True, width=236, height=50, anchor='w',
                                   image=self.icons[icon], compound='left')
-            button.configure(font=self._font(14))
-            button.grid(row=row, column=0, padx=11, pady=4, sticky='ew')
+            button.configure(font=self._font(15, semibold=True))
+            button.grid(row=row, column=0, padx=11, pady=5, sticky='ew')
             self.nav_buttons[name] = button
         ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=8, column=0, sticky='ew', padx=17, pady=(10, 6))
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
@@ -541,32 +543,6 @@ class PanaceaApp(ctk.CTk):
             body, 'Show individual tools', self._toggle_cleanup_tools, secondary=True)
         self.cleanup_toggle_button.pack(fill='x', pady=(0, 4))
         self.cleanup_individuals_frame = ctk.CTkFrame(body, fg_color='transparent')
-        preview = self._card(self.cleanup_individuals_frame)
-        preview.pack(fill='x', pady=(0, 4))
-        preview.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(preview, text='', image=self.icons_active['clean'],
-                     width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
-        ctk.CTkLabel(preview, text='Temporary files · optional analysis',
-                     height=18, font=self._font(13, True), anchor='w'
-                     ).grid(row=0, column=1, sticky='ew', pady=(12, 0))
-        ctk.CTkLabel(preview, text='Preview only · never deletes files',
-                     height=16, font=self._font(11), text_color=MUTED,
-                     anchor='w').grid(row=1, column=1, sticky='ew')
-        self.preview_label = ctk.CTkLabel(
-            preview, text=self._preview_summary, anchor='w', text_color=MUTED,
-            font=self._font(12), justify='left', wraplength=650)
-        self.preview_label.grid(row=2, column=1, sticky='ew', pady=(5, 0))
-        self._button(preview, 'Analyze', self.run_preview_temp, secondary=True,
-                     maintenance=True, width=112).grid(
-                         row=0, column=2, rowspan=4, padx=(12, 14), pady=12)
-        self.cleanup_reasons_button = self._button(
-            preview, 'View reasons', self._show_cleanup_diagnostics,
-            secondary=True, width=112, height=24)
-        self.cleanup_reasons_button.grid(row=3, column=1, sticky='w', pady=(3, 12))
-        self.cleanup_reasons_button.configure(
-            state='normal' if self.__dict__.get('_cleanup_diagnostics') else 'disabled')
-        preview.bind('<Configure>', lambda event: self.preview_label.configure(
-            wraplength=max(100, event.width / self.preview_label._get_widget_scaling() - 210)))
         actions = self._card(self.cleanup_individuals_frame)
         actions.pack(fill='x')
         self.btn_clean_temp = self._action_row(

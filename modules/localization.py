@@ -576,6 +576,7 @@ PATTERNS = [
     (r"^(.+) MB logical bytes freed$", r"\1 MB logici liberati"),
     (r"^Found (\d+) eligible files\.\.\.$", r"Trovati \1 file idonei…"),
     (r"^Deleted (\d+) files\.\.\.$", r"Eliminati \1 file…"),
+    (r"^([+−]) (.+)$", lambda match: f"{match.group(1)} {translate(match.group(2), 'it')}"),
     (r"^([^:]+): (.+)$", lambda match:
      f"{translate(match.group(1), 'it')}: {translate(match.group(2), 'it')}"
      if translate(match.group(1), 'it') != match.group(1) else match.group(0)),

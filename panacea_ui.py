@@ -158,12 +158,27 @@ class PanaceaApp(ctk.CTk):
                 header = ctk.CTkFrame(host, fg_color='transparent')
                 header.grid(row=0, column=0, sticky='ew', padx=28, pady=(23, 10))
                 heading = ctk.CTkFrame(header, fg_color='transparent')
-                heading.pack(anchor='w')
+                heading.pack(fill='x')
                 self.group_headings[group] = heading
                 LLabel(heading, text='', image=self.icons_active[icon], width=38,
                        height=38).pack(side='left', padx=(0, 9))
-                LLabel(heading, text=label, font=self._font(23, True),
-                       text_color=TEXT).pack(side='left')
+                caption = LLabel(heading, text=label, font=self._font(23, True),
+                                 text_color=TEXT, anchor='w', justify='left',
+                                 height=38)
+                caption.pack(side='left', fill='x', expand=True)
+                def fit_group_heading(event, title=caption, host=heading):
+                    scale = max(host._get_widget_scaling(), .01)
+                    logical = max(125, event.width / scale - 55)
+                    rendered = title._label
+                    measured = int(rendered.tk.call(
+                        'font', 'measure', rendered.cget('font'),
+                        '-displayof', rendered, title.cget('text')))
+                    wrapped = measured > logical * scale
+                    key = (round(logical // 8), wrapped)
+                    if host.__dict__.get('_title_geometry') != key:
+                        host._title_geometry = key
+                        title.configure(wraplength=logical, height=67 if wrapped else 38)
+                heading.bind('<Configure>', fit_group_heading, add='+')
                 ctk.CTkFrame(header, fg_color=BORDER, height=1).pack(
                     fill='x', pady=(13, 0))
                 content = ctk.CTkScrollableFrame(host, fg_color=BG, corner_radius=0)
@@ -245,7 +260,16 @@ class PanaceaApp(ctk.CTk):
         LLabel(frame, text=title, height=24, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
         label = LLabel(frame, text=detail, height=18 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
         label.pack(fill='x', pady=(1, 0))
-        frame.bind('<Configure>', lambda event: label.configure(wraplength=max(250, event.width - 10)))
+        def fit_section_header(event):
+            logical = event.width / max(frame._get_widget_scaling(), .01)
+            narrow = logical < 400
+            key = (int(logical // 8), narrow)
+            if frame.__dict__.get('_detail_geometry') != key:
+                frame._detail_geometry = key
+                label.configure(
+                    wraplength=max(120, logical - 12),
+                    height=(43 if compact else 58) if narrow else (18 if compact else 28))
+        frame.bind('<Configure>', fit_section_header, add='+')
 
     def _keyboard_switch(self, switch):
         switch._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
@@ -932,11 +956,27 @@ class PanaceaApp(ctk.CTk):
         master.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(master, fg_color='transparent')
         row.pack(fill='x', padx=14, pady=(10, 5))
-        LLabel(row, text='All settings', font=self._font(15, True)).pack(side='left')
+        master_caption = LLabel(row, text='All settings', font=self._font(15, True))
+        master_caption.pack(side='left')
         self.master_var = tk.BooleanVar(value=False)
         self.master_switch = LSwitch(row, text='Loading…', variable=self.master_var, state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_GOLD)
         self.master_switch.pack(side='right')
         self._keyboard_switch(self.master_switch)
+        def fit_master_row(event):
+            logical = event.width / max(row._get_widget_scaling(), .01)
+            stacked = logical < 390
+            if row.__dict__.get('_stacked_master') == stacked:
+                return
+            row._stacked_master = stacked
+            master_caption.pack_forget()
+            self.master_switch.pack_forget()
+            if stacked:
+                master_caption.pack(side='top', anchor='w', fill='x')
+                self.master_switch.pack(side='top', anchor='w', pady=(6, 0))
+            else:
+                master_caption.pack(side='left')
+                self.master_switch.pack(side='right')
+        row.bind('<Configure>', fit_master_row, add='+')
         self.turbo_saved_label = LLabel(master, text='Reading saved originals…', height=18, font=self._font(11), text_color=MUTED, anchor='w', wraplength=600)
         self.turbo_saved_label.pack(fill='x', padx=14, pady=(0, 8))
         actions = ctk.CTkFrame(master, fg_color='transparent')
@@ -953,7 +993,8 @@ class PanaceaApp(ctk.CTk):
             row = ctk.CTkFrame(card, fg_color='transparent')
             row.pack(fill='x', padx=14, pady=5)
             row.grid_columnconfigure(0, weight=1)
-            LLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew')
+            caption = LLabel(row, text=title, height=18, font=self._font(13, True), anchor='w', justify='left')
+            caption.grid(row=0, column=0, sticky='ew')
             detail = LLabel(row, text=desc, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
             detail.grid(row=1, column=0, sticky='ew')
             var = tk.BooleanVar(value=False)
@@ -961,7 +1002,25 @@ class PanaceaApp(ctk.CTk):
             switch.grid(row=0, column=1, rowspan=2, padx=(12, 0))
             self._keyboard_switch(switch)
             self.turbo_vars[key], self.turbo_switches[key] = var, switch
-            row.bind('<Configure>', lambda event, label=detail: label.configure(wraplength=max(120, event.width / label._get_widget_scaling() - 150)))
+            def fit_turbo_row(event, surface=row, title_label=caption,
+                              hint=detail, toggle=switch):
+                logical = event.width / max(surface._get_widget_scaling(), .01)
+                narrow = logical < 350
+                if surface.__dict__.get('_narrow_turbo') != narrow:
+                    surface._narrow_turbo = narrow
+                    if narrow:
+                        toggle.grid_configure(row=2, column=0, rowspan=1,
+                                              sticky='w', padx=0, pady=(5, 4))
+                    else:
+                        toggle.grid_configure(row=0, column=1, rowspan=2,
+                                              sticky='', padx=(12, 0), pady=0)
+                remaining = max(115, logical - (12 if narrow else 154))
+                token = (int(remaining // 8), narrow)
+                if surface.__dict__.get('_turbo_text_geometry') != token:
+                    surface._turbo_text_geometry = token
+                    title_label.configure(wraplength=remaining, height=36 if narrow else 18)
+                    hint.configure(wraplength=remaining, height=43 if narrow else 25)
+            row.bind('<Configure>', fit_turbo_row, add='+')
         if self._turbo_states:
             self._apply_turbo_states((self._turbo_states, self._turbo_master))
         self._apply_saved_turbo(self.__dict__.get('_turbo_saved'))
@@ -995,14 +1054,28 @@ class PanaceaApp(ctk.CTk):
                width=38, height=38).pack(side='left', padx=(0, 10))
         heading_copy = ctk.CTkFrame(heading, fg_color='transparent')
         heading_copy.pack(side='left', fill='x', expand=True)
-        LLabel(heading_copy, text='Guided Maintenance',
-               font=self._font(23, True), anchor='w').pack(fill='x')
+        guided_title = LLabel(
+            heading_copy, text='Guided Maintenance', height=36,
+            font=self._font(23, True), anchor='w', justify='left')
+        guided_title.pack(fill='x')
         subtitle = LLabel(
             heading_copy, text='10 steps · Verified restore point required',
             font=self._font(12), text_color=MUTED, anchor='w', justify='left')
         subtitle.pack(fill='x')
-        heading_copy.bind('<Configure>', lambda event: subtitle.configure(
-            wraplength=max(180, event.width / subtitle._get_widget_scaling() - 8)))
+        def fit_guided_heading(event):
+            scale = max(heading_copy._get_widget_scaling(), .01)
+            logical = max(140, event.width / scale - 8)
+            label = guided_title._label
+            measured = int(label.tk.call(
+                'font', 'measure', label.cget('font'),
+                '-displayof', label, guided_title.cget('text')))
+            wrapped = measured > logical * scale
+            key = (int(logical // 8), wrapped)
+            if heading_copy.__dict__.get('_guided_title_geometry') != key:
+                heading_copy._guided_title_geometry = key
+                guided_title.configure(wraplength=logical, height=71 if wrapped else 36)
+                subtitle.configure(wraplength=logical)
+        heading_copy.bind('<Configure>', fit_guided_heading, add='+')
 
         hero = self._card(body)
         hero.pack(fill='x', padx=8, pady=(0, 10))

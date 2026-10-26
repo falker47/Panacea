@@ -173,3 +173,9 @@ def test_operation_prefixes_localize_after_specific_result_patterns():
     assert translate('Guided Maintenance: Restart required.', 'it') == (
         'Manutenzione guidata: Riavvio necessario.')
     assert translate('Quick cleanup: completed', 'it') == 'Pulizia rapida: completato'
+
+
+def test_expandable_output_labels_translate_the_visible_prefix():
+    assert translate('+ Cleanup details', 'it') == '+ Dettagli pulizia'
+    assert translate('− Command output', 'it') == '− Output dei comandi'
+    assert translate('+ Cleanup details', 'en') == '+ Cleanup details'

@@ -1332,3 +1332,39 @@ def test_five_by_two_guided_grid_preserves_order_and_expandable_information(monk
         assert app._resurrection_info_labels['Restore point'].winfo_ismapped()
     finally:
         _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_narrow_italian_headers_and_turbo_switches_reflow_at_150_percent(monkeypatch):
+    monkeypatch.setenv('PANACEA_LANGUAGE', 'italian')
+    panacea_ui.ctk.set_widget_scaling(1.5)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    try:
+        panacea_ui.tk.Tk.maxsize(app, 1024, 768)
+        panacea_ui.tk.Tk.geometry(app, '1020x700')
+        app.select_frame('Tools')
+        app.update()
+        title = next(label for label in _native_widgets(
+            app.group_headings['Tools'], panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Diagnostica e riparazione')
+        assert title.cget('wraplength') > 0
+        assert title.cget('height') > 38  # Wrapped instead of clipped at 150%.
+        app.select_frame('Turbo')
+        app.update()
+        master = app.master_switch.master
+        title = next(label for label in _native_widgets(
+            master, panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Tutte le impostazioni')
+        assert app.master_switch.winfo_rooty() > title.winfo_rooty()
+        for switch in app.turbo_switches.values():
+            assert switch.grid_info()['row'] == 2
+        app.select_frame('Resurrect')
+        app.update()
+        title = next(label for label in _native_widgets(
+            app.frame_resurrect, panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Manutenzione guidata')
+        assert title.cget('wraplength') > 0
+        assert title.cget('height') > 36
+    finally:
+        _destroy_real_app(app)

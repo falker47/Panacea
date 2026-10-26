@@ -407,37 +407,32 @@ class PanaceaApp(ctk.CTk):
         self.card_sys = ctk.CTkFrame(frame, fg_color='transparent')
         self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 4), sticky='ew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
-        scan = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
-                            border_color=BORDER, border_width=1, corner_radius=9)
-        scan.grid(row=0, column=0, sticky='nsew', padx=(0, 5), pady=0)
-        scan.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(scan, image=self.action_icons['scan'], text='', width=27).grid(
-            row=0, column=0, rowspan=2, padx=(9, 5))
-        ctk.CTkLabel(scan, text='Temporary files', height=18, font=self._font(12, True),
-                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
-        self.dash_preview_status = ctk.CTkLabel(
-            scan, text=self._preview_summary, height=16, text_color=MUTED, font=self._font(10),
-            anchor='w', wraplength=226, justify='left')
-        self.dash_preview_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
-        self._button(scan, 'Analyze', self.run_preview_temp, secondary=True,
-                     maintenance=True, width=77).grid(
-            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+        def action_card(column, padding, icon, title, detail, button_label, command, wraplength):
+            """Build matching Overview actions without duplicating their layout."""
+            card = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
+                                border_color=BORDER, border_width=1, corner_radius=9)
+            card.grid(row=0, column=column, sticky='nsew', padx=padding, pady=0)
+            card.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(card, image=self.action_icons[icon], text='', width=27).grid(
+                row=0, column=0, rowspan=2, padx=(9, 5))
+            ctk.CTkLabel(card, text=title, height=18, font=self._font(12, True),
+                         anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+            status = ctk.CTkLabel(
+                card, text=detail, height=16, text_color=MUTED, font=self._font(10),
+                anchor='w', wraplength=wraplength, justify='left')
+            status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
+            self._button(card, button_label, command, secondary=True,
+                         maintenance=True, width=77).grid(
+                row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+            return card, status
 
-        restore = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
-                               border_color=BORDER, border_width=1, corner_radius=9)
-        restore.grid(row=0, column=1, sticky='nsew', padx=(5, 0), pady=0)
-        restore.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(restore, image=self.action_icons['restore'], text='', width=27).grid(
-            row=0, column=0, rowspan=2, padx=(9, 5))
-        ctk.CTkLabel(restore, text='Restore point', height=18, font=self._font(12, True),
-                     anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
-        restore_detail = ctk.CTkLabel(restore, text='Save Windows state · confirmation required',
-                     height=16, text_color=MUTED, font=self._font(10), anchor='w', wraplength=210,
-                     justify='left')
-        restore_detail.grid(row=1, column=1, sticky='nw', pady=(0, 14))
-        self._button(restore, 'Create', self.run_create_restore, secondary=True,
-                     maintenance=True, width=77).grid(
-            row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+        scan, self.dash_preview_status = action_card(
+            0, (0, 5), 'scan', 'Temporary files', self._preview_summary,
+            'Analyze', self.run_preview_temp, 226)
+        restore, restore_detail = action_card(
+            1, (5, 0), 'restore', 'Restore point',
+            'Save Windows state · confirmation required', 'Create',
+            self.run_create_restore, 210)
 
         for card, label, reserved in ((scan, self.dash_preview_status, 151),
                                       (restore, restore_detail, 151),

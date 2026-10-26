@@ -98,7 +98,7 @@ class PanaceaApp(ctk.CTk):
             pass
         self._load_icons()
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self._setup_sidebar()
         self._setup_update_bar()
         self._setup_subnav()
@@ -117,7 +117,7 @@ class PanaceaApp(ctk.CTk):
         }
         self._built_frames = set()
         self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
-        self.operation_label.grid(row=3, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
+        self.operation_label.grid(row=2, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
         self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
         if self._maintenance_uncertain:
             self.operation_label.configure(text=self.maintenance_guard.last_error, text_color=COL_WARNING)
@@ -190,7 +190,7 @@ class PanaceaApp(ctk.CTk):
 
     def _setup_sidebar(self):
         self.sidebar_frame = ctk.CTkFrame(self, width=228, corner_radius=0, fg_color='#0e192b')
-        self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky='nsew')
+        self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
@@ -227,11 +227,11 @@ class PanaceaApp(ctk.CTk):
         for group, _, _, pages in self.NAV_GROUPS:
             if len(pages) < 2:
                 continue
-            strip = ctk.CTkFrame(self, fg_color='transparent', corner_radius=0)
+            strip = ctk.CTkFrame(self.update_bar, fg_color='transparent', corner_radius=0)
             for index, page in enumerate(pages):
                 button = self._button(strip, self.SUBVIEW_LABELS[page],
                                       lambda p=page: self.select_frame(p),
-                                      secondary=True, height=26, width=166)
+                                      secondary=True, height=30, width=145)
                 button.grid(row=0, column=index, padx=(0, 8))
                 self.subnav_buttons[page] = button
             self.subnav_frames[group] = strip
@@ -244,13 +244,13 @@ class PanaceaApp(ctk.CTk):
             self._built_frames.add(name)
         for frame in self.frames.values():
             frame.grid_forget()
-        self.frames[name].grid(row=2, column=1, sticky='nsew', padx=(6, 0))
+        self.frames[name].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
         group = next((root for root, _, _, pages in self.NAV_GROUPS if name in pages), name)
         self.active_frame, self.active_group = name, group
         for root, strip in self.__dict__.get('subnav_frames', {}).items():
             strip.grid_forget()
             if root == group:
-                strip.grid(row=1, column=1, sticky='w', padx=(24, 12), pady=(3, 0))
+                strip.grid(row=0, column=1, sticky='w', padx=(0, 6), pady=3)
         for page, button in self.__dict__.get('subnav_buttons', {}).items():
             active = page == name
             button.configure(fg_color='#263a56' if active else SURFACE_ALT,
@@ -269,12 +269,13 @@ class PanaceaApp(ctk.CTk):
 
     def _setup_update_bar(self):
         bar = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=42)
+        self.update_bar = bar
         bar.grid(row=0, column=1, sticky='ew', padx=(6, 0))
         bar.grid_columnconfigure(0, weight=1)
         self.app_update_status = ctk.CTkLabel(bar, text='Checking Panacea updates…', anchor='w', text_color=MUTED, font=self._font(11), wraplength=350)
         self.app_update_status.grid(row=0, column=0, sticky='ew', padx=18, pady=7)
         self.btn_check_update = self._button(bar, 'Check updates', self._check_app_update, secondary=True, width=105)
-        self.btn_check_update.grid(row=0, column=1, padx=(4, 12), pady=6)
+        self.btn_check_update.grid(row=0, column=2, padx=(4, 12), pady=6)
         self.update_actions = ctk.CTkFrame(bar, fg_color='transparent')
         self.btn_update_install = self._button(self.update_actions, 'Download / install', self._auto_update, width=130)
         self.btn_update_notes = self._button(self.update_actions, 'Release notes', self._show_release_notes, secondary=True, width=98)
@@ -1324,7 +1325,7 @@ class PanaceaApp(ctk.CTk):
                 self.app_update_status.configure(text=f'Panacea {VERSION} is up to date', text_color=MUTED)
             else:
                 self.app_update_status.configure(text=f'Panacea {self._release.version} available', text_color=COL_BLUE)
-                self.update_actions.grid(row=1, column=0, columnspan=2, sticky='w', padx=18)
+                self.update_actions.grid(row=1, column=0, columnspan=3, sticky='w', padx=18)
         def failed(exc):
             self.app_update_status.configure(text=f'Update check failed: {exc}', text_color=COL_WARNING)
             self.btn_check_update.configure(text='Retry check')

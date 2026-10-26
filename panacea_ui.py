@@ -455,6 +455,7 @@ class PanaceaApp(ctk.CTk):
         self.dashboard_metrics = body
         body.grid(row=2, column=0, padx=18, pady=(0, 12), sticky='nsew')
         body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
+        body.grid_rowconfigure(0, weight=1)
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
         for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
             card.grid(row=0, column=index, padx=(0, 5) if index == 0 else
@@ -517,6 +518,7 @@ class PanaceaApp(ctk.CTk):
         self.card_sys = ctk.CTkFrame(frame, fg_color='transparent')
         self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 12), sticky='nsew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
+        self.card_sys.grid_rowconfigure(0, weight=1)
         def action_card(column, padding, icon, title, detail, button_label, command, wraplength):
             """Build matching Overview actions without duplicating their layout."""
             card = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
@@ -1081,7 +1083,7 @@ class PanaceaApp(ctk.CTk):
     @staticmethod
     def _steps_need_stack(available):
         """Each step has room for number, one-line action and legible title."""
-        return available < 630
+        return available < 590
 
     def _layout_resurrection_timeline(self, event):
         # CustomTkinter forwards <Configure> from an internal Canvas, not

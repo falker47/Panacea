@@ -29,7 +29,11 @@ def test_inno_installer_is_stable_machine_install_with_no_forced_close():
         "{autoprograms}\\Panacea", "AppVersion={#PanaceaVersion}",
     ):
         assert required in text
-    assert "[UninstallDelete]" not in text
+    # Only the one installer-owned language sidecar may be removed at uninstall.
+    # Never accept broad or wildcard cleanup rules.
+    assert text.count("[UninstallDelete]") == 1
+    scoped = text.split("[UninstallDelete]", 1)[1].split("[Tasks]", 1)[0].strip()
+    assert scoped == 'Type: files; Name: "{app}\\panacea-language.ini"'
 
 
 def test_installer_rejects_bad_input_checksum_before_compiling(tmp_path, monkeypatch):

@@ -966,14 +966,18 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.select_frame('Cleaning')
         app._toggle_cleanup_tools()
         app.update()
-        analyze_button = next(button for button in _native_widgets(app.preview_label.master, panacea_ui.ctk.CTkButton)
-                              if button.cget('text') == 'Analyze')
         log = app.clean_log
         toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
         assert not log.winfo_manager()
+        # Analysis remains accessible from Overview, not the individual-cleanup panel.
+        app.select_frame('Dashboard')
+        app.update()
+        analyze_button = next(button for button in _native_widgets(app.card_sys, panacea_ui.ctk.CTkButton)
+                              if button.cget('text') == 'Analyze')
         activate(analyze_button)
         assert entered.wait(3)
         app.dispatcher.drain()
+        app.select_frame('Cleaning')
         app.update()
         assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
         assert 'Fixture analysis line 59' in log.get('1.0', 'end')
@@ -1009,12 +1013,16 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.update()
         assert not app.workers.busy()
         assert not log.winfo_manager(), 'Completion must preserve manual closure'
-        assert 'Analysis completed' in app.preview_label.cget('text')
+        assert 'Analysis completed' in app.dash_preview_status.cget('text')
+        app.select_frame('Dashboard')
+        app.update()
         activate(analyze_button)
         app.workers.join(3)
         app.dispatcher.drain()
         app.update()
         assert len(runs) == 2
+        app.select_frame('Cleaning')
+        app.update()
         assert log.winfo_ismapped(), 'A new explicit run must reopen output and leave it open at completion'
         app.select_frame('Dashboard')
         app.select_frame('Cleaning')

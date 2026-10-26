@@ -4,8 +4,9 @@ Implemented only on the existing draft PR #4; the published release stays at v2.
 
 - Sidebar retains the original image and approved tinted Guided Maintenance chalice.
   The original brand icon is 68px (was 61), title 28px (was 24), tagline 11px
-  semibold (was 9); sidebar width 260px, navigation icons 31px, labels 15px
-  Segoe UI Semibold, with slightly more vertical breathing room and Title Case.
+  semibold (was 9); sidebar width 250px, navigation icons 31px, labels 15px
+  Segoe UI Semibold, with slightly more vertical breathing room and Title Case. On short high-DPI windows,
+  padding and button heights compress to keep the fixed footer visible.
 - Space & Cleanup keeps the icon-free Quick cleanup card and its original
   guarded, serial three-step implementation followed by manual Windows Disk
   Cleanup launch. No backend maintenance commands or confirmations changed.

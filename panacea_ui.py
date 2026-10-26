@@ -193,14 +193,14 @@ class PanaceaApp(ctk.CTk):
         self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(68, 68))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        brand.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=(20, 30), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=68, height=68).grid(row=0, column=0, padx=(0, 8))
+        brand.grid(row=0, column=0, rowspan=2, padx=(10, 6), pady=(20, 30), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=68, height=68).grid(row=0, column=0, padx=(0, 6))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
         lettering.grid(row=0, column=1, sticky='w')
         self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=30, font=self._font(28, True), text_color=TEXT, anchor='w')
@@ -210,7 +210,7 @@ class PanaceaApp(ctk.CTk):
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=236, height=50, anchor='w',
+                                  secondary=True, width=226, height=50, anchor='w',
                                   image=self.icons[icon], compound='left')
             button.configure(font=self._font(15, semibold=True))
             button.grid(row=row, column=0, padx=11, pady=5, sticky='ew')
@@ -219,12 +219,26 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=14, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(1, weight=1)
+        self._sidebar_brand = brand
+        self._sidebar_compact = None
+        self.sidebar_frame.bind('<Configure>', self._adjust_sidebar_height)
         footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} falker47',
                               height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
         footer.grid(row=0, column=0, sticky='w')
         footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
         ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
                      font=self._font(10), anchor='e').grid(row=0, column=1, sticky='e')
+
+    def _adjust_sidebar_height(self, event):
+        """Preserve a fixed footer on short, high-DPI windows without shrinking labels."""
+        compact = event.height < 470 * self.sidebar_frame._get_widget_scaling()
+        if self._sidebar_compact == compact:
+            return
+        self._sidebar_compact = compact
+        self._sidebar_brand.grid_configure(pady=(14, 20) if compact else (20, 30))
+        for button in self.nav_buttons.values():
+            button.configure(height=46 if compact else 50)
+            button.grid_configure(pady=3 if compact else 5)
 
     def _setup_subnav(self):
         """Compact secondary navigation for groups containing more than one view."""

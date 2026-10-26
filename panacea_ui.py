@@ -21,6 +21,7 @@ from modules.restore import RestoreManager
 from modules.performance import PerformanceManager
 from modules.maintenance_guard import MaintenanceGuard
 from modules.ui_dispatch import UiDispatcher, WorkerController
+from modules.localization import resolve_language, translate
 from modules.utils import resource_path
 from version import VERSION, GITHUB_REPO
 
@@ -41,6 +42,43 @@ ctk.set_appearance_mode('Dark')
 ctk.set_default_color_theme('dark-blue')
 
 
+def _view_language(widget):
+    """Read language from the owning Panacea window, including nested dialogs."""
+    for _ in range(24):
+        if widget is None:
+            break
+        language = getattr(widget, 'language', None)
+        if language:
+            return language
+        widget = getattr(widget, 'master', None)
+    return 'en'
+
+
+class _LocalizedText:
+    """Translate widget presentation only, leaving command identifiers intact."""
+    def __init__(self, master, *args, **kwargs):
+        if 'text' in kwargs:
+            kwargs['text'] = translate(kwargs['text'], _view_language(master))
+        super().__init__(master, *args, **kwargs)
+
+    def configure(self, *args, **kwargs):
+        if 'text' in kwargs:
+            kwargs['text'] = translate(kwargs['text'], _view_language(self))
+        return super().configure(*args, **kwargs)
+
+
+class LLabel(_LocalizedText, ctk.CTkLabel):
+    pass
+
+
+class LButton(_LocalizedText, ctk.CTkButton):
+    pass
+
+
+class LSwitch(_LocalizedText, ctk.CTkSwitch):
+    pass
+
+
 class PanaceaApp(ctk.CTk):
     LOG_LINES = 500
     # Five primary destinations; existing screens remain available as lazy subviews.
@@ -54,7 +92,8 @@ class PanaceaApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title(f'Panacea · System maintenance · {VERSION}')
+        self.language = resolve_language()
+        self.title(f'Panacea · {translate("System maintenance", self.language)} · {VERSION}')
         self.configure(fg_color=BG)
         self.withdraw()
         self.geometry('1020x680')
@@ -129,7 +168,7 @@ class PanaceaApp(ctk.CTk):
             'Startup': self._setup_startup_frame, 'Resurrect': self._setup_resurrect_frame,
         }
         self._built_frames = set()
-        self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
+        self.operation_label = LLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
         self.operation_label.grid(row=2, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
         self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
         if self._maintenance_uncertain:
@@ -147,6 +186,12 @@ class PanaceaApp(ctk.CTk):
         self._check_updates_thread()
         self._check_app_update()
 
+    def _t(self, text):
+        return translate(text, self.__dict__.get('language', 'en'))
+
+    def _confirm(self, title, detail, **kwargs):
+        return messagebox.askyesno(self._t(title), self._t(detail), **kwargs)
+
     def _font(self, size=13, bold=False, semibold=False):
         key = size, bold, semibold
         if key not in self._fonts:
@@ -157,7 +202,7 @@ class PanaceaApp(ctk.CTk):
 
     def _button(self, parent, text, command, *, secondary=False, maintenance=False, **kwargs):
         button_height = kwargs.pop('height', 32)
-        button = ctk.CTkButton(parent, text=text, command=command, height=button_height, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
+        button = LButton(parent, text=text, command=command, height=button_height, corner_radius=6, fg_color=SURFACE_ALT if secondary else '#765f33', hover_color='#304561' if secondary else '#957745', text_color=TEXT, font=self._font(12), border_width=1, border_color=BORDER if secondary else COL_GOLD, **kwargs)
         button.bind('<Return>', lambda event: button.invoke())
         button.bind('<FocusIn>', lambda event: button.configure(border_color=COL_BLUE))
         button.bind('<FocusOut>', lambda event: button.configure(border_color=BORDER if secondary else COL_GOLD))
@@ -173,8 +218,8 @@ class PanaceaApp(ctk.CTk):
         parent.grid_columnconfigure(0, weight=1)
         frame = ctk.CTkFrame(parent, fg_color='transparent')
         frame.grid(row=0, column=0, sticky='ew', padx=22, pady=(10, 8) if compact else (15, 10))
-        ctk.CTkLabel(frame, text=title, height=24, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
-        label = ctk.CTkLabel(frame, text=detail, height=18 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
+        LLabel(frame, text=title, height=24, font=self._font(21 if compact else 23, True), anchor='w').pack(fill='x')
+        label = LLabel(frame, text=detail, height=18 if compact else 28, font=self._font(11 if compact else 12), text_color=MUTED, anchor='w', wraplength=650, justify='left')
         label.pack(fill='x', pady=(1, 0))
         frame.bind('<Configure>', lambda event: label.configure(wraplength=max(250, event.width - 10)))
 
@@ -211,15 +256,15 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         brand.grid(row=0, column=0, rowspan=2, padx=(10, 7), pady=(18, 26), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=74, height=74).grid(
+        LLabel(brand, image=self.brand_icon, text='', width=74, height=74).grid(
             row=0, column=0, padx=(0, 7))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
         lettering.grid(row=0, column=1, sticky='w')
-        self.brand_title = ctk.CTkLabel(
+        self.brand_title = LLabel(
             lettering, text='Panacea', height=34, font=self._font(32, True),
             text_color=TEXT, anchor='w')
         self.brand_title.pack(anchor='w')
-        self.brand_tagline = ctk.CTkLabel(
+        self.brand_tagline = LLabel(
             lettering, text='SYSTEM MAINTENANCE', height=18,
             font=self._font(12, semibold=True), text_color=COL_GOLD, anchor='w')
         self.brand_tagline.pack(anchor='w')
@@ -236,20 +281,20 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=12, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(0, weight=1)
-        self.footer_developer = ctk.CTkLabel(
+        self.footer_developer = LLabel(
             self.sidebar_footer, text='Developed by Maurizio Falconi',
             height=16, font=self._font(10), text_color=MUTED, anchor='w')
         self.footer_developer.grid(row=1, column=0, sticky='ew', pady=(3, 0))
         byline = ctk.CTkFrame(self.sidebar_footer, fg_color='transparent')
         byline.grid(row=2, column=0, sticky='ew')
         byline.grid_columnconfigure(1, weight=1)
-        self.footer_credit = ctk.CTkLabel(
+        self.footer_credit = LLabel(
             byline, text='falker47', height=17, text_color=COL_GOLD,
             font=self._font(11, semibold=True), cursor='hand2', anchor='w')
         self.footer_credit.grid(row=0, column=0, sticky='w')
         self.footer_credit.bind(
             '<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
-        self.footer_version = ctk.CTkLabel(
+        self.footer_version = LLabel(
             byline, text=f'v{VERSION}', height=17, font=self._font(10),
             text_color=MUTED, anchor='e')
         self.footer_version.grid(row=0, column=1, sticky='e')
@@ -321,7 +366,7 @@ class PanaceaApp(ctk.CTk):
         self.update_bar = bar
         bar.grid(row=0, column=0, sticky='ew', pady=(0, 7))
         bar.grid_columnconfigure(0, weight=1)
-        self.app_update_status = ctk.CTkLabel(
+        self.app_update_status = LLabel(
             bar, text='Checking Panacea updates…', anchor='w',
             text_color=MUTED, font=self._font(11), justify='left', wraplength=222)
         self.app_update_status.grid(row=0, column=0, sticky='ew', padx=11, pady=(10, 4))
@@ -349,7 +394,7 @@ class PanaceaApp(ctk.CTk):
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
         frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(frame, text='Overview', font=self._font(22, True), anchor='w').grid(
+        LLabel(frame, text='Overview', font=self._font(22, True), anchor='w').grid(
             row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
         # A compact system summary, with a separate truthful Windows Update status.
@@ -358,25 +403,25 @@ class PanaceaApp(ctk.CTk):
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
         system.grid(row=0, column=0, sticky='ew', padx=(14, 7), pady=10)
-        self.dash_os = ctk.CTkLabel(system, text='Loading Windows details…', height=22, anchor='w',
+        self.dash_os = LLabel(system, text='Loading Windows details…', height=22, anchor='w',
                                     font=self._font(15, True), text_color=TEXT)
         self.dash_os.pack(anchor='w')
         system_details = ctk.CTkFrame(system, fg_color='transparent')
         system_details.pack(fill='x')
-        self.dash_uptime_val = ctk.CTkLabel(system_details, text='Uptime: —', height=16, anchor='w',
+        self.dash_uptime_val = LLabel(system_details, text='Uptime: —', height=16, anchor='w',
                                             font=self._font(11), text_color=MUTED)
         self.dash_uptime_val.pack(side='left')
-        self.dash_battery = ctk.CTkLabel(system_details, text='Power: —', height=16, anchor='w',
+        self.dash_battery = LLabel(system_details, text='Power: —', height=16, anchor='w',
                                          font=self._font(10), text_color=MUTED)
         self.dash_battery.pack(side='left', padx=(10, 0))
         updates = ctk.CTkFrame(info, fg_color=SURFACE_ALT, corner_radius=8)
         updates.grid(row=0, column=1, sticky='nsew', padx=(7, 10), pady=7)
         updates.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(updates, text='', image=self.action_icons['updates'], width=28).grid(
+        LLabel(updates, text='', image=self.action_icons['updates'], width=28).grid(
             row=0, column=0, rowspan=2, padx=(10, 3))
-        ctk.CTkLabel(updates, text='Windows Update', height=18, text_color=TEXT, font=self._font(12, True),
+        LLabel(updates, text='Windows Update', height=18, text_color=TEXT, font=self._font(12, True),
                      anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
-        self.lbl_update_status = ctk.CTkLabel(updates, text='Checking…', height=16, font=self._font(10),
+        self.lbl_update_status = LLabel(updates, text='Checking…', height=16, font=self._font(10),
                                               text_color=MUTED, anchor='w', wraplength=210)
         self.lbl_update_status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
         self._button(updates, 'View', self.run_windows_update, secondary=True, width=58).grid(
@@ -396,48 +441,48 @@ class PanaceaApp(ctk.CTk):
         ):
             heading = ctk.CTkFrame(card, fg_color='transparent')
             heading.pack(fill='x', padx=12, pady=(7, 1))
-            ctk.CTkLabel(heading, text='', image=self.action_icons[icon_name],
+            LLabel(heading, text='', image=self.action_icons[icon_name],
                          width=24, height=24).pack(side='left', padx=(0, 6))
-            ctk.CTkLabel(heading, text=title, font=self._font(12, True),
+            LLabel(heading, text=title, font=self._font(12, True),
                          anchor='w', text_color=TEXT).pack(side='left', fill='x')
 
-        self.dash_cpu_val = ctk.CTkLabel(self.card_cpu, text='—', font=self._font(25, True),
+        self.dash_cpu_val = LLabel(self.card_cpu, text='—', font=self._font(25, True),
                                          text_color=TEXT, anchor='w')
         self.dash_cpu_val.pack(fill='x', padx=12)
         self.cpu_graph = LiveGraph(self.card_cpu, width=175, height=36, line_color=COL_BLUE)
         self.cpu_graph.pack(fill='x', padx=12, pady=(5, 5))
-        self.dash_cpu_name = ctk.CTkLabel(self.card_cpu, text='Loading processor…',
+        self.dash_cpu_name = LLabel(self.card_cpu, text='Loading processor…',
                                           text_color=MUTED, font=self._font(10),
                                           anchor='w', wraplength=185, justify='left')
         self.dash_cpu_name.pack(fill='x', padx=12, pady=(0, 9))
 
-        self.dash_ram_perc = ctk.CTkLabel(self.card_ram, text='—', font=self._font(25, True),
+        self.dash_ram_perc = LLabel(self.card_ram, text='—', font=self._font(25, True),
                                           text_color=TEXT, anchor='w')
         self.dash_ram_perc.pack(fill='x', padx=12)
         self.ram_graph = LiveGraph(self.card_ram, width=175, height=36, line_color=COL_GOLD)
         self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
-        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='RAM: —', text_color=MUTED,
+        self.dash_ram_val = LLabel(self.card_ram, text='RAM: —', text_color=MUTED,
                                          font=self._font(11), anchor='w', wraplength=185)
         self.dash_ram_val.pack(fill='x', padx=12)
-        self.dash_ram_info = ctk.CTkLabel(self.card_ram, text='Loading memory details…',
+        self.dash_ram_info = LLabel(self.card_ram, text='Loading memory details…',
                                           text_color=MUTED, font=self._font(10),
                                           anchor='w', wraplength=185)
         self.dash_ram_info.pack(fill='x', padx=12, pady=(0, 9))
 
-        self.dash_disk_perc = ctk.CTkLabel(self.card_disk, text='—', font=self._font(25, True),
+        self.dash_disk_perc = LLabel(self.card_disk, text='—', font=self._font(25, True),
                                            text_color=TEXT, anchor='w')
         self.dash_disk_perc.pack(fill='x', padx=12)
         self.dash_disk_bar = ctk.CTkProgressBar(self.card_disk, height=12, corner_radius=6,
                                                  progress_color=COL_GOLD, fg_color='#26364b')
         self.dash_disk_bar.set(0)
         self.dash_disk_bar.pack(fill='x', padx=12, pady=(12, 8))
-        self.dash_disk_val = ctk.CTkLabel(self.card_disk, text='Storage: —', text_color=MUTED,
+        self.dash_disk_val = LLabel(self.card_disk, text='Storage: —', text_color=MUTED,
                                           font=self._font(11), anchor='w', wraplength=185)
         self.dash_disk_val.pack(fill='x', padx=12)
-        self.dash_disk_state = ctk.CTkLabel(self.card_disk, text='Checking space…',
+        self.dash_disk_state = LLabel(self.card_disk, text='Checking space…',
                                             text_color=MUTED, font=self._font(10), anchor='w')
         self.dash_disk_state.pack(fill='x', padx=12)
-        self.dash_disk_info = ctk.CTkLabel(self.card_disk, text='Loading disk details…',
+        self.dash_disk_info = LLabel(self.card_disk, text='Loading disk details…',
                                            text_color=MUTED, font=self._font(10),
                                            anchor='w', wraplength=185)
         self.dash_disk_info.pack(fill='x', padx=12, pady=(0, 9))
@@ -453,11 +498,11 @@ class PanaceaApp(ctk.CTk):
                                 border_color=BORDER, border_width=1, corner_radius=9)
             card.grid(row=0, column=column, sticky='nsew', padx=padding, pady=0)
             card.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(card, image=self.action_icons[icon], text='', width=27).grid(
+            LLabel(card, image=self.action_icons[icon], text='', width=27).grid(
                 row=0, column=0, rowspan=2, padx=(9, 5))
-            ctk.CTkLabel(card, text=title, height=18, font=self._font(12, True),
+            LLabel(card, text=title, height=18, font=self._font(12, True),
                          anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
-            status = ctk.CTkLabel(
+            status = LLabel(
                 card, text=detail, height=16, text_color=MUTED, font=self._font(10),
                 anchor='w', wraplength=wraplength, justify='left')
             status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
@@ -547,13 +592,13 @@ class PanaceaApp(ctk.CTk):
         row.pack(fill='x', padx=12, pady=3)
         row.grid_columnconfigure(1, weight=1)
         if icon:
-            ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(
+            LLabel(row, text='', image=self.icons_active[icon], width=26).grid(
                 row=0, column=0, rowspan=2, padx=(0, 7))
-        heading = ctk.CTkLabel(
+        heading = LLabel(
             row, text=title, height=18, font=self._font(13, True), anchor='w',
             justify='left')
         heading.grid(row=0, column=1, sticky='ew')
-        description = ctk.CTkLabel(
+        description = LLabel(
             row, text=detail, height=16, text_color=MUTED,
             font=self._font(11), anchor='w', justify='left')
         description.grid(row=1, column=1, sticky='ew')
@@ -586,19 +631,19 @@ class PanaceaApp(ctk.CTk):
         quick.pack(fill='x', pady=(0, 8))
         quick.grid_columnconfigure(0, weight=1)
         self.quick_cleanup_card = quick
-        ctk.CTkLabel(quick, text='Quick cleanup', anchor='w',
+        LLabel(quick, text='Quick cleanup', anchor='w',
                      font=self._font(17, True)).grid(row=0, column=0, sticky='ew', padx=14, pady=(12, 2))
-        ctk.CTkLabel(quick, text='Temporary files · Recycle Bin · Windows component store',
+        LLabel(quick, text='Temporary files · Recycle Bin · Windows component store',
                      anchor='w', text_color=MUTED, font=self._font(11)
                      ).grid(row=1, column=0, sticky='ew', padx=14)
-        ctk.CTkLabel(quick, text='Then Windows Disk Cleanup opens for manual selection.',
+        LLabel(quick, text='Then Windows Disk Cleanup opens for manual selection.',
                      anchor='w', text_color=MUTED, font=self._font(11)
                      ).grid(row=2, column=0, sticky='ew', padx=14, pady=(0, 5))
         self.quick_cleanup_button = self._button(
             quick, 'Run quick cleanup', self.run_quick_cleanup,
             maintenance=True, height=38, width=164)
         self.quick_cleanup_button.grid(row=3, column=0, columnspan=2, sticky='w', padx=14, pady=(8, 5))
-        self.quick_cleanup_status = ctk.CTkLabel(
+        self.quick_cleanup_status = LLabel(
             quick, text=self._quick_cleanup_summary, font=self._font(11),
             text_color=MUTED, anchor='w', justify='left', wraplength=680)
         self.quick_cleanup_status.grid(row=4, column=0, columnspan=2, sticky='ew', padx=14, pady=(2, 6))
@@ -645,15 +690,15 @@ class PanaceaApp(ctk.CTk):
         card.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(card, fg_color='transparent')
         row.pack(fill='x', padx=14, pady=12)
-        ctk.CTkLabel(row, text='', image=self.icons_active['disk'], width=28).pack(side='left', padx=(0, 8))
-        self.selected_drive = tk.StringVar(value='Loading…')
-        self.drive_menu = ctk.CTkOptionMenu(row, variable=self.selected_drive, values=['Loading…'], command=self._drive_selected, width=112, fg_color=SURFACE_ALT, button_color=BORDER, font=self._font(13))
+        LLabel(row, text='', image=self.icons_active['disk'], width=28).pack(side='left', padx=(0, 8))
+        self.selected_drive = tk.StringVar(value=self._t('Loading…'))
+        self.drive_menu = ctk.CTkOptionMenu(row, variable=self.selected_drive, values=[self._t('Loading…')], command=self._drive_selected, width=112, fg_color=SURFACE_ALT, button_color=BORDER, font=self._font(13))
         self.drive_menu.pack(side='left')
         self.drive_menu._canvas.configure(takefocus=1, highlightthickness=1, highlightcolor=COL_BLUE, highlightbackground=SURFACE)
         self.drive_menu.bind('<Down>', lambda event: self._cycle_drive(1))
         self.drive_menu.bind('<Up>', lambda event: self._cycle_drive(-1))
         self._button(row, 'Refresh', self.refresh_drives, secondary=True, width=85).pack(side='right')
-        self.drive_detail = ctk.CTkLabel(card, text='Reading local drives…', anchor='w', justify='left', font=self._font(13), text_color=MUTED, wraplength=650)
+        self.drive_detail = LLabel(card, text='Reading local drives…', anchor='w', justify='left', font=self._font(13), text_color=MUTED, wraplength=650)
         self.drive_detail.pack(fill='x', padx=14, pady=(0, 10))
         self.drive_capacity = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
         self.drive_capacity.set(0)
@@ -670,7 +715,7 @@ class PanaceaApp(ctk.CTk):
         for title, entries in [
             ('WINDOWS INTEGRITY', [('System file scan', 'Verify and repair protected files.', 'sfc /scannow', 'SFC scan'), ('Image health', 'Check the component image for recorded corruption.', 'DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check'), ('Repair image', 'Repair corruption; may use Windows Update.', 'DISM /Online /Cleanup-Image /RestoreHealth', 'DISM repair')]),
             ('NETWORK', [('Flush DNS', 'Clear cached DNS records.', 'ipconfig /flushdns', 'DNS flush'), ('Reset Winsock', 'May interrupt connections and require a restart.', 'netsh winsock reset', 'Network reset')])]:
-            ctk.CTkLabel(body, text=title, height=18, text_color=COL_GOLD, font=self._font(10, True), anchor='w').pack(fill='x', pady=(4, 3), padx=2)
+            LLabel(body, text=title, height=18, text_color=COL_GOLD, font=self._font(10, True), anchor='w').pack(fill='x', pady=(4, 3), padx=2)
             card = self._card(body)
             card.pack(fill='x', pady=(0, 4))
             for text, detail, command, name in entries:
@@ -696,9 +741,9 @@ class PanaceaApp(ctk.CTk):
         card.pack(fill='x', pady=(0, 10))
         heading = ctk.CTkFrame(card, fg_color='transparent')
         heading.pack(fill='x', padx=16, pady=(14, 4))
-        ctk.CTkLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
-        ctk.CTkLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
-        ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
+        LLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
+        LLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
+        LLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
         row = ctk.CTkFrame(card, fg_color='transparent')
         row.pack(fill='x', padx=16, pady=(0, 14))
         for index, (text, uri) in enumerate(actions):
@@ -713,7 +758,7 @@ class PanaceaApp(ctk.CTk):
         self._windows_settings_card(
             body, 'Installed apps', 'Review storage use, repair or uninstall apps.',
             [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps')
-        self.apps_status = ctk.CTkLabel(body, text='Windows handles app changes. Return here when finished.',
+        self.apps_status = LLabel(body, text='Windows handles app changes. Return here when finished.',
                                         font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
         self.apps_status.pack(fill='x', padx=2, pady=5)
 
@@ -722,7 +767,7 @@ class PanaceaApp(ctk.CTk):
         self._windows_settings_card(
             body, 'Startup apps', 'Review startup impact and disable unnecessary auto-start entries.',
             [('Startup settings', 'ms-settings:startupapps')], 'turbo')
-        self.startup_status = ctk.CTkLabel(body, text='Windows manages startup changes. Return here when finished.',
+        self.startup_status = LLabel(body, text='Windows manages startup changes. Return here when finished.',
                                            font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
         self.startup_status.pack(fill='x', padx=2, pady=5)
 
@@ -733,12 +778,12 @@ class PanaceaApp(ctk.CTk):
         master.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(master, fg_color='transparent')
         row.pack(fill='x', padx=14, pady=(10, 5))
-        ctk.CTkLabel(row, text='All settings', font=self._font(15, True)).pack(side='left')
+        LLabel(row, text='All settings', font=self._font(15, True)).pack(side='left')
         self.master_var = tk.BooleanVar(value=False)
-        self.master_switch = ctk.CTkSwitch(row, text='Loading…', variable=self.master_var, state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_GOLD)
+        self.master_switch = LSwitch(row, text='Loading…', variable=self.master_var, state='disabled', command=self._master_toggle_changed, font=self._font(12), progress_color=COL_GOLD)
         self.master_switch.pack(side='right')
         self._keyboard_switch(self.master_switch)
-        self.turbo_saved_label = ctk.CTkLabel(master, text='Reading saved originals…', height=18, font=self._font(11), text_color=MUTED, anchor='w', wraplength=600)
+        self.turbo_saved_label = LLabel(master, text='Reading saved originals…', height=18, font=self._font(11), text_color=MUTED, anchor='w', wraplength=600)
         self.turbo_saved_label.pack(fill='x', padx=14, pady=(0, 8))
         actions = ctk.CTkFrame(master, fg_color='transparent')
         actions.pack(fill='x', padx=14, pady=(0, 10))
@@ -754,11 +799,11 @@ class PanaceaApp(ctk.CTk):
             row = ctk.CTkFrame(card, fg_color='transparent')
             row.pack(fill='x', padx=14, pady=5)
             row.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew')
-            detail = ctk.CTkLabel(row, text=desc, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+            LLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=0, sticky='ew')
+            detail = LLabel(row, text=desc, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
             detail.grid(row=1, column=0, sticky='ew')
             var = tk.BooleanVar(value=False)
-            switch = ctk.CTkSwitch(row, text='Unknown', variable=var, state='disabled', font=self._font(11), width=125, progress_color=COL_GOLD, command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
+            switch = LSwitch(row, text='Unknown', variable=var, state='disabled', font=self._font(11), width=125, progress_color=COL_GOLD, command=lambda k=key, on=on_fn, off=off_fn: self._turbo_toggle_changed(k, on, off))
             switch.grid(row=0, column=1, rowspan=2, padx=(12, 0))
             self._keyboard_switch(switch)
             self.turbo_vars[key], self.turbo_switches[key] = var, switch
@@ -786,7 +831,7 @@ class PanaceaApp(ctk.CTk):
         body = self._section_body(self.frame_resurrect, 'Resurrection', '10 steps · Verified restore point required')
         card = self._card(body)
         card.pack(fill='x', pady=(0, 6))
-        self.lbl_status = ctk.CTkLabel(card, text='Ready · No steps run', height=22, font=self._font(15, True), anchor='w', justify='left')
+        self.lbl_status = LLabel(card, text='Ready · No steps run', height=22, font=self._font(15, True), anchor='w', justify='left')
         self.lbl_status.pack(fill='x', padx=14, pady=(8, 4))
         self.progress_bar = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
         self.progress_bar.set(0)
@@ -796,7 +841,7 @@ class PanaceaApp(ctk.CTk):
         self.btn_resurrect_start = self._button(row, 'Start sequence', self.run_god_mode, maintenance=True)
         self.btn_resurrect_start.pack(side='right')
         self.btn_resurrect_cancel = self._button(row, 'Cancel after step', self._cancel_resurrect, secondary=True)
-        warning = ctk.CTkLabel(body, text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.', height=28, text_color=COL_WARNING, font=self._font(10), anchor='w', justify='left', wraplength=650)
+        warning = LLabel(body, text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.', height=28, text_color=COL_WARNING, font=self._font(10), anchor='w', justify='left', wraplength=650)
         warning.pack(fill='x', padx=2, pady=(0, 6))
         card.bind('<Configure>', lambda event: (
             warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 4)),
@@ -811,15 +856,15 @@ class PanaceaApp(ctk.CTk):
             phase = self._card(timeline)
             phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
             phase.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=28).grid(row=0, column=0, padx=(6, 4), pady=4)
+            LLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=28).grid(row=0, column=0, padx=(6, 4), pady=4)
             display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
-            ctk.CTkLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
-            status = ctk.CTkLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
+            LLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
+            status = LLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
             status.grid(row=0, column=2, padx=(4, 5))
             self._button(
                 phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
                 secondary=True, width=28, height=24).grid(row=0, column=3, padx=(0, 6), pady=2)
-            explanation = ctk.CTkLabel(
+            explanation = LLabel(
                 phase, text=self.RESURRECTION_HELP[name], font=self._font(10),
                 text_color=MUTED, anchor='w', justify='left', wraplength=230)
             explanation.grid(row=1, column=1, columnspan=3, sticky='ew', padx=(0, 7), pady=(0, 7))
@@ -853,7 +898,7 @@ class PanaceaApp(ctk.CTk):
 
     def _append_log(self, widget, msg, level):
         widget.configure(state='normal')
-        widget.insert(tk.END, msg + '\n', level)
+        widget.insert(tk.END, self._t(msg) + '\n', level)
         lines = int(widget.index('end-1c').split('.')[0])
         if lines > self.LOG_LINES:
             widget.delete('1.0', f'{lines - self.LOG_LINES + 1}.0')
@@ -1043,9 +1088,9 @@ class PanaceaApp(ctk.CTk):
         self._drive_values = values
         if 'drive_menu' not in self.__dict__:
             return
-        self.drive_menu.configure(values=values or ['No drives'])
+        self.drive_menu.configure(values=values or [self._t('No drives')])
         if self.selected_drive.get() not in values:
-            self.selected_drive.set(values[0] if values else 'No drives')
+            self.selected_drive.set(values[0] if values else self._t('No drives'))
         self.drive_menu.configure(state='normal' if values else 'disabled')
         self._drive_selected()
 
@@ -1165,7 +1210,7 @@ class PanaceaApp(ctk.CTk):
         dialog.after(50, text.focus_set)
 
     def run_clean_temp(self):
-        if not messagebox.askyesno('Clean temporary files now', 'Permanently delete eligible files in validated temporary folders?\n\nNo analysis is required. Files are checked as they are deleted; locked and protected items are skipped. Results may differ from an earlier analysis.\n\nDeletion cannot be undone through the Recycle Bin.', parent=self):
+        if not self._confirm('Clean temporary files now', 'Permanently delete eligible files in validated temporary folders?\n\nNo analysis is required. Files are checked as they are deleted; locked and protected items are skipped. Results may differ from an earlier analysis.\n\nDeletion cannot be undone through the Recycle Bin.', parent=self):
             return
         before = self.cleanup_mgr.last_result
         self._request_operation('Temporary file cleanup',
@@ -1174,7 +1219,7 @@ class PanaceaApp(ctk.CTk):
             on_error=lambda exc: self._show_temp_failure(exc, before, preview=False))
 
     def run_empty_recycle(self):
-        if not messagebox.askyesno('Empty Recycle Bin', 'Permanently delete every item in the Recycle Bin?\nThese items cannot be recovered through the Recycle Bin.', parent=self):
+        if not self._confirm('Empty Recycle Bin', 'Permanently delete every item in the Recycle Bin?\nThese items cannot be recovered through the Recycle Bin.', parent=self):
             return
         self._request_operation('Empty Recycle Bin', self.cleanup_mgr.empty_recycle_bin, lambda result: self._show_logged_result('Recycle Bin', result, 'clean_log'), output='clean_log')
 
@@ -1258,7 +1303,7 @@ class PanaceaApp(ctk.CTk):
             self._show_toast('Operation in progress',
                              'Wait for the current operation to finish.', 'warning')
             return False
-        approved = messagebox.askyesno(
+        approved = self._confirm(
             'Confirm quick cleanup',
             'Run the following cleanup operations in sequence?\n\n'
             '1. Permanently delete eligible files in validated temporary folders.\n'
@@ -1292,7 +1337,7 @@ class PanaceaApp(ctk.CTk):
         if not re.fullmatch(r'[A-Za-z]:', letter) or letter not in self._drive_values:
             self._show_toast('Select a drive', 'Choose a valid drive letter.', 'warning')
             return
-        if messagebox.askyesno('Optimize drive', f'Run Windows optimization on {letter}?\nThis operation can take several minutes.', parent=self):
+        if self._confirm('Optimize drive', f'Run Windows optimization on {letter}?\nThis operation can take several minutes.', parent=self):
             self._request_operation('Drive optimization', lambda: self.disk_opt.analyze_optimize_drive(letter, progress_callback=self.log_disk_msg), lambda success: self._show_logged_result('Drive optimization', (success is True, 'See optimization output for details.'), 'disk_log'), output='disk_log')
 
     def run_dfrgui(self):
@@ -1306,7 +1351,7 @@ class PanaceaApp(ctk.CTk):
     def run_cmd(self, cmd, desc, *, log=None, output='tools_log'):
         log = log or self.log_tools_msg
         detail = 'Network connections may be interrupted and a restart may be needed.' if 'winsock' in cmd.lower() else 'The operation can take several minutes. Save your work first.'
-        if not messagebox.askyesno(desc, f'Run {desc}?\n{detail}', parent=self):
+        if not self._confirm(desc, f'Run {desc}?\n{detail}', parent=self):
             return
         def work():
             log(f'> {desc}')
@@ -1355,7 +1400,7 @@ class PanaceaApp(ctk.CTk):
         self._request_operation('Battery report', report, saved, output='tools_log')
 
     def run_create_restore(self):
-        if messagebox.askyesno('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):
+        if self._confirm('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):
             self._request_operation('Restore point', lambda: self.restore_mgr.create_restore_point('Panacea Manual Point'), lambda result: self._show_logged_result('Restore point', result, 'tools_log'), output='tools_log')
 
     def run_windows_update(self):
@@ -1550,7 +1595,7 @@ class PanaceaApp(ctk.CTk):
         if self._update_installing or self._update_downloading or self.workers.busy():
             self._show_toast('Operation in progress', 'Wait for the current operation to finish.', 'warning')
             return
-        if not messagebox.askyesno('Confirm Resurrection', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
+        if not self._confirm('Confirm Resurrection', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
             return
         self._resurrect_cancel.clear()
         def done():
@@ -1609,7 +1654,7 @@ class PanaceaApp(ctk.CTk):
         if self.workers.busy() or self.workers.busy('app-update') or self._update_installing:
             self._show_toast('Operation in progress', 'Finish the current operation before updating.', 'warning')
             return
-        if not messagebox.askyesno('Install verified update', f'Download and verify Panacea {self._release.version}?\nThe app stays open if verification or installation fails.', parent=self):
+        if not self._confirm('Install verified update', f'Download and verify Panacea {self._release.version}?\nThe app stays open if verification or installation fails.', parent=self):
             return
         self._update_cancel.clear()
         self._update_downloading = True
@@ -1748,8 +1793,8 @@ class PanaceaApp(ctk.CTk):
         x = max(0, self.winfo_rootx() + self.winfo_width() - width - 16)
         y = max(0, self.winfo_rooty() + self.winfo_height() - height - 16)
         toast.geometry(f'{width}x{height}+{x}+{y}')
-        ctk.CTkLabel(toast, text=title, text_color=colors.get(msg_type, COL_BLUE), font=self._font(13, True), anchor='w').pack(fill='x', padx=14, pady=(10, 2))
-        ctk.CTkLabel(toast, text=str(message)[:500], text_color=TEXT, font=self._font(11), anchor='w', wraplength=330, justify='left').pack(fill='x', padx=14, pady=(0, 10))
+        LLabel(toast, text=title, text_color=colors.get(msg_type, COL_BLUE), font=self._font(13, True), anchor='w').pack(fill='x', padx=14, pady=(10, 2))
+        LLabel(toast, text=str(message)[:500], text_color=TEXT, font=self._font(11), anchor='w', wraplength=330, justify='left').pack(fill='x', padx=14, pady=(0, 10))
         toast.after(6500, toast.destroy)
 
 

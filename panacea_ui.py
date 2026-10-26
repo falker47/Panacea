@@ -68,6 +68,7 @@ class PanaceaApp(ctk.CTk):
         self.workers = WorkerController(self.dispatcher)
         self._shutdown = threading.Event()
         self._resurrect_cancel = threading.Event()
+        self._quick_cleanup_cancel = threading.Event()
         self._update_cancel = threading.Event()
         self._update_installing = False
         self._update_downloading = False
@@ -76,6 +77,7 @@ class PanaceaApp(ctk.CTk):
         self._fonts = {}
         self._pending_logs = {}
         self._preview_summary = 'Analysis optional · No files deleted'
+        self._quick_cleanup_summary = 'Ready · No cleanup started'
         self._drive_values = []
         self._turbo_states = {}
         self._turbo_master = None
@@ -177,8 +179,8 @@ class PanaceaApp(ctk.CTk):
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
             idle = make_icon(name, '#a5b5cd', 96)
             active = make_icon(name, COL_GOLD, 96)
-            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(24, 24))
-            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(24, 24))
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(29, 29))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(29, 29))
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
@@ -186,29 +188,30 @@ class PanaceaApp(ctk.CTk):
             self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
-        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(51, 51))
+        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(61, 61))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=228, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame = ctk.CTkFrame(self, width=244, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, padx=(0, 8))
+        brand.grid(row=0, column=0, rowspan=2, padx=13, pady=(20, 28), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=61, height=61).grid(row=0, column=0, padx=(0, 8))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
         lettering.grid(row=0, column=1, sticky='w')
-        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=25, font=self._font(21, True), text_color=TEXT, anchor='w')
+        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=25, font=self._font(24, True), text_color=TEXT, anchor='w')
         self.brand_title.pack(anchor='w')
-        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(8), text_color=COL_GOLD, anchor='w')
+        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(9), text_color=COL_GOLD, anchor='w')
         self.brand_tagline.pack(anchor='w')
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=205, height=40, anchor='w',
+                                  secondary=True, width=220, height=49, anchor='w',
                                   image=self.icons[icon], compound='left')
-            button.grid(row=row, column=0, padx=10, pady=3, sticky='ew')
+            button.configure(font=self._font(14))
+            button.grid(row=row, column=0, padx=11, pady=5, sticky='ew')
             self.nav_buttons[name] = button
         ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=8, column=0, sticky='ew', padx=17, pady=(10, 6))
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
@@ -332,7 +335,7 @@ class PanaceaApp(ctk.CTk):
                       (5, 0) if index == 2 else 5, sticky='nsew')
         for card, title, icon_name in (
             (self.card_cpu, 'CPU', 'cpu'),
-            (self.card_ram, 'Memory', 'memory'),
+            (self.card_ram, 'Memory (RAM)', 'memory'),
             (self.card_disk, 'System drive', 'drive'),
         ):
             heading = ctk.CTkFrame(card, fg_color='transparent')
@@ -357,7 +360,7 @@ class PanaceaApp(ctk.CTk):
         self.dash_ram_perc.pack(fill='x', padx=12)
         self.ram_graph = LiveGraph(self.card_ram, width=175, height=36, line_color=COL_GOLD)
         self.ram_graph.pack(fill='x', padx=12, pady=(5, 5))
-        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='Memory: —', text_color=MUTED,
+        self.dash_ram_val = ctk.CTkLabel(self.card_ram, text='RAM: —', text_color=MUTED,
                                          font=self._font(11), anchor='w', wraplength=185)
         self.dash_ram_val.pack(fill='x', padx=12)
         self.dash_ram_info = ctk.CTkLabel(self.card_ram, text='Loading memory details…',
@@ -504,27 +507,91 @@ class PanaceaApp(ctk.CTk):
         return button
 
     def _setup_cleaning_frame(self):
-        body = self._section_body(self.frame_cleaning, 'Cleanup', 'Analyze if you wish, or clean now. Locked and protected files stay untouched.')
-        preview = self._card(body)
+        body = self._section_body(
+            self.frame_cleaning, 'Cleanup',
+            'One confirmed cleanup or individual tools. Protected files remain untouched.')
+        quick = self._card(body)
+        quick.pack(fill='x', pady=(0, 8))
+        quick.grid_columnconfigure(0, weight=1)
+        self.quick_cleanup_card = quick
+        ctk.CTkLabel(quick, text='Quick cleanup', anchor='w',
+                     font=self._font(17, True)).grid(row=0, column=0, sticky='ew', padx=14, pady=(12, 2))
+        ctk.CTkLabel(quick, text='Temporary files · Recycle Bin · Windows component store',
+                     anchor='w', text_color=MUTED, font=self._font(11)
+                     ).grid(row=1, column=0, sticky='ew', padx=14)
+        ctk.CTkLabel(quick, text='Then Windows Disk Cleanup opens for manual selection.',
+                     anchor='w', text_color=MUTED, font=self._font(11)
+                     ).grid(row=2, column=0, sticky='ew', padx=14, pady=(0, 5))
+        self.quick_cleanup_button = self._button(
+            quick, 'Run quick cleanup', self.run_quick_cleanup,
+            maintenance=True, height=38, width=164)
+        self.quick_cleanup_button.grid(row=0, column=1, rowspan=3, padx=(8, 14), pady=10)
+        self.quick_cleanup_status = ctk.CTkLabel(
+            quick, text=self._quick_cleanup_summary, font=self._font(11),
+            text_color=MUTED, anchor='w', justify='left', wraplength=680)
+        self.quick_cleanup_status.grid(row=3, column=0, columnspan=2, sticky='ew', padx=14, pady=(2, 6))
+        self.quick_cleanup_bar = ctk.CTkProgressBar(
+            quick, height=7, progress_color=COL_GOLD, fg_color=BORDER)
+        self.quick_cleanup_bar.set(0)
+        self.quick_cleanup_bar.grid(row=4, column=0, columnspan=2, sticky='ew', padx=14, pady=(0, 11))
+        quick.bind('<Configure>', lambda event: self.quick_cleanup_status.configure(
+            wraplength=max(180, event.width / self.quick_cleanup_status._get_widget_scaling() - 28)))
+
+        self.cleanup_toggle_button = self._button(
+            body, 'Show individual tools', self._toggle_cleanup_tools, secondary=True)
+        self.cleanup_toggle_button.pack(fill='x', pady=(0, 4))
+        self.cleanup_individuals_frame = ctk.CTkFrame(body, fg_color='transparent')
+        preview = self._card(self.cleanup_individuals_frame)
         preview.pack(fill='x', pady=(0, 4))
         preview.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(preview, text='', image=self.icons_active['clean'], width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
-        ctk.CTkLabel(preview, text='Temporary files', height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew', pady=(12, 0))
-        ctk.CTkLabel(preview, text='Optional analysis · does not delete files', height=16, font=self._font(11), text_color=MUTED, anchor='w').grid(row=1, column=1, sticky='ew')
-        self.preview_label = ctk.CTkLabel(preview, text=self._preview_summary, anchor='w', text_color=MUTED, font=self._font(12), justify='left', wraplength=650)
+        ctk.CTkLabel(preview, text='', image=self.icons_active['clean'],
+                     width=26).grid(row=0, column=0, rowspan=4, padx=(14, 10), pady=12)
+        ctk.CTkLabel(preview, text='Temporary files · optional analysis',
+                     height=18, font=self._font(13, True), anchor='w'
+                     ).grid(row=0, column=1, sticky='ew', pady=(12, 0))
+        ctk.CTkLabel(preview, text='Preview only · never deletes files',
+                     height=16, font=self._font(11), text_color=MUTED,
+                     anchor='w').grid(row=1, column=1, sticky='ew')
+        self.preview_label = ctk.CTkLabel(
+            preview, text=self._preview_summary, anchor='w', text_color=MUTED,
+            font=self._font(12), justify='left', wraplength=650)
         self.preview_label.grid(row=2, column=1, sticky='ew', pady=(5, 0))
-        self._button(preview, 'Analyze', self.run_preview_temp, secondary=True, maintenance=True, width=112).grid(row=0, column=2, rowspan=4, padx=(12, 14), pady=12)
-        self.cleanup_reasons_button = self._button(preview, 'View reasons', self._show_cleanup_diagnostics, secondary=True, width=112, height=24)
+        self._button(preview, 'Analyze', self.run_preview_temp, secondary=True,
+                     maintenance=True, width=112).grid(
+                         row=0, column=2, rowspan=4, padx=(12, 14), pady=12)
+        self.cleanup_reasons_button = self._button(
+            preview, 'View reasons', self._show_cleanup_diagnostics,
+            secondary=True, width=112, height=24)
         self.cleanup_reasons_button.grid(row=3, column=1, sticky='w', pady=(3, 12))
-        self.cleanup_reasons_button.configure(state='normal' if self.__dict__.get('_cleanup_diagnostics') else 'disabled')
-        preview.bind('<Configure>', lambda event: self.preview_label.configure(wraplength=max(100, event.width / self.preview_label._get_widget_scaling() - 210)))
-        actions = self._card(body)
+        self.cleanup_reasons_button.configure(
+            state='normal' if self.__dict__.get('_cleanup_diagnostics') else 'disabled')
+        preview.bind('<Configure>', lambda event: self.preview_label.configure(
+            wraplength=max(100, event.width / self.preview_label._get_widget_scaling() - 210)))
+        actions = self._card(self.cleanup_individuals_frame)
         actions.pack(fill='x')
-        self.btn_clean_temp = self._action_row(actions, 'Delete temporary files', 'No analysis required · permanent deletion after confirmation', 'Clean now', self.run_clean_temp, maintenance=True)
-        self.btn_empty_bin = self._action_row(actions, 'Recycle Bin', 'Permanently empty all items · confirmation required', 'Empty bin', self.run_empty_recycle, maintenance=True)
-        self._action_row(actions, 'Component store', 'Windows removes superseded components.', 'Clean store', self.run_deep_clean, maintenance=True)
-        self._action_row(actions, 'Windows Disk Cleanup', 'Choose categories in the Windows utility.', 'Open utility', self.run_cleanmgr)
+        self.btn_clean_temp = self._action_row(
+            actions, 'Delete temporary files',
+            'Permanent deletion after confirmation; no analysis required',
+            'Clean now', self.run_clean_temp, maintenance=True)
+        self.btn_empty_bin = self._action_row(
+            actions, 'Recycle Bin', 'Permanently empty all items · confirmation required',
+            'Empty bin', self.run_empty_recycle, maintenance=True)
+        self._action_row(
+            actions, 'Component store', 'Windows removes superseded components.',
+            'Clean store', self.run_deep_clean, maintenance=True)
+        self._action_row(
+            actions, 'Windows Disk Cleanup', 'Choose categories in the Windows utility.',
+            'Open utility', self.run_cleanmgr)
         self._section_log(body, 'clean_log', 'Cleanup details')
+
+    def _toggle_cleanup_tools(self):
+        details = self.cleanup_individuals_frame
+        if details.winfo_manager():
+            details.pack_forget()
+            self.cleanup_toggle_button.configure(text='Show individual tools')
+        else:
+            details.pack(fill='x', pady=(0, 6), before=self.clean_log.master)
+            self.cleanup_toggle_button.configure(text='Hide individual tools')
 
     def _setup_disk_frame(self):
         body = self._section_body(self.frame_disk, 'Drive optimization', 'Select a drive; Windows chooses the correct optimization method.')

@@ -510,6 +510,8 @@ class PanaceaApp(ctk.CTk):
         if previous == group:
             self.active_frame = name
             return
+        if previous == 'Resurrect' and group != 'Resurrect':
+            self._pause_resurrection_cards()
         if previous in self.group_frames:
             self.group_frames[previous].grid_forget()
         self.group_frames[group].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
@@ -531,6 +533,8 @@ class PanaceaApp(ctk.CTk):
             if icon_key in colors:
                 settings['image'] = colors[icon_key]
             self.nav_buttons[key].configure(**settings)
+        if group == 'Resurrect' and '_resurrection_next_index' in self.__dict__:
+            self._schedule_resurrection_cards()
 
     def _setup_update_bar(self):
         bar = ctk.CTkFrame(self.sidebar_footer, fg_color=SURFACE_ALT,
@@ -1261,59 +1265,99 @@ class PanaceaApp(ctk.CTk):
         self._resurrection_cards = {}
         self._resurrection_info_labels = {}
         self._resurrection_phases = []
-        for index, name in enumerate(self.RESURRECTION_STEPS):
-            phase = self._card(timeline)
-            phase.grid(row=index, column=0, sticky='nsew', pady=4)
-            phase.grid_columnconfigure(1, weight=1)
-            LLabel(
-                phase, text=f'{index + 1:02}', height=23, width=23,
-                text_color=COL_GOLD, font=self._font(13, True)).grid(
-                    row=0, column=0, rowspan=2, sticky='n',
-                    padx=(8, 6), pady=(9, 0))
-            display = {
-                'Drive optimization': 'Optimize drive',
-                'Disk health scan': 'Disk scan',
-                'Windows image health': 'Image health',
-                'System file scan': 'System files',
-                'Temporary files': 'Temp files',
-                'Browser caches': 'Browser cache',
-            }.get(name, name)
-            title = LLabel(
-                phase, text=display, font=self._font(12, True),
-                height=22, anchor='w', justify='left')
-            title.grid(row=0, column=1, sticky='ew', pady=(7, 0))
-            status = LLabel(
-                phase, text='Not started', height=18, font=self._font(10),
-                anchor='w', text_color=MUTED)
-            status.grid(row=1, column=1, sticky='ew', pady=(0, 7))
-            detail_button = self._button(
-                phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
-                secondary=True, width=27, height=27)
-            detail_button.configure(font=self._font(12, True), text_color=MUTED)
-            detail_button._canvas.configure(takefocus=1)
-            detail_button.grid(
-                row=0, column=2, rowspan=2,
-                padx=(4, 8), pady=8, sticky='e')
-            # Ten initially hidden help labels are unnecessary on first navigation.
-            def fit_step(event, heading=title, step_name=name):
-                available = event.width / max(heading._get_widget_scaling(), .01)
-                width = max(90, int((available - 80) // 8) * 8)
-                if getattr(heading, '_fit_wrap', None) != width:
-                    heading._fit_wrap = width
-                    heading.configure(wraplength=width)
-                    info = self._resurrection_info_labels.get(step_name)
-                    if info is not None:
-                        info.configure(wraplength=max(115, available - 50))
-            phase.bind('<Configure>', fit_step, add='+')
-            self._resurrection_rows[name] = status
-            self._resurrection_cards[name] = phase
-            self._resurrection_info_labels[name] = None
-            self._resurrection_phases.append(phase)
         self._resurrection_timeline = timeline
         self._resurrection_layout_mode = None
         self._resurrection_two_columns = None
+        self._resurrection_card_job = None
+        self._resurrection_next_index = 0
         timeline.bind('<Configure>', self._layout_resurrection_timeline, add='+')
+        # Visible first steps and all essential controls exist before navigation returns.
+        for index, name in enumerate(self.RESURRECTION_STEPS[:2]):
+            self._append_resurrection_card(index, name)
+        self._resurrection_next_index = 2
         self._section_log(body, 'god_log', 'Full sequence output')
+
+    def _append_resurrection_card(self, index, name):
+        """Add a phase to the current grid and reflect any already delivered worker state."""
+        timeline = self._resurrection_timeline
+        phase = self._card(timeline)
+        columns = int(self._resurrection_layout_mode or '1')
+        span = 30 // columns
+        phase.grid(row=index // columns, column=(index % columns) * span,
+                   columnspan=span, sticky='nsew', padx=4, pady=4)
+        phase.grid_columnconfigure(1, weight=1)
+        LLabel(
+            phase, text=f'{index + 1:02}', height=23, width=23,
+            text_color=COL_GOLD, font=self._font(13, True)).grid(
+                row=0, column=0, rowspan=2, sticky='n',
+                padx=(8, 6), pady=(9, 0))
+        display = {
+            'Drive optimization': 'Optimize drive',
+            'Disk health scan': 'Disk scan',
+            'Windows image health': 'Image health',
+            'System file scan': 'System files',
+            'Temporary files': 'Temp files',
+            'Browser caches': 'Browser cache',
+        }.get(name, name)
+        title = LLabel(
+            phase, text=display, font=self._font(12, True),
+            height=22, anchor='w', justify='left')
+        title.grid(row=0, column=1, sticky='ew', pady=(7, 0))
+        status = LLabel(
+            phase, text='Not started', height=18, font=self._font(10),
+            anchor='w', text_color=MUTED)
+        status.grid(row=1, column=1, sticky='ew', pady=(0, 7))
+        detail_button = self._button(
+            phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
+            secondary=True, width=27, height=27)
+        detail_button.configure(font=self._font(12, True), text_color=MUTED)
+        detail_button._canvas.configure(takefocus=1)
+        detail_button.grid(
+            row=0, column=2, rowspan=2,
+            padx=(4, 8), pady=8, sticky='e')
+        # Ten initially hidden help labels are unnecessary on first navigation.
+        def fit_step(event, heading=title, step_name=name):
+            available = event.width / max(heading._get_widget_scaling(), .01)
+            width = max(90, int((available - 80) // 8) * 8)
+            if getattr(heading, '_fit_wrap', None) != width:
+                heading._fit_wrap = width
+                heading.configure(wraplength=width)
+                info = self._resurrection_info_labels.get(step_name)
+                if info is not None:
+                    info.configure(wraplength=max(115, available - 50))
+        phase.bind('<Configure>', fit_step, add='+')
+        self._resurrection_rows[name] = status
+        self._resurrection_cards[name] = phase
+        self._resurrection_info_labels[name] = None
+        self._resurrection_phases.append(phase)
+        saved = self._resurrection_states.get(name)
+        if saved is not None:
+            self._set_resurrection_step(name, *saved)
+
+    def _schedule_resurrection_cards(self):
+        if (self._shutdown.is_set()
+                or self.__dict__.get('active_group') != 'Resurrect'
+                or self._resurrection_next_index >= len(self.RESURRECTION_STEPS)
+                or self._resurrection_card_job is not None):
+            return
+        self._resurrection_card_job = self.after(16, self._build_resurrection_batch)
+
+    def _build_resurrection_batch(self):
+        self._resurrection_card_job = None
+        if self._shutdown.is_set() or self.__dict__.get('active_group') != 'Resurrect':
+            return
+        start = self._resurrection_next_index
+        end = min(start + 2, len(self.RESURRECTION_STEPS))
+        for index in range(start, end):
+            self._append_resurrection_card(index, self.RESURRECTION_STEPS[index])
+        self._resurrection_next_index = end
+        self._schedule_resurrection_cards()
+
+    def _pause_resurrection_cards(self):
+        job = self.__dict__.get('_resurrection_card_job')
+        if job is not None:
+            self._resurrection_card_job = None
+            self.after_cancel(job)
 
     def _layout_resurrection_actions(self, event):
         narrow = event.width / max(self.btn_resurrect_start._get_widget_scaling(), 0.01) < 385
@@ -2371,6 +2415,7 @@ class PanaceaApp(ctk.CTk):
         if self._update_installing:
             self._show_toast('Update installation in progress', 'Wait for installation to finish before closing Panacea.', 'warning')
             return
+        self._pause_resurrection_cards()
         if self.workers.busy():
             self._close_when_idle = True
             self._resurrect_cancel.set()

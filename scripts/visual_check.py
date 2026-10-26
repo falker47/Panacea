@@ -33,6 +33,7 @@ def main():
     observations = []
     errors = []
     navigation_measurements = []
+    navigation_started = {}
     class DispatchErrors(logging.Handler):
         def emit(self, record):
             errors.append(record.getMessage())
@@ -45,6 +46,7 @@ def main():
     def capture(index):
         name = names[index]
         started = time.perf_counter()
+        navigation_started[name] = started
         app.select_frame(name)
         app.update_idletasks()
         navigation_measurements.append({
@@ -53,6 +55,12 @@ def main():
         app.after(300, lambda: save(index))
 
     def save(index):
+        name = names[index]
+        if name == "Resurrect" and len(app._resurrection_rows) < len(app.RESURRECTION_STEPS):
+            if time.perf_counter() - navigation_started[name] < 4:
+                app.after(25, lambda: save(index))
+                return
+            errors.append("Guided maintenance cards not ready before capture")
         app.update_idletasks()
         x, y = app.winfo_rootx(), app.winfo_rooty()
         width, height = app.winfo_width(), app.winfo_height()

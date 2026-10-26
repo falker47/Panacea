@@ -5,6 +5,7 @@ from functools import wraps
 import os
 import subprocess
 import sys
+import time
 import panacea_ui
 from panacea_ui import PanaceaApp
 from modules.ui_dispatch import UiDispatcher, WorkerController
@@ -504,6 +505,11 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app._toggle_cleanup_tools()
             app.update()
             app.select_frame('Resurrect')
+            deadline = time.perf_counter() + 4
+            while (len(app._resurrection_rows) < len(app.RESURRECTION_STEPS)
+                   and time.perf_counter() < deadline):
+                app.update()
+                time.sleep(.01)
             app.update()
             resurrection_canvas = app._section_log_hosts['god_log'].master._parent_canvas
             resurrection_canvas.yview_moveto(0)

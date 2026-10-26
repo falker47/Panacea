@@ -1,5 +1,6 @@
 """Five primary destinations with two sibling panels visible per group."""
 from unittest.mock import Mock
+import threading
 
 from panacea_ui import PanaceaApp
 
@@ -83,3 +84,39 @@ def test_reselecting_a_visible_group_skips_redundant_grid_and_navigation_redraw(
     app.select_frame('Cleaning')
     assert app.group_frames['Cleaning'].grid.call_count == redraw_count
     app.nav_buttons['Cleaning'].configure.assert_not_called()
+
+
+def test_guided_batches_pause_when_leaving_tab_and_resume_on_return():
+    app = _navigation_app()
+    app._shutdown = threading.Event()
+    app.after = Mock(side_effect=('job-a', 'job-b'))
+    app.after_cancel = Mock()
+    app._setup_functions['Resurrect'] = Mock(
+        side_effect=lambda: app.__dict__.update(
+            _resurrection_next_index=2, _resurrection_card_job=None))
+    app.select_frame('Resurrect')
+    assert app._resurrection_card_job == 'job-a'
+    app.select_frame('Dashboard')
+    app.after_cancel.assert_called_once_with('job-a')
+    assert app._resurrection_card_job is None
+    app.select_frame('Resurrect')
+    assert app._resurrection_card_job == 'job-b'
+    app._setup_functions['Resurrect'].assert_called_once()
+
+
+def test_guided_batch_builds_only_two_cards_per_event_loop_turn():
+    app = _navigation_app()
+    app._shutdown = threading.Event()
+    app.active_group = 'Resurrect'
+    app._resurrection_next_index = 2
+    app._resurrection_card_job = 'active-job'
+    app._append_resurrection_card = Mock()
+    app.after = Mock(return_value='next-job')
+    app._build_resurrection_batch()
+    assert [call.args[0] for call in app._append_resurrection_card.call_args_list] == [2, 3]
+    assert app._resurrection_next_index == 4
+    assert app._resurrection_card_job == 'next-job'
+    app._shutdown.set()
+    app._build_resurrection_batch()
+    assert app._append_resurrection_card.call_count == 2
+    assert app._resurrection_card_job is None

@@ -201,9 +201,6 @@ class PanaceaApp(ctk.CTk):
         for index, (name, _, _, _) in enumerate(self.NAV_GROUPS, 1):
             self.bind(f'<Control-Key-{index}>', lambda event, n=name: self.select_frame(n))
         self.select_frame('Dashboard')
-        # Warm one inactive destination at a time, after the first window paints.
-        # The first user click no longer has to create every widget synchronously.
-        self.after(450, self._prebuild_next_group)
         self.after(20, self._drain_callbacks)
         self.after_idle(self._center_and_show)
         self.update_dashboard()
@@ -406,20 +403,6 @@ class PanaceaApp(ctk.CTk):
             if icon_key in colors:
                 settings['image'] = colors[icon_key]
             self.nav_buttons[key].configure(**settings)
-
-    def _prebuild_next_group(self):
-        """Amortize first-open widget creation during idle periods; never touch maintenance."""
-        if self._shutdown.is_set():
-            return
-        for group, _, _, pages in self.NAV_GROUPS[1:]:
-            pending = [page for page in pages if page not in self._built_frames]
-            if not pending:
-                continue
-            for page in pending:
-                self._setup_functions[page]()
-                self._built_frames.add(page)
-            self.after(180, self._prebuild_next_group)
-            return
 
     def _setup_update_bar(self):
         bar = ctk.CTkFrame(self.sidebar_footer, fg_color=SURFACE_ALT,

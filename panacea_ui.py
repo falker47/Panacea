@@ -489,7 +489,7 @@ class PanaceaApp(ctk.CTk):
 
     def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
         row = ctk.CTkFrame(parent, fg_color='transparent')
-        row.pack(fill='x', padx=14, pady=4)
+        row.pack(fill='x', padx=14, pady=2)
         row.grid_columnconfigure(1, weight=1)
         if icon:
             ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(row=0, column=0, rowspan=2, padx=(0, 10))

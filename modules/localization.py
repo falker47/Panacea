@@ -129,6 +129,15 @@ Choose which apps launch when you sign in. => Scegli quali app avviare all'acces
 Review startup impact and disable unnecessary auto-start entries. => Controlla l'impatto all'avvio e disattiva le app non necessarie.
 Startup settings => Impostazioni di avvio
 Windows manages startup changes. Return here when finished. => Windows gestisce le modifiche all'avvio. Torna qui al termine.
+Disable unnecessary apps at sign-in. => Disattiva gli avvii automatici non necessari.
+Manage or uninstall programs in Windows. => Gestisci o disinstalla i programmi in Windows.
+Windows selects TRIM or defragmentation. => Windows sceglie TRIM o deframmentazione.
+Open Windows drive optimizer => Apri ottimizzazione unità Windows.
+Original settings are saved for restoration. => Le impostazioni originali vengono salvate per il ripristino.
+Adjust Windows animations. => Regola le animazioni di Windows.
+Stops app preloading. => Ferma il precaricamento delle app.
+Stops background indexing. => Ferma l'indicizzazione in background.
+Saved settings unavailable · Refresh state => Impostazioni salvate non disponibili · Aggiorna stato
 Performance settings => Impostazioni prestazioni
 Original settings are saved before changes and restored when turned off. => Le impostazioni originali vengono salvate e ripristinate alla disattivazione.
 All settings => Tutte le impostazioni
@@ -279,6 +288,8 @@ No further sequence steps will start => Non verranno avviati altri passaggi
 ITALIAN = dict(line.split(" => ", 1) for line in _PAIRS.splitlines())
 
 WARNINGS = {
+    "Permanent deletion: browser caches, temporary files and Recycle Bin items; restore points cannot recover them.\nNetwork reset can interrupt connections or require restart. Save work; cancellation stops between steps.":
+        "Eliminazione definitiva di cache dei browser, file temporanei e Cestino: i punti di ripristino non recuperano questi dati.\nIl ripristino della rete può interrompere le connessioni o richiedere un riavvio. Salva il lavoro; l'annullamento avviene tra i passaggi.",
     "Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.":
         "Eliminazione definitiva di cache browser, file temporanei e tutto il Cestino. I punti di ripristino non recuperano i file eliminati.\nIl ripristino rete può disconnetterti o richiedere un riavvio. Salva il lavoro. L'annullamento avviene tra i comandi.",
     "Safety · Verify a new Windows restore point. Deleted files are NOT recoverable.":

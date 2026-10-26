@@ -80,3 +80,26 @@ def test_installer_emits_language_sidecar_next_to_protected_exe():
     assert 'panacea-language.ini' in source
     assert 'String: "{language}"' in source
     assert 'Type: files; Name: "{app}\\panacea-language.ini"' in source
+
+
+def test_compact_ux_copy_has_italian_translation_and_safe_maintenance_warning():
+    for source in (
+        'Manage or uninstall programs in Windows.',
+        'Disable unnecessary apps at sign-in.',
+        'Windows selects TRIM or defragmentation.',
+        'Open Windows drive optimizer',
+        'Original settings are saved for restoration.',
+        'Saved settings unavailable · Refresh state',
+    ):
+        assert translate(source, 'it') != source
+
+    warning = (
+        'Permanent deletion: browser caches, temporary files and Recycle Bin items; '
+        'restore points cannot recover them.\n'
+        'Network reset can interrupt connections or require restart. '
+        'Save work; cancellation stops between steps.'
+    )
+    result = translate(warning, 'it')
+    assert 'Eliminazione definitiva' in result
+    assert 'punti di ripristino' in result
+    assert 'annullamento' in result

@@ -173,7 +173,7 @@ class PanaceaApp(ctk.CTk):
                 if len(pages) > 1:
                     frame = ctk.CTkFrame(content, fg_color=SURFACE_ALT,
                                          border_color=BORDER, border_width=1, corner_radius=12)
-                    frame.grid(row=0, column=index, sticky='nsew',
+                    frame.grid(row=0, column=index, sticky='new',
                                padx=(0, 9) if index == 0 else (9, 0), pady=(8, 12))
                 else:
                     frame = host
@@ -253,6 +253,7 @@ class PanaceaApp(ctk.CTk):
     def _load_icons(self):
         """Load the original chalice logo and a consistent, vector-like icon system."""
         self.icons, self.icons_active, self.action_icons = {}, {}, {}
+        self.compact_icons = {}
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
             idle = make_icon(name, '#a5b5cd', 96)
             active = make_icon(name, COL_GOLD, 96)
@@ -263,6 +264,11 @@ class PanaceaApp(ctk.CTk):
             icon = make_icon(name, color, 96)
             size = 46 if name in ('scan', 'restore', 'updates') else 22
             self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
+        for name in ('apps', 'tools', 'clean', 'turbo', 'disk', 'scan', 'restore'):
+            color = COL_GOLD if name in ('restore', 'disk') else COL_BLUE
+            glyph = make_icon(name, color, 96)
+            self.compact_icons[name] = ctk.CTkImage(light_image=glyph, dark_image=glyph,
+                                                    size=(23, 23))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
         self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(74, 74))
@@ -348,7 +354,7 @@ class PanaceaApp(ctk.CTk):
         for index, page in enumerate(pages):
             self.frames[page].grid_configure(
                 row=index if stacked else 0, column=0 if stacked else index,
-                sticky='ew' if stacked else 'nsew',
+                sticky='ew' if stacked else 'new',
                 padx=(7, 12) if stacked else ((7, 10) if index == 0 else (10, 7)),
                 pady=(10, 4) if stacked and index == 0 else (10, 15))
 
@@ -403,16 +409,24 @@ class PanaceaApp(ctk.CTk):
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
         frame.grid_columnconfigure(0, weight=1)
-        self.dashboard_heading = LLabel(frame, text='Overview', font=self._font(22, True), anchor='w')
-        self.dashboard_heading.grid(row=0, column=0, sticky='w', padx=18, pady=(8, 7))
+        self.dashboard_scroll = frame
+        heading = ctk.CTkFrame(frame, fg_color='transparent')
+        heading.grid(row=0, column=0, sticky='ew', padx=26, pady=(14, 10))
+        LLabel(heading, text='', image=self.icons_active['dashboard'],
+               width=38, height=38).pack(side='left', padx=(0, 10))
+        self.dashboard_heading = LLabel(
+            heading, text='Overview', font=self._font(23, True),
+            text_color=TEXT, anchor='w')
+        self.dashboard_heading.pack(side='left')
 
         # A compact system summary, with a separate truthful Windows Update status.
         info = self._card(frame)
         self.dashboard_summary = info
-        info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
+        info.grid(row=1, column=0, padx=18, pady=(0, 12), sticky='nsew')
+        info.grid_rowconfigure(0, weight=1)
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
-        system.grid(row=0, column=0, sticky='ew', padx=(14, 7), pady=10)
+        system.grid(row=0, column=0, sticky='w', padx=(16, 7), pady=14)
         self.dash_os = LLabel(system, text='Loading Windows details…', height=22, anchor='w',
                                     font=self._font(15, True), text_color=TEXT)
         self.dash_os.pack(anchor='w')
@@ -439,7 +453,7 @@ class PanaceaApp(ctk.CTk):
 
         body = ctk.CTkFrame(frame, fg_color='transparent')
         self.dashboard_metrics = body
-        body.grid(row=2, column=0, padx=18, pady=(0, 5), sticky='ew')
+        body.grid(row=2, column=0, padx=18, pady=(0, 12), sticky='nsew')
         body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
         for index, card in enumerate((self.card_cpu, self.card_ram, self.card_disk)):
@@ -501,25 +515,26 @@ class PanaceaApp(ctk.CTk):
         # Two meaningful actions. Navigation is already in the sidebar: no redundant
         # "Open cleanup" tile. Preview feedback remains in-place on the dashboard.
         self.card_sys = ctk.CTkFrame(frame, fg_color='transparent')
-        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 4), sticky='ew')
+        self.card_sys.grid(row=3, column=0, padx=18, pady=(0, 12), sticky='nsew')
         self.card_sys.grid_columnconfigure((0, 1), weight=1, uniform='actions')
         def action_card(column, padding, icon, title, detail, button_label, command, wraplength):
             """Build matching Overview actions without duplicating their layout."""
             card = ctk.CTkFrame(self.card_sys, fg_color=SURFACE_ALT,
                                 border_color=BORDER, border_width=1, corner_radius=9)
             card.grid(row=0, column=column, sticky='nsew', padx=padding, pady=0)
+            card.grid_rowconfigure((0, 1), weight=1)
             card.grid_columnconfigure(1, weight=1)
-            LLabel(card, image=self.action_icons[icon], text='', width=27).grid(
-                row=0, column=0, rowspan=2, padx=(9, 5))
+            LLabel(card, image=self.action_icons[icon], text='', width=40).grid(
+                row=0, column=0, rowspan=2, padx=(12, 8))
             LLabel(card, text=title, height=18, font=self._font(12, True),
-                         anchor='w').grid(row=0, column=1, sticky='sw', pady=(14, 0))
+                         anchor='w').grid(row=0, column=1, sticky='sw', pady=(12, 0))
             status = LLabel(
                 card, text=detail, height=16, text_color=MUTED, font=self._font(10),
                 anchor='w', wraplength=wraplength, justify='left')
-            status.grid(row=1, column=1, sticky='nw', pady=(0, 14))
+            status.grid(row=1, column=1, sticky='nw', pady=(0, 12))
             self._button(card, button_label, command, secondary=True,
-                         maintenance=True, width=77).grid(
-                row=0, column=2, rowspan=2, padx=(3, 9), pady=8)
+                         maintenance=True, width=77, height=36).grid(
+                row=0, column=2, rowspan=2, padx=(3, 12), pady=10)
             return card, status
 
         scan, self.dash_preview_status = action_card(
@@ -530,8 +545,8 @@ class PanaceaApp(ctk.CTk):
             'Save Windows state · confirmation required', 'Create',
             self.run_create_restore, 210)
 
-        for card, label, reserved in ((scan, self.dash_preview_status, 151),
-                                      (restore, restore_detail, 151),
+        for card, label, reserved in ((scan, self.dash_preview_status, 167),
+                                      (restore, restore_detail, 167),
                                       (updates, self.lbl_update_status, 132)):
             card.bind('<Configure>', lambda event, item=label, space=reserved:
                       item.configure(wraplength=max(80, event.width / item._get_widget_scaling() - space)))
@@ -545,19 +560,22 @@ class PanaceaApp(ctk.CTk):
                 label.configure(wraplength=max(110, event.width / label._get_widget_scaling() - 24))
                 for label in items
             ])
-        outer.bind('<Configure>', self._adjust_dashboard_spacing, add='+')
+        frame._parent_canvas.bind('<Configure>', self._adjust_dashboard_spacing, add='+')
 
     def _adjust_dashboard_spacing(self, event):
-        """Spend spare vertical room on section gaps, preserving small-window scroll."""
-        logical_height = event.height / max(self.frame_dashboard._get_widget_scaling(), 0.01)
-        gap = min(72, max(0, int((logical_height - 640) * 0.22)))
-        if self.__dict__.get('_dashboard_gap') == gap:
+        """Allocate viewport height to real cards, not giant empty outer gutters."""
+        scale = max(self.dashboard_scroll._get_widget_scaling(), 0.01)
+        height = event.height / scale
+        stretch = min(320, max(0, int((height - 510) * 1.05)))
+        if self.__dict__.get('_dashboard_stretch') == stretch:
             return
-        self._dashboard_gap = gap
-        self.dashboard_heading.grid_configure(pady=(8 + gap, 7 + gap // 2))
-        self.dashboard_summary.grid_configure(pady=(0, 7 + gap))
-        self.dashboard_metrics.grid_configure(pady=(0, 5 + gap))
-        self.card_sys.grid_configure(pady=(0, 4 + gap // 2))
+        self._dashboard_stretch = stretch
+        # At compact DPI viewports cards keep their natural minimum sizes and
+        # scroll if necessary. Taller windows grow the informative surfaces.
+        for row, baseline, share in ((0, 62, .08), (1, 106, .27),
+                                     (2, 196, .43), (3, 92, .22)):
+            self.dashboard_scroll.grid_rowconfigure(
+                row, minsize=round((baseline + stretch * share) * scale))
 
     def _section_body(self, frame, title, detail):
         """Paired cards share one scroller; standalone maintenance keeps its own."""
@@ -569,7 +587,7 @@ class PanaceaApp(ctk.CTk):
             body.grid(row=1, column=0, sticky='nsew', padx=14, pady=(0, 8))
         else:
             body = ctk.CTkFrame(frame, fg_color='transparent')
-            body.grid(row=1, column=0, sticky='ew', padx=16, pady=(0, 16))
+            body.grid(row=1, column=0, sticky='new', padx=16, pady=(0, 16))
         body.grid_columnconfigure(0, weight=1)
         return body
 
@@ -726,7 +744,7 @@ class PanaceaApp(ctk.CTk):
             self.cleanup_toggle_button.configure(text='Hide individual tools')
 
     def _setup_disk_frame(self):
-        body = self._section_body(self.frame_disk, 'Drive optimization', 'Select a drive; Windows chooses the correct optimization method.')
+        body = self._section_body(self.frame_disk, 'Drive optimization', 'Windows selects TRIM or defragmentation.')
         card = self._card(body)
         card.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(card, fg_color='transparent')
@@ -743,11 +761,18 @@ class PanaceaApp(ctk.CTk):
         self.drive_detail.pack(fill='x', padx=14, pady=(0, 10))
         self.drive_capacity = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
         self.drive_capacity.set(0)
-        self.drive_capacity.pack(fill='x', padx=14, pady=(0, 14))
-        self.btn_optimize_drive = self._action_row(card, 'Optimize selected drive', 'Windows chooses TRIM or defragmentation. May take several minutes.', 'Optimize', self.run_optimize_drive, maintenance=True)
+        self.drive_capacity.pack(fill='x', padx=14, pady=(0, 12))
+        self.btn_optimize_drive = self._button(
+            card, 'Optimize', self.run_optimize_drive,
+            image=self.compact_icons['disk'], compound='left',
+            secondary=True, maintenance=True, anchor='w', height=38)
+        self.btn_optimize_drive.pack(fill='x', padx=14, pady=(0, 13))
         windows = self._card(body)
         windows.pack(fill='x')
-        self._action_row(windows, 'Windows drive optimization', 'View schedules and drive health in Windows.', 'Open utility', self.run_dfrgui)
+        self._button(
+            windows, 'Open Windows drive optimizer', self.run_dfrgui,
+            image=self.compact_icons['disk'], compound='left',
+            anchor='w', secondary=True, height=40).pack(fill='x', padx=14, pady=12)
         self._section_log(body, 'disk_log', 'Optimization output')
         self._set_drives(self.__dict__.get('_drive_info', [{'letter': value} for value in self._drive_values]))
 
@@ -765,56 +790,91 @@ class PanaceaApp(ctk.CTk):
         row.pack(fill='x', pady=(6, 0))
         self._button(
             row, 'Restore point', self.run_create_restore,
-            secondary=True, maintenance=True).pack(fill='x', pady=(0, 5))
+            image=self.compact_icons['restore'], compound='left', anchor='w',
+            secondary=True, maintenance=True, height=40).pack(fill='x', pady=(0, 6))
         self._button(
             row, 'Battery report', self.run_battery_report,
-            secondary=True, maintenance=True).pack(fill='x')
+            image=self.compact_icons['tools'], compound='left', anchor='w',
+            secondary=True, maintenance=True, height=40).pack(fill='x')
         self._section_log(body, 'tools_log', 'Command output')
 
     def _add_tool_btn(self, parent, text, desc, cmd, name):
-        labels = {'SFC scan': 'Scan', 'DISM health check': 'Check', 'DISM repair': 'Repair',
-                  'DNS flush': 'Flush', 'Network reset': 'Reset'}
-        return self._action_row(parent, text, desc, labels.get(name, 'Run'),
-                                lambda: self.run_cmd(cmd, name), maintenance=True)
+        """Compact command row: label and actionable control share one line."""
+        labels = {'SFC scan': 'Scan', 'DISM health check': 'Check',
+                  'DISM repair': 'Repair', 'DNS flush': 'Flush',
+                  'Network reset': 'Reset'}
+        icon = 'scan' if name in ('SFC scan', 'DISM health check') else (
+            'restore' if name == 'DISM repair' else 'tools')
+        row = ctk.CTkFrame(parent, fg_color='transparent')
+        row.pack(fill='x', padx=12, pady=7)
+        row.grid_columnconfigure(1, weight=1)
+        LLabel(row, text='', image=self.compact_icons[icon],
+               width=24, height=26).grid(row=0, column=0, sticky='n',
+                                          padx=(0, 9), pady=(4, 0))
+        copy = ctk.CTkFrame(row, fg_color='transparent')
+        copy.grid(row=0, column=1, sticky='ew')
+        title = LLabel(copy, text=text, font=self._font(13, True),
+                       anchor='w', justify='left')
+        title.pack(fill='x')
+        hint = LLabel(copy, text=desc, font=self._font(11),
+                      text_color=MUTED, anchor='w', justify='left')
+        hint.pack(fill='x', pady=(1, 0))
+        button = self._button(row, labels.get(name, 'Run'),
+                              lambda: self.run_cmd(cmd, name),
+                              secondary=True, maintenance=True,
+                              width=92, height=34)
+        button.grid(row=0, column=2, sticky='e', padx=(10, 0))
+        def fit(event):
+            available = event.width / max(row._get_widget_scaling(), .01)
+            narrow = available < 260
+            if row.__dict__.get('_compact_narrow') != narrow:
+                row._compact_narrow = narrow
+                if narrow:
+                    button.grid_configure(row=1, column=1, padx=0,
+                                          pady=(6, 0), sticky='w')
+                else:
+                    button.grid_configure(row=0, column=2, padx=(10, 0),
+                                          pady=0, sticky='e')
+            space = available - (52 if narrow else 159)
+            for label in (title, hint):
+                label.configure(wraplength=max(90, space))
+        row.bind('<Configure>', fit)
+        return button
 
-    def _windows_settings_card(self, body, title, detail, actions, icon):
+    def _settings_shortcuts(self, body, shortcuts):
+        """A section header already gives context; show only icon-led actions."""
         card = self._card(body)
-        card.pack(fill='x', pady=(0, 10))
-        heading = ctk.CTkFrame(card, fg_color='transparent')
-        heading.pack(fill='x', padx=16, pady=(14, 4))
-        LLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
-        if title:
-            LLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
-        LLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
-        row = ctk.CTkFrame(card, fg_color='transparent')
-        row.pack(fill='x', padx=16, pady=(0, 14))
-        for index, (text, uri) in enumerate(actions):
-            self._button(
-                row, text, lambda u=uri, t=text: self.run_launch(u, t),
-                secondary=True, width=140).grid(row=index, column=0, sticky='ew',
-                                                 pady=(0, 5) if index < len(actions) - 1 else 0)
-        row.grid_columnconfigure(0, weight=1)
+        card.pack(fill='x', pady=(0, 8))
+        buttons = []
+        for index, (text, target, icon) in enumerate(shortcuts):
+            button = self._button(
+                card, text, lambda u=target, t=text: self.run_launch(u, t),
+                secondary=True, image=self.compact_icons[icon],
+                compound='left', anchor='w', height=46)
+            button.configure(font=self._font(13, semibold=True))
+            button.pack(fill='x', padx=14,
+                        pady=(14 if index == 0 else 0,
+                              14 if index == len(shortcuts) - 1 else 8))
+            buttons.append(button)
+        return buttons
 
     def _setup_apps_frame(self):
-        body = self._section_body(self.frame_apps, 'Installed apps', 'Review installed software using Windows settings.')
-        self._windows_settings_card(
-            body, 'Installed apps', 'Review storage use, repair or uninstall apps.',
-            [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps')
-        self.apps_status = LLabel(body, text='Windows handles app changes. Return here when finished.',
-                                        font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
-        self.apps_status.pack(fill='x', padx=2, pady=5)
+        body = self._section_body(
+            self.frame_apps, 'Installed apps',
+            'Manage or uninstall programs in Windows.')
+        self.app_shortcuts = self._settings_shortcuts(
+            body, [('Apps settings', 'ms-settings:appsfeatures', 'apps'),
+                   ('Classic programs', 'appwiz.cpl', 'tools')])
 
     def _setup_startup_frame(self):
-        body = self._section_body(self.frame_startup, 'Startup apps', 'Choose which apps launch when you sign in.')
-        self._windows_settings_card(
-            body, None, 'Review startup impact and disable unnecessary auto-start entries.',
-            [('Startup settings', 'ms-settings:startupapps')], 'turbo')
-        self.startup_status = LLabel(body, text='Windows manages startup changes. Return here when finished.',
-                                           font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
-        self.startup_status.pack(fill='x', padx=2, pady=5)
+        body = self._section_body(
+            self.frame_startup, 'Startup apps',
+            'Disable unnecessary apps at sign-in.')
+        self.startup_shortcuts = self._settings_shortcuts(
+            body, [('Startup settings', 'ms-settings:startupapps', 'turbo')])
 
     def _setup_turbo_frame(self):
-        body = self._section_body(self.frame_turbo, 'Performance settings', 'Original settings are saved before changes and restored when turned off.')
+        body = self._section_body(self.frame_turbo, 'Performance settings', 'Original settings are saved for restoration.')
         self.turbo_vars, self.turbo_switches = {}, {}
         master = self._card(body)
         master.pack(fill='x', pady=(0, 8))
@@ -836,7 +896,7 @@ class PanaceaApp(ctk.CTk):
             secondary=True).pack(fill='x')
         card = self._card(body)
         card.pack(fill='x')
-        config = [('power', 'High performance', 'More power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Visual effects preset', 'Save the Windows performance preference.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Pause application preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Pause background indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
+        config = [('power', 'High performance', 'More power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Visual effects preset', 'Adjust Windows animations.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Stops app preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Stops background indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
         for key, title, desc, on_fn, off_fn in config:
             row = ctk.CTkFrame(card, fg_color='transparent')
             row.pack(fill='x', padx=14, pady=5)
@@ -870,89 +930,87 @@ class PanaceaApp(ctk.CTk):
     }
 
     def _setup_resurrect_frame(self):
-        # Presentation only: the guarded ten-step executor and restore-point gate
-        # remain unchanged. One scroller owns hero, steps and expandable output.
+        """Compact, readable two-column guided maintenance without engine changes."""
         host = self.frame_resurrect
         host.grid_columnconfigure(0, weight=1)
         host.grid_rowconfigure(0, weight=1)
         body = ctk.CTkScrollableFrame(host, fg_color=BG, corner_radius=0)
-        body.grid(row=0, column=0, sticky='nsew', padx=(18, 8), pady=(8, 10))
+        body.grid(row=0, column=0, sticky='nsew', padx=(18, 8), pady=(4, 8))
 
-        header = ctk.CTkFrame(body, fg_color='transparent')
-        header.pack(fill='x', padx=8, pady=(10, 20))
-        LLabel(header, text='', image=self.icons_active['resurrect'],
-               width=42, height=42).pack(side='left', padx=(0, 12))
-        heading = ctk.CTkFrame(header, fg_color='transparent')
-        heading.pack(side='left', fill='x', expand=True)
-        LLabel(heading, text='Guided Maintenance', font=self._font(26, True),
-               anchor='w').pack(fill='x')
+        heading = ctk.CTkFrame(body, fg_color='transparent')
+        heading.pack(fill='x', padx=8, pady=(8, 12))
+        LLabel(heading, text='', image=self.icons_active['resurrect'],
+               width=38, height=38).pack(side='left', padx=(0, 10))
+        heading_copy = ctk.CTkFrame(heading, fg_color='transparent')
+        heading_copy.pack(side='left', fill='x', expand=True)
+        LLabel(heading_copy, text='Guided Maintenance',
+               font=self._font(23, True), anchor='w').pack(fill='x')
         subtitle = LLabel(
-            heading, text='10 steps · Verified restore point required',
-            font=self._font(13), text_color=MUTED, anchor='w', justify='left')
-        subtitle.pack(fill='x', pady=(4, 0))
-        heading.bind('<Configure>', lambda event: subtitle.configure(
-            wraplength=max(180, event.width / subtitle._get_widget_scaling() - 12)))
+            heading_copy, text='10 steps · Verified restore point required',
+            font=self._font(12), text_color=MUTED, anchor='w', justify='left')
+        subtitle.pack(fill='x')
+        heading_copy.bind('<Configure>', lambda event: subtitle.configure(
+            wraplength=max(180, event.width / subtitle._get_widget_scaling() - 8)))
 
         hero = self._card(body)
-        hero.pack(fill='x', padx=8, pady=(0, 16))
-        hero.grid_columnconfigure(0, weight=1)
+        hero.pack(fill='x', padx=8, pady=(0, 10))
         top = ctk.CTkFrame(hero, fg_color='transparent')
-        top.grid(row=0, column=0, sticky='ew', padx=20, pady=(18, 8))
-        LLabel(top, text='SEQUENCE STATUS', font=self._font(11, semibold=True),
-               text_color=COL_GOLD, anchor='w').pack(fill='x')
+        top.pack(fill='x', padx=16, pady=(12, 3))
         self.lbl_status = LLabel(
-            top, text='Ready · No steps run', font=self._font(19, True),
-            height=30, anchor='w', justify='left')
-        self.lbl_status.pack(fill='x', pady=(5, 0))
+            top, text='Ready · No steps run', font=self._font(16, True),
+            height=26, anchor='w', justify='left')
+        self.lbl_status.pack(fill='x')
         self.resurrection_step_count = LLabel(
-            hero, text='0 / 10 steps', text_color=MUTED,
-            font=self._font(13, semibold=True), anchor='w')
-        self.resurrection_step_count.grid(row=1, column=0, sticky='ew',
-                                          padx=20, pady=(2, 9))
+            hero, text='0 / 10 steps', text_color=COL_GOLD,
+            font=self._font(12, semibold=True), anchor='w', height=18)
+        self.resurrection_step_count.pack(fill='x', padx=16, pady=(0, 6))
         self.progress_bar = ctk.CTkProgressBar(
-            hero, height=14, corner_radius=7,
+            hero, height=11, corner_radius=5,
             progress_color=COL_GOLD, fg_color='#283951')
         self.progress_bar.set(0)
-        self.progress_bar.grid(row=2, column=0, sticky='ew',
-                               padx=20, pady=(0, 15))
+        self.progress_bar.pack(fill='x', padx=16, pady=(0, 10))
         actions = ctk.CTkFrame(hero, fg_color='transparent')
-        actions.grid(row=3, column=0, sticky='ew', padx=20, pady=(0, 20))
+        actions.pack(fill='x', padx=16, pady=(0, 12))
         self.btn_resurrect_start = self._button(
             actions, 'Start sequence', self.run_god_mode,
-            maintenance=True, width=178, height=44)
-        self.btn_resurrect_start.configure(font=self._font(14, semibold=True))
+            maintenance=True, width=168, height=38)
+        self.btn_resurrect_start.configure(font=self._font(13, semibold=True))
         self.btn_resurrect_start.pack(side='left')
         self.btn_resurrect_cancel = self._button(
             actions, 'Cancel after step', self._cancel_resurrect,
-            secondary=True, height=38, width=178)
+            secondary=True, height=36, width=176)
         self._resurrection_action_stacked = None
         actions.bind('<Configure>', self._layout_resurrection_actions, add='+')
         hero.bind('<Configure>', lambda event: self.lbl_status.configure(
-            wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 40)))
+            wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 32)))
 
         safety = ctk.CTkFrame(
-            body, fg_color='#252b35', border_color='#8d6d40',
-            border_width=1, corner_radius=10)
-        safety.pack(fill='x', padx=8, pady=(0, 20))
-        LLabel(safety, text='Before you start', text_color=COL_WARNING,
-               font=self._font(15, True), anchor='w').pack(fill='x', padx=18,
-                                                           pady=(15, 5))
+            body, fg_color='#242b37', border_color='#8d6d40',
+            border_width=1, corner_radius=9)
+        safety.pack(fill='x', padx=8, pady=(0, 14))
+        safety.grid_columnconfigure(1, weight=1)
+        LLabel(safety, text='', image=self.compact_icons['restore'],
+               width=24).grid(row=0, column=0, rowspan=2,
+                              padx=(14, 8), pady=(10, 6), sticky='n')
+        LLabel(safety, text='Before you start', font=self._font(13, True),
+               text_color=COL_WARNING, anchor='w').grid(
+                   row=0, column=1, padx=(0, 12), pady=(9, 0), sticky='ew')
         warning = LLabel(
             safety,
-            text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.',
-            height=96, text_color=TEXT, font=self._font(12),
-            anchor='w', justify='left', wraplength=640)
-        warning.pack(fill='x', padx=18, pady=(0, 15))
-        safety.bind('<Configure>', lambda event: warning.configure(
-            wraplength=max(170, event.width / warning._get_widget_scaling() - 38)))
+            text='Permanent deletion: browser caches, temporary files and Recycle Bin items; restore points cannot recover them.\nNetwork reset can interrupt connections or require restart. Save work; cancellation stops between steps.',
+            font=self._font(12), height=60,
+            text_color=TEXT, anchor='w', justify='left')
+        warning.grid(row=1, column=1, padx=(0, 12), pady=(0, 9), sticky='ew')
+        def fit_warning(event):
+            available = max(170, event.width / safety._get_widget_scaling() - 72)
+            warning.configure(wraplength=available, height=(
+                60 if available >= 590 else 80 if available >= 420 else 116))
+        safety.bind('<Configure>', fit_warning, add='+')
 
-        LLabel(body, text='Maintenance steps', font=self._font(19, True),
-               anchor='w').pack(fill='x', padx=8, pady=(0, 5))
-        LLabel(body, text='Select Details for step information and results.',
-               text_color=MUTED, font=self._font(12), anchor='w',
-               justify='left').pack(fill='x', padx=8, pady=(0, 12))
+        LLabel(body, text='Maintenance steps', font=self._font(17, True),
+               anchor='w').pack(fill='x', padx=8, pady=(0, 7))
         timeline = ctk.CTkFrame(body, fg_color='transparent')
-        timeline.pack(fill='x', padx=8, pady=(0, 18))
+        timeline.pack(fill='x', padx=8, pady=(0, 10))
         timeline.grid_columnconfigure(0, weight=1)
         self._resurrection_rows = {}
         self._resurrection_cards = {}
@@ -960,36 +1018,43 @@ class PanaceaApp(ctk.CTk):
         self._resurrection_phases = []
         for index, name in enumerate(self.RESURRECTION_STEPS):
             phase = self._card(timeline)
-            phase.grid(row=index, column=0, sticky='nsew', pady=5)
+            phase.grid(row=index, column=0, sticky='nsew', pady=4)
             phase.grid_columnconfigure(1, weight=1)
-            LLabel(phase, text=f'{index + 1:02}', height=40, width=40,
-                   text_color=COL_GOLD, font=self._font(18, True)).grid(
-                       row=0, column=0, rowspan=2, sticky='n',
-                       padx=(14, 10), pady=(12, 0))
+            LLabel(phase, text=f'{index + 1:02}', height=22,
+                   width=27, text_color=COL_GOLD,
+                   font=self._font(14, True)).grid(
+                       row=0, column=0, rowspan=2,
+                       padx=(10, 7), pady=(10, 0), sticky='n')
+            display = {
+                'Drive optimization': 'Optimize drive',
+                'Disk health scan': 'Disk scan',
+                'Windows image health': 'Image health',
+                'System file scan': 'System files',
+            }.get(name, name)
             title = LLabel(
-                phase, text=name, font=self._font(15, True),
-                height=24, anchor='w', justify='left')
-            title.grid(row=0, column=1, sticky='ew', pady=(12, 3))
+                phase, text=display, font=self._font(13, True),
+                height=22, anchor='w', justify='left')
+            title.grid(row=0, column=1, sticky='ew', pady=(8, 0))
+            status = LLabel(
+                phase, text='Not started', height=20,
+                font=self._font(11), anchor='w', text_color=MUTED)
+            status.grid(row=1, column=1, sticky='ew', pady=(0, 8))
             self._button(
                 phase, 'Details', lambda n=name: self._toggle_resurrection_info(n),
-                secondary=True, width=80, height=29).grid(
-                    row=0, column=2, padx=(8, 12), pady=(11, 2), sticky='e')
-            status = LLabel(
-                phase, text='Not started', height=23,
-                font=self._font(12, semibold=True),
-                anchor='w', text_color=MUTED, justify='left')
-            status.grid(row=1, column=1, columnspan=2,
-                        sticky='ew', pady=(0, 13))
+                secondary=True, width=70, height=28).grid(
+                    row=0, column=2, rowspan=2, padx=(6, 9), pady=9, sticky='e')
             explanation = LLabel(
                 phase, text=self.RESURRECTION_HELP[name],
-                font=self._font(12), text_color=MUTED,
-                anchor='w', justify='left')
+                font=self._font(11), height=56,
+                text_color=MUTED, anchor='w', justify='left')
             explanation.grid(row=2, column=1, columnspan=2,
-                             sticky='ew', padx=(0, 13), pady=(0, 14))
+                             sticky='ew', padx=(0, 10), pady=(0, 9))
             explanation.grid_remove()
             phase.bind('<Configure>', lambda event, title=title, detail=explanation: (
-                title.configure(wraplength=max(100, event.width / title._get_widget_scaling() - 160)),
-                detail.configure(wraplength=max(150, event.width / detail._get_widget_scaling() - 87)),
+                title.configure(wraplength=max(
+                    100, event.width / title._get_widget_scaling() - 148)),
+                detail.configure(wraplength=max(
+                    125, event.width / detail._get_widget_scaling() - 66)),
             ))
             self._resurrection_rows[name] = status
             self._resurrection_cards[name] = phase
@@ -1000,21 +1065,26 @@ class PanaceaApp(ctk.CTk):
         self._section_log(body, 'god_log', 'Full sequence output')
 
     def _layout_resurrection_actions(self, event):
-        narrow = event.width / max(self.btn_resurrect_start._get_widget_scaling(), 0.01) < 410
+        narrow = event.width / max(self.btn_resurrect_start._get_widget_scaling(), 0.01) < 385
         if self._resurrection_action_stacked == narrow:
             return
         self._resurrection_action_stacked = narrow
         self.btn_resurrect_start.pack_configure(
             side='top' if narrow else 'left', fill='x' if narrow else 'none',
-            pady=(0, 8) if narrow else 0)
+            pady=(0, 7) if narrow else 0)
         if self.btn_resurrect_cancel.winfo_manager():
             self.btn_resurrect_cancel.pack_configure(
                 side='top' if narrow else 'left', fill='x' if narrow else 'none',
-                padx=0 if narrow else (12, 0))
+                padx=0 if narrow else (10, 0))
+
+    @staticmethod
+    def _steps_need_stack(available):
+        """Each step has room for number, one-line action and legible title."""
+        return available < 630
 
     def _layout_resurrection_timeline(self, event):
         available = event.width / max(event.widget._get_widget_scaling(), 0.01)
-        two_columns = available >= 780
+        two_columns = not self._steps_need_stack(available)
         if self._resurrection_two_columns == two_columns:
             return
         self._resurrection_two_columns = two_columns
@@ -1026,8 +1096,9 @@ class PanaceaApp(ctk.CTk):
             phase.grid_configure(
                 row=index // 2 if two_columns else index,
                 column=index % 2 if two_columns else 0,
-                padx=(0, 7) if two_columns and index % 2 == 0 else
-                     (7, 0) if two_columns else 0, pady=6)
+                padx=(0, 6) if two_columns and index % 2 == 0 else
+                     (6, 0) if two_columns else 0,
+                pady=4)
 
     def _toggle_resurrection_info(self, name):
         label = self._resurrection_info_labels.get(name)
@@ -1624,7 +1695,7 @@ class PanaceaApp(ctk.CTk):
         if 'btn_restore_turbo' not in self.__dict__:
             return
         busy = self.workers.busy() or self._update_downloading or self._update_installing or self.__dict__.get('_maintenance_uncertain')
-        text = 'Saved originals unavailable · retry Refresh state' if saved is None else f'{len(saved)} original settings saved · available for restoration' if saved else 'No saved changes · switches show the current Windows state'
+        text = 'Saved settings unavailable · Refresh state' if saved is None else f'{len(saved)} original settings saved' if saved else 'No saved changes'
         self.turbo_saved_label.configure(text=text, text_color=COL_WARNING if saved is None else MUTED)
         self.btn_restore_turbo.configure(state='normal' if saved and not busy else 'disabled')
 

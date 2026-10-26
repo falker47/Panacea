@@ -1203,3 +1203,63 @@ def test_update_footer_offers_retry_only_after_check_error(monkeypatch):
     app.btn_check_update.grid.assert_called_once()
     app.app_update_status.configure.assert_any_call(
         text='Update check failed: network offline', text_color=panacea_ui.COL_WARNING)
+
+
+@isolated_tk_test
+def test_real_tk_compact_polish_prevents_duplicate_headings_and_vertical_voids(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        app.select_frame('Dashboard')
+        app.update()
+        overview = [label for label in _native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel)
+                    if label.cget('text') == 'Overview']
+        assert len(overview) == 1
+        dashboard_icons = [label.cget('image') for label in
+                           _native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel)]
+        assert app.icons_active['dashboard'] in dashboard_icons
+        assert app.dashboard_summary.winfo_height() >= 85
+
+        app.select_frame('Apps')
+        app.update()
+        titles = [label.cget('text') for label in
+                  _native_widgets(app.frame_apps, panacea_ui.ctk.CTkLabel)]
+        assert titles.count('Installed apps') == 1
+        assert len(app.app_shortcuts) == 2
+        assert all(button.cget('image') is not None for button in app.app_shortcuts)
+
+        app.select_frame('Tools')
+        app.update()
+        assert app.drive_menu.winfo_rooty() - app.frame_disk.winfo_rooty() < 160
+        repair_labels = list(_native_widgets(app.frame_tools, panacea_ui.ctk.CTkLabel))
+        scan = next(label for label in repair_labels if label.cget('text') == 'System file scan')
+        scan_button = next(button for button in _native_widgets(app.frame_tools, panacea_ui.ctk.CTkButton)
+                           if button.cget('text') == 'Scan')
+        assert scan_button.winfo_rootx() > scan.winfo_rootx()
+        assert abs(scan_button.winfo_rooty() - scan.winfo_rooty()) < 35
+
+        app.select_frame('Turbo')
+        app.update()
+        startup_titles = [label.cget('text') for label in
+                          _native_widgets(app.frame_startup, panacea_ui.ctk.CTkLabel)]
+        assert startup_titles.count('Startup apps') == 1
+        assert len(app.startup_shortcuts) == 1
+        assert app.startup_shortcuts[0].cget('image') is not None
+
+        app.select_frame('Resurrect')
+        app.update()
+        canvas = app.god_log.master.master._parent_canvas
+        width = canvas.winfo_width() / app.god_log.master.master._get_widget_scaling()
+        # The timeline has its own 16px horizontal inset.
+        expected = not app._steps_need_stack(width - 16)
+        assert app._resurrection_two_columns == expected
+        if expected:
+            assert abs(app._resurrection_phases[0].winfo_rooty() -
+                       app._resurrection_phases[1].winfo_rooty()) <= 4
+        assert len(app._resurrection_phases) == 10
+        warning = next(label for label in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkLabel)
+                       if label.cget('text').startswith('Permanent deletion:'))
+        assert warning.cget('height') <= 116
+        assert app._resurrection_phases[0].winfo_rooty() - canvas.winfo_rooty() < 540
+    finally:
+        _destroy_real_app(app)

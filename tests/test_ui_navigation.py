@@ -63,3 +63,10 @@ def test_pair_reflow_uses_actual_usable_panel_width_by_section():
     assert not PanaceaApp._group_requires_stack('Tools', 640)
     assert PanaceaApp._group_requires_stack('Turbo', 650)
     assert not PanaceaApp._group_requires_stack('Turbo', 670)
+
+
+def test_guided_steps_reflow_before_becoming_an_endless_vertical_list():
+    assert PanaceaApp._steps_need_stack(540)
+    assert PanaceaApp._steps_need_stack(629)
+    assert not PanaceaApp._steps_need_stack(650)
+    assert not PanaceaApp._steps_need_stack(800)

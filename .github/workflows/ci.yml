@@ -50,6 +50,22 @@ jobs:
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged GUI smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke failed: $($process.ExitCode)" }
 
+      - name: Capture read-only Windows UX evidence
+        shell: pwsh
+        run: |
+          python scripts/visual_check.py --width 1020 --height 700 --scale 1 --settle-ms 500 --output build/ui-evidence/100
+          if ($LASTEXITCODE -ne 0) { throw 'Default UI screenshot capture failed' }
+          python scripts/visual_check.py --width 1020 --height 700 --scale 1.5 --settle-ms 500 --output build/ui-evidence/150
+          if ($LASTEXITCODE -ne 0) { throw '150 percent UI screenshot capture failed' }
+
+      - name: Preserve UI screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-UI-visual-QA
+          path: build/ui-evidence
+          if-no-files-found: warn
+
       - name: Ensure Inno Setup compiler is available on the disposable runner
         shell: pwsh
         run: |

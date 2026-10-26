@@ -23,6 +23,58 @@ def median(values):
     return round(statistics.median(values), 2) if values else None
 
 
+def profile_disk_widgets(build):
+    """Inclusive, low-overhead breakdown of the synchronous Disk setup path.
+
+    Nested timings overlap; they describe hotspots, not additive costs.
+    Instrumentation is scoped to the Disk constructor and never ships in the app.
+    """
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    import tkinter as tk
+    import customtkinter as ctk
+    from panacea_ui import PanaceaApp, _LocalizedText
+
+    targets = (
+        ("section_body", PanaceaApp, "_section_body"),
+        ("card", PanaceaApp, "_card"),
+        ("button", PanaceaApp, "_button"),
+        ("section_log", PanaceaApp, "_section_log"),
+        ("set_drives", PanaceaApp, "_set_drives"),
+        ("drive_selected", PanaceaApp, "_drive_selected"),
+        ("CTkFrame_init", ctk.CTkFrame, "__init__"),
+        ("CTkOptionMenu_init", ctk.CTkOptionMenu, "__init__"),
+        ("CTkOptionMenu_configure", ctk.CTkOptionMenu, "configure"),
+        ("CTkProgressBar_init", ctk.CTkProgressBar, "__init__"),
+        ("CTkProgressBar_set", ctk.CTkProgressBar, "set"),
+        ("localized_widget_init", _LocalizedText, "__init__"),
+        ("StringVar_init", tk.StringVar, "__init__"),
+        ("tk_pack", tk.Pack, "pack"),
+        ("tk_grid", tk.Grid, "grid"),
+    )
+    measures, counts = {}, {}
+    with ExitStack() as scope:
+        for key, owner, method in targets:
+            original = getattr(owner, method)
+
+            def timed(self, *args, _original=original, _key=key, **kwargs):
+                start = time.perf_counter()
+                try:
+                    return _original(self, *args, **kwargs)
+                finally:
+                    elapsed = (time.perf_counter() - start) * 1000
+                    measures[_key] = measures.get(_key, 0.0) + elapsed
+                    counts[_key] = counts.get(_key, 0) + 1
+
+            scope.enter_context(patch.object(owner, method, timed))
+        build()
+    return {
+        key: {"total_ms": round(measures.get(key, 0), 2),
+              "calls": counts.get(key, 0)}
+        for key, _, _ in targets
+    }
+
+
 def child(output):
     logging.getLogger("PanaceaLogger").addHandler(logging.NullHandler())
     sys.path.insert(0, str(ROOT))
@@ -37,11 +89,15 @@ def child(output):
     app.update_idletasks()
     flush_ms = (time.perf_counter() - started) * 1000 - init_ms
     setup_times = {}
+    disk_trace = {}
     for key, fn in tuple(app._setup_functions.items()):
         def wrap(original, section):
             def traced():
                 before = time.perf_counter()
                 try:
+                    if section == "Disk":
+                        disk_trace.update(profile_disk_widgets(original))
+                        return None
                     return original()
                 finally:
                     setup_times[section] = round((time.perf_counter() - before) * 1000, 2)
@@ -50,7 +106,7 @@ def child(output):
     result = {
         "startup": {"constructor_ms": round(init_ms, 2),
                     "first_geometry_flush_ms": round(flush_ms, 2)},
-        "cold": {}, "warm": {}, "idle": {},
+        "cold": {}, "warm": {}, "idle": {}, "disk_trace": disk_trace,
     }
     failures = []
     app.report_callback_exception = lambda kind, exc, tb: failures.append(str(exc))
@@ -73,6 +129,7 @@ def child(output):
             "geometry_flush_ms": round(geometry, 2),
             "total_ms": round(callback + geometry, 2),
             "setup_ms": setup_times.get(name),
+            "disk_setup_ms": setup_times.get("Disk") if name == "Tools" else None,
             "resident_mb": round(resident, 2),
         }
         app.after(90, navigate, index + 1)
@@ -132,6 +189,11 @@ def main():
         "startup_median_ms": {key: median([s["startup"][key] for s in samples])
                               for key in samples[0]["startup"]},
         "sections": {},
+        "disk_trace_median_ms": {
+            key: median([sample["disk_trace"][key]["total_ms"] for sample in samples])
+            for key in samples[0]["disk_trace"]
+        },
+        "disk_setup_median_ms": median([sample["cold"]["Tools"].get("disk_setup_ms") for sample in samples]),
         "idle_median_cpu_percent": median([s["idle"]["cpu_percent_total_machine"] for s in samples]),
         "idle_median_resident_mb": median([s["idle"]["resident_mb"] for s in samples]),
         "samples": samples,

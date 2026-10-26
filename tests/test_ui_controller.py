@@ -182,18 +182,23 @@ def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch
 
 def test_navigation_builds_each_section_only_when_first_opened():
     app = app_without_window()
-    app.frames = {'Dashboard': Mock(), 'Disk': Mock()}
-    app.nav_buttons = {'Dashboard': Mock(), 'Disk': Mock()}
-    dashboard, disk = Mock(), Mock()
-    app._setup_functions = {'Dashboard': dashboard, 'Disk': disk}
+    pages = [page for _, _, _, group_pages in app.NAV_GROUPS for page in group_pages]
+    app.frames = {page: Mock() for page in pages}
+    app.group_frames = {root: Mock() for root, _, _, _ in app.NAV_GROUPS}
+    app.nav_buttons = {root: Mock() for root, _, _, _ in app.NAV_GROUPS}
+    app.icons = {}
+    app.icons_active = {}
+    app._setup_functions = {page: Mock() for page in pages}
     app._built_frames = set()
     app.select_frame('Dashboard')
     app.select_frame('Dashboard')
-    assert dashboard.call_count == 1
-    disk.assert_not_called()
+    assert app._setup_functions['Dashboard'].call_count == 1
+    app._setup_functions['Disk'].assert_not_called()
     app.select_frame('Disk')
-    assert disk.call_count == 1
+    assert app._setup_functions['Disk'].call_count == 1
+    assert app._setup_functions['Tools'].call_count == 1
     assert app.active_frame == 'Disk'
+    assert app.group_frames['Tools'].grid.called
 
 
 def test_actual_turbo_state_is_cached_before_section_is_built():
@@ -358,28 +363,35 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             dashboard_canvas.yview_moveto(0)
             app.update()
             labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
-            version = next(label for label in labels if f'v{panacea_ui.VERSION}' in label.cget('text'))
-            copyright_label = next(label for label in labels if '©' in label.cget('text'))
-            expect(copyright_label.cget('text') == f'© {panacea_ui.datetime.now().year} falker47',
+            version, credit, developer = (
+                app.footer_version, app.footer_credit, app.footer_developer)
+            expect(version.cget('text') == f'v{panacea_ui.VERSION}',
+                   'Footer must show current version')
+            expect(credit.cget('text') == 'falker47',
                    'Footer must identify the repository author')
-            expect(abs(baseline(version) - baseline(copyright_label)) <= 2 * scale, 'Footer text must share one baseline')
-            expect('\n' not in version.cget('text') + copyright_label.cget('text'), 'Footer must stay on one line')
-            expect(_native_bounds(copyright_label)[2] <= _native_bounds(version)[0],
-                   'Footer author must be left of the version without overlap')
+            expect('Maurizio Falconi' in developer.cget('text'),
+                   'Footer must include developer attribution')
+            expect(abs(baseline(version) - baseline(credit)) <= 2 * scale,
+                   'Version and credit should share a baseline')
+            expect(_native_bounds(credit)[2] <= _native_bounds(version)[0],
+                   'Footer attribution must not overlap the version')
+            expect(_native_bounds(app.update_bar)[3] <= _native_bounds(developer)[1],
+                   'Update controls must precede attribution in the bottom footer')
             sidebar = _native_bounds(app.sidebar_frame)
-            footer_bottom = max(_native_bounds(label)[3] for label in (version, copyright_label))
-            insets = (_native_bounds(copyright_label)[0] - sidebar[0],
+            footer_bottom = max(_native_bounds(version)[3], _native_bounds(credit)[3])
+            insets = (_native_bounds(credit)[0] - sidebar[0],
                       sidebar[2] - _native_bounds(version)[2], sidebar[3] - footer_bottom)
             footer_insets.append(insets)
-            expect(all(0 <= inset <= 20 * scale for inset in insets), f'Footer edge insets too large: {insets}')
-            for label in (version, copyright_label):
+            expect(all(0 <= inset <= 20 * scale for inset in insets),
+                   f'Footer edge insets too large: {insets}')
+            for label in (version, credit, developer, app.app_update_status, app.btn_check_update):
                 inside(label, app.sidebar_frame, 'Footer')
             title = next(label for label in labels if label.cget('text') == 'Panacea')
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
             expect(all(icon.cget('size') == (31, 31) for icon in app.icons.values()), 'Sidebar navigation icons must be 31px')
-            expect(app.brand_icon.cget('size') == (68, 68), 'Original brand logo should render at 68px')
+            expect(app.brand_icon.cget('size') == (74, 74), 'Original brand logo should render at 74px')
             for branding in (app.brand_title, app.brand_tagline):
                 inside(branding, app.sidebar_frame, 'Sidebar branding')
                 rendered = branding._label
@@ -387,8 +399,8 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                                                 '-displayof', rendered, branding.cget('text')))
                 expect(required <= rendered.winfo_width() + 2,
                        f'Branding text clips: {branding.cget("text")}')
-            expect(app.brand_title.cget('font').cget('size') == 28, 'Panacea title is undersized')
-            expect(app.brand_tagline.cget('font').cget('size') == 11, 'System maintenance subtitle is undersized')
+            expect(app.brand_title.cget('font').cget('size') == 32, 'Panacea title is undersized')
+            expect(app.brand_tagline.cget('font').cget('size') == 12, 'System maintenance subtitle is undersized')
             for root, label, _, _ in app.NAV_GROUPS:
                 button = app.nav_buttons[root]
                 expect(button.cget('text') == label, f'{root} navigation label changed')
@@ -895,9 +907,9 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
             app.update()
             assert app.active_frame == name
         app.select_frame('Tools')
-        app.subnav_buttons['Disk'].invoke()
         app.update()
-        assert app.active_frame == 'Disk'
+        assert app.frame_tools.winfo_ismapped()
+        assert app.frame_disk.winfo_ismapped()
         assert app.active_group == 'Tools'
         button = app.nav_buttons['Dashboard']
         button._canvas.focus_force()
@@ -1035,3 +1047,23 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         _destroy_real_app(app)
         panacea_ui.ctk.set_widget_scaling(1)
         panacea_ui.ctk.set_window_scaling(1)
+
+
+@pytest.mark.parametrize('group,pages', [
+    ('Cleaning', ('Cleaning', 'Apps')),
+    ('Tools', ('Tools', 'Disk')),
+    ('Turbo', ('Turbo', 'Startup')),
+])
+@isolated_tk_test
+def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch, group, pages):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.select_frame(group)
+        app.update()
+        host = app.group_frames[group]
+        assert host.winfo_ismapped()
+        assert not hasattr(app, 'subnav_frames')
+        assert all(app.frames[page].winfo_ismapped() for page in pages)
+        assert app.frames[pages[0]].winfo_rootx() < app.frames[pages[1]].winfo_rootx()
+    finally:
+        _destroy_real_app(app)

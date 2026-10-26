@@ -1098,6 +1098,103 @@ class PanaceaApp(ctk.CTk):
         except Exception as exc:
             self._show_toast('Disk Cleanup', str(exc), 'error')
 
+    def _set_quick_cleanup_status(self, message, color=MUTED):
+        self._quick_cleanup_summary = str(message)
+        label = self.__dict__.get('quick_cleanup_status')
+        if label is not None:
+            label.configure(text=self._quick_cleanup_summary, text_color=color)
+
+    def _quick_cleanup_progress(self, finished, total, result):
+        bar = self.__dict__.get('quick_cleanup_bar')
+        if bar is not None:
+            bar.set(finished / total)
+        status = 'Completed' if result.success else 'Partial / failed'
+        self._set_quick_cleanup_status(
+            f'{finished}/{total} automatic steps attempted · {result.name}: {status}',
+            MUTED if result.success else COL_WARNING)
+
+    def _run_quick_cleanup_sequence(self):
+        from modules.quick_cleanup import run_quick_cleanup
+        return run_quick_cleanup(
+            self.cleanup_mgr, self.cmd_runner, self.log_msg,
+            cancel=self._quick_cleanup_cancel,
+            progress=lambda finished, total, result: self.dispatcher.post(
+                self._quick_cleanup_progress, finished, total, result, critical=True))
+
+    def _finish_quick_cleanup(self, result):
+        """Show actual results; never describe the external Windows UI as completed."""
+        self.last_quick_cleanup_result = result
+        attempted = len(result.steps)
+        successes = sum(1 for item in result.steps if item.success)
+        if 'quick_cleanup_bar' in self.__dict__:
+            self.quick_cleanup_bar.set(attempted / 3)
+        details = '; '.join(
+            f'{step.name}: {"completed" if step.success else "partial / failed"}'
+            for step in result.steps)
+        if result.error:
+            details = f'{details} · {result.error}' if details else result.error
+        self.log_msg(f'Quick cleanup: {result.status} · {attempted}/3 attempted · {details}')
+        # Only attempt the launch after all three internal steps have returned
+        # and no command state, cancellation, or close request remains uncertain.
+        ready = (attempted == 3
+                 and not self._quick_cleanup_cancel.is_set()
+                 and not getattr(self.cmd_runner, 'completion_unknown', False)
+                 and not self.__dict__.get('_close_when_idle', False))
+        external = 'Windows Disk Cleanup not opened'
+        if ready:
+            try:
+                if self.cleanup_mgr.open_disk_cleanup() is not True:
+                    raise RuntimeError('Windows Disk Cleanup could not be opened.')
+                external = 'Windows Disk Cleanup opened · choose and confirm categories in Windows'
+            except Exception as exc:
+                external = f'Windows Disk Cleanup launch failed: {exc}'
+                self.log_msg(external)
+        elif getattr(self.cmd_runner, 'completion_unknown', False):
+            external = 'Windows Disk Cleanup not opened · command completion unknown'
+        elif attempted < 3:
+            external = 'Windows Disk Cleanup not opened · sequence stopped'
+        else:
+            external = 'Windows Disk Cleanup not opened · closing or cancellation requested'
+        completed = result.status == 'completed' and external.startswith('Windows Disk Cleanup opened')
+        color = COL_SUCCESS if completed else COL_WARNING
+        summary = (f'{result.status.capitalize()} · {successes}/3 automatic steps completed '
+                   f'({attempted} attempted).\n{external}')
+        self._set_quick_cleanup_status(summary, color)
+        self.operation_label.configure(
+            text=f'Quick cleanup · {result.status} · {external}',
+            text_color=color)
+
+    def run_quick_cleanup(self):
+        """A single informed opt-in covers all three destructive in-app operations."""
+        if self._update_installing or self._update_downloading or self.workers.busy():
+            self._show_toast('Operation in progress',
+                             'Wait for the current operation to finish.', 'warning')
+            return False
+        approved = messagebox.askyesno(
+            'Confirm quick cleanup',
+            'Run the following cleanup operations in sequence?\n\n'
+            '1. Permanently delete eligible files in validated temporary folders.\n'
+            '2. Permanently empty the ENTIRE Recycle Bin.\n'
+            '3. Remove superseded Windows components using DISM.\n'
+            '4. OPEN Windows Disk Cleanup for your manual selection and confirmation.\n\n'
+            'Deletion is irreversible, including through Windows restore points. '
+            'Some files may be skipped; DISM may take time or require a restart. '
+            'Save your work first.\n\nContinue?',
+            parent=self)
+        if not approved:
+            return False
+        self._quick_cleanup_cancel.clear()
+        accepted = self._request_operation(
+            'Quick cleanup', self._run_quick_cleanup_sequence,
+            self._finish_quick_cleanup,
+            on_error=lambda exc: self._set_quick_cleanup_status(
+                f'Quick cleanup failed: {exc}', COL_WARNING))
+        if accepted:
+            self.quick_cleanup_bar.set(0)
+            self._set_quick_cleanup_status('Starting · 0/3 automatic steps attempted')
+            self._set_section_log_open('clean_log', True)
+        return accepted
+
     def run_deep_clean(self):
         self.run_cmd('DISM /Online /Cleanup-Image /StartComponentCleanup', 'Component store cleanup', log=self.log_msg, output='clean_log')
 
@@ -1536,10 +1633,14 @@ class PanaceaApp(ctk.CTk):
         if self.workers.busy():
             self._close_when_idle = True
             self._resurrect_cancel.set()
+            if hasattr(self, '_quick_cleanup_cancel'):
+                self._quick_cleanup_cancel.set()
             self.operation_label.configure(text='Closing after the current operation · No further sequence steps will start', text_color=COL_WARNING)
             return
         self._shutdown.set()
         self._resurrect_cancel.set()
+        if hasattr(self, '_quick_cleanup_cancel'):
+            self._quick_cleanup_cancel.set()
         self._update_cancel.set()
         self.monitor.close()
         self.workers.close()

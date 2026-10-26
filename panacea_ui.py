@@ -242,7 +242,7 @@ class PanaceaApp(ctk.CTk):
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
-            size = 40 if name in ('scan', 'restore', 'updates') else 22
+            size = 46 if name in ('scan', 'restore', 'updates') else 22
             self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
@@ -308,10 +308,10 @@ class PanaceaApp(ctk.CTk):
         if self._sidebar_compact == compact:
             return
         self._sidebar_compact = compact
-        self._sidebar_brand.grid_configure(pady=(9, 10) if compact else (18, 26))
+        self._sidebar_brand.grid_configure(pady=(5, 3) if compact else (18, 26))
         for button in self.nav_buttons.values():
-            button.configure(height=44 if compact else 50)
-            button.grid_configure(pady=2 if compact else 6)
+            button.configure(height=42 if compact else 50)
+            button.grid_configure(pady=1 if compact else 6)
 
     def _layout_group(self, group, event):
         """Default to parallel panels; stack only when neither can remain readable."""
@@ -856,14 +856,14 @@ class PanaceaApp(ctk.CTk):
             phase = self._card(timeline)
             phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
             phase.grid_columnconfigure(1, weight=1)
-            LLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=28).grid(row=0, column=0, padx=(6, 4), pady=4)
+            LLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=26).grid(row=0, column=0, padx=(6, 4), pady=4)
             display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
             LLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
-            status = LLabel(phase, text='Not started', height=20, width=78, anchor='e', font=self._font(10), text_color=MUTED)
+            status = LLabel(phase, text='Not started', height=20, width=62, anchor='e', font=self._font(10), text_color=MUTED)
             status.grid(row=0, column=2, padx=(4, 5))
             self._button(
                 phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
-                secondary=True, width=28, height=24).grid(row=0, column=3, padx=(0, 6), pady=2)
+                secondary=True, width=26, height=24).grid(row=0, column=3, padx=(0, 6), pady=2)
             explanation = LLabel(
                 phase, text=self.RESURRECTION_HELP[name], font=self._font(10),
                 text_color=MUTED, anchor='w', justify='left', wraplength=230)

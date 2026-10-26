@@ -51,11 +51,6 @@ class PanaceaApp(ctk.CTk):
         ('Turbo', 'Performance & Startup', 'turbo', ('Turbo', 'Startup')),
         ('Resurrect', 'Guided Maintenance', 'resurrect', ('Resurrect',)),
     )
-    SUBVIEW_LABELS = {
-        'Cleaning': 'Cleanup', 'Apps': 'Installed apps',
-        'Tools': 'Repair tools', 'Disk': 'Drive optimization',
-        'Turbo': 'Performance settings', 'Startup': 'Startup apps',
-    }
 
     def __init__(self):
         super().__init__()
@@ -103,14 +98,30 @@ class PanaceaApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self._setup_sidebar()
         self._setup_update_bar()
-        self._setup_subnav()
-        self.frames = {}
-        for name, attr in [('Dashboard', 'dashboard'), ('Cleaning', 'cleaning'),
-                           ('Apps', 'apps'), ('Tools', 'tools'), ('Disk', 'disk'),
-                           ('Turbo', 'turbo'), ('Startup', 'startup'), ('Resurrect', 'resurrect')]:
-            frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
-            self.frames[name] = frame
-            setattr(self, f'frame_{attr}', frame)
+        self.frames, self.group_frames = {}, {}
+        self._group_stacked = {}
+        frame_attrs = {
+            'Dashboard': 'dashboard', 'Cleaning': 'cleaning', 'Apps': 'apps',
+            'Tools': 'tools', 'Disk': 'disk', 'Turbo': 'turbo',
+            'Startup': 'startup', 'Resurrect': 'resurrect',
+        }
+        for group, _, _, pages in self.NAV_GROUPS:
+            if len(pages) > 1:
+                host = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
+                host.grid_rowconfigure(0, weight=1)
+                host.grid_columnconfigure((0, 1), weight=1, uniform='panels')
+                host.bind('<Configure>', lambda event, g=group: self._layout_group(g, event))
+            else:
+                host = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
+            self.group_frames[group] = host
+            for index, page in enumerate(pages):
+                frame = host if len(pages) == 1 else ctk.CTkFrame(host, fg_color=BG, corner_radius=0)
+                self.frames[page] = frame
+                setattr(self, f'frame_{frame_attrs[page]}', frame)
+                if len(pages) > 1:
+                    frame.grid(row=0, column=index, sticky='nsew',
+                               padx=(0, 5) if index == 0 else (5, 0))
+
         self._setup_functions = {
             'Dashboard': self._setup_dashboard_frame, 'Cleaning': self._setup_cleaning_frame,
             'Apps': self._setup_apps_frame, 'Tools': self._setup_tools_frame,
@@ -190,91 +201,109 @@ class PanaceaApp(ctk.CTk):
             self.action_icons[name] = ctk.CTkImage(light_image=icon, dark_image=icon, size=(size, size))
         with Image.open(resource_path('assets/panacea_icon.png')) as source:
             original = source.convert('RGBA').copy()
-        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(68, 68))
+        self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(74, 74))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame = ctk.CTkFrame(self, width=278, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        brand.grid(row=0, column=0, rowspan=2, padx=(10, 6), pady=(20, 30), sticky='ew')
-        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=68, height=68).grid(row=0, column=0, padx=(0, 6))
+        brand.grid(row=0, column=0, rowspan=2, padx=(10, 7), pady=(18, 26), sticky='ew')
+        ctk.CTkLabel(brand, image=self.brand_icon, text='', width=74, height=74).grid(
+            row=0, column=0, padx=(0, 7))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
         lettering.grid(row=0, column=1, sticky='w')
-        self.brand_title = ctk.CTkLabel(lettering, text='Panacea', height=30, font=self._font(28, True), text_color=TEXT, anchor='w')
+        self.brand_title = ctk.CTkLabel(
+            lettering, text='Panacea', height=34, font=self._font(32, True),
+            text_color=TEXT, anchor='w')
         self.brand_title.pack(anchor='w')
-        self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=17, font=self._font(11, semibold=True), text_color=COL_GOLD, anchor='w')
+        self.brand_tagline = ctk.CTkLabel(
+            lettering, text='SYSTEM MAINTENANCE', height=18,
+            font=self._font(12, semibold=True), text_color=COL_GOLD, anchor='w')
         self.brand_tagline.pack(anchor='w')
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=226, height=50, anchor='w',
+                                  secondary=True, width=251, height=50, anchor='w',
                                   image=self.icons[icon], compound='left')
             button.configure(font=self._font(15, semibold=True))
-            button.grid(row=row, column=0, padx=11, pady=5, sticky='ew')
+            button.grid(row=row, column=0, padx=11, pady=6, sticky='ew')
             self.nav_buttons[name] = button
-        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=8, column=0, sticky='ew', padx=17, pady=(10, 6))
+        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(
+            row=8, column=0, sticky='ew', padx=15, pady=(7, 10))
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=14, pady=(0, 10))
-        self.sidebar_footer.grid_columnconfigure(1, weight=1)
+        self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=12, pady=(0, 10))
+        self.sidebar_footer.grid_columnconfigure(0, weight=1)
+        self.footer_developer = ctk.CTkLabel(
+            self.sidebar_footer, text='Developed by Maurizio Falconi',
+            height=16, font=self._font(10), text_color=MUTED, anchor='w')
+        self.footer_developer.grid(row=1, column=0, sticky='ew', pady=(3, 0))
+        byline = ctk.CTkFrame(self.sidebar_footer, fg_color='transparent')
+        byline.grid(row=2, column=0, sticky='ew')
+        byline.grid_columnconfigure(1, weight=1)
+        self.footer_credit = ctk.CTkLabel(
+            byline, text='falker47', height=17, text_color=COL_GOLD,
+            font=self._font(11, semibold=True), cursor='hand2', anchor='w')
+        self.footer_credit.grid(row=0, column=0, sticky='w')
+        self.footer_credit.bind(
+            '<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
+        self.footer_version = ctk.CTkLabel(
+            byline, text=f'v{VERSION}', height=17, font=self._font(10),
+            text_color=MUTED, anchor='e')
+        self.footer_version.grid(row=0, column=1, sticky='e')
         self._sidebar_brand = brand
         self._sidebar_compact = None
         self.sidebar_frame.bind('<Configure>', self._adjust_sidebar_height)
-        footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} falker47',
-                              height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
-        footer.grid(row=0, column=0, sticky='w')
-        footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
-        ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
-                     font=self._font(10), anchor='e').grid(row=0, column=1, sticky='e')
 
     def _adjust_sidebar_height(self, event):
-        """Preserve a fixed footer on short, high-DPI windows without shrinking labels."""
-        compact = event.height < 470 * self.sidebar_frame._get_widget_scaling()
+        """Keep the update and attribution footer fixed on small DPI-scaled windows."""
+        compact = event.height / max(self.sidebar_frame._get_widget_scaling(), 0.01) < 590
         if self._sidebar_compact == compact:
             return
         self._sidebar_compact = compact
-        self._sidebar_brand.grid_configure(pady=(14, 20) if compact else (20, 30))
+        self._sidebar_brand.grid_configure(pady=(9, 10) if compact else (18, 26))
         for button in self.nav_buttons.values():
-            button.configure(height=46 if compact else 50)
-            button.grid_configure(pady=3 if compact else 5)
+            button.configure(height=44 if compact else 50)
+            button.grid_configure(pady=2 if compact else 6)
 
-    def _setup_subnav(self):
-        """Compact secondary navigation for groups containing more than one view."""
-        self.subnav_frames, self.subnav_buttons = {}, {}
-        for group, _, _, pages in self.NAV_GROUPS:
-            if len(pages) < 2:
-                continue
-            strip = ctk.CTkFrame(self.update_bar, fg_color='transparent', corner_radius=0)
-            for index, page in enumerate(pages):
-                button = self._button(strip, self.SUBVIEW_LABELS[page],
-                                      lambda p=page: self.select_frame(p),
-                                      secondary=True, height=30, width=145)
-                button.grid(row=0, column=index, padx=(0, 8))
-                self.subnav_buttons[page] = button
-            self.subnav_frames[group] = strip
+    def _layout_group(self, group, event):
+        """Default to parallel panels; stack only when neither can remain readable."""
+        host = self.group_frames[group]
+        width = event.width / max(host._get_widget_scaling(), 0.01)
+        stacked = width < 610
+        if self._group_stacked.get(group) == stacked:
+            return
+        self._group_stacked[group] = stacked
+        pages = next(pages for root, _, _, pages in self.NAV_GROUPS if root == group)
+        host.grid_columnconfigure(0, weight=1, uniform='' if stacked else 'panels')
+        host.grid_columnconfigure(1, weight=0 if stacked else 1,
+                                  uniform='' if stacked else 'panels')
+        host.grid_rowconfigure(0, weight=1, uniform='rows' if stacked else '')
+        host.grid_rowconfigure(1, weight=1 if stacked else 0,
+                               uniform='rows' if stacked else '')
+        for index, page in enumerate(pages):
+            self.frames[page].grid_configure(
+                row=index if stacked else 0, column=0 if stacked else index,
+                padx=(0, 0) if stacked else ((0, 5) if index == 0 else (5, 0)),
+                pady=(0, 3) if stacked and index == 0 else
+                     (3, 0) if stacked else 0)
 
     def select_frame(self, name):
         if name not in self.frames:
             return
-        if name not in self._built_frames:
-            self._setup_functions[name]()
-            self._built_frames.add(name)
-        for frame in self.frames.values():
-            frame.grid_forget()
-        self.frames[name].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
         group = next((root for root, _, _, pages in self.NAV_GROUPS if name in pages), name)
+        pages = next(pages for root, _, _, pages in self.NAV_GROUPS if root == group)
+        # Build both sibling panels before they become visible: no hidden submenus.
+        for page in pages:
+            if page not in self._built_frames:
+                self._setup_functions[page]()
+                self._built_frames.add(page)
+        for frame in self.group_frames.values():
+            frame.grid_forget()
+        self.group_frames[group].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
         self.active_frame, self.active_group = name, group
-        for root, strip in self.__dict__.get('subnav_frames', {}).items():
-            strip.grid_forget()
-            if root == group:
-                strip.grid(row=0, column=1, sticky='w', padx=(0, 6), pady=3)
-        for page, button in self.__dict__.get('subnav_buttons', {}).items():
-            active = page == name
-            button.configure(fg_color='#263a56' if active else SURFACE_ALT,
-                             border_color=COL_GOLD if active else BORDER,
-                             text_color=TEXT if active else MUTED)
         for key, button in self.nav_buttons.items():
             selected = key == group
             icon_key = next((icon for root, _, icon, _ in self.NAV_GROUPS if root == key), key.lower())
@@ -287,20 +316,31 @@ class PanaceaApp(ctk.CTk):
             button.configure(**kwargs)
 
     def _setup_update_bar(self):
-        bar = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=0, height=42)
+        bar = ctk.CTkFrame(self.sidebar_footer, fg_color=SURFACE_ALT,
+                           border_color=BORDER, border_width=1, corner_radius=9)
         self.update_bar = bar
-        bar.grid(row=0, column=1, sticky='ew', padx=(6, 0))
+        bar.grid(row=0, column=0, sticky='ew', pady=(0, 7))
         bar.grid_columnconfigure(0, weight=1)
-        self.app_update_status = ctk.CTkLabel(bar, text='Checking Panacea updates…', anchor='w', text_color=MUTED, font=self._font(11), wraplength=350)
-        self.app_update_status.grid(row=0, column=0, sticky='ew', padx=18, pady=7)
-        self.btn_check_update = self._button(bar, 'Check updates', self._check_app_update, secondary=True, width=105)
-        self.btn_check_update.grid(row=0, column=2, padx=(4, 12), pady=6)
+        self.app_update_status = ctk.CTkLabel(
+            bar, text='Checking Panacea updates…', anchor='w',
+            text_color=MUTED, font=self._font(11), justify='left', wraplength=222)
+        self.app_update_status.grid(row=0, column=0, sticky='ew', padx=11, pady=(10, 4))
+        self.btn_check_update = self._button(
+            bar, 'Check updates', self._check_app_update, secondary=True, height=30)
+        self.btn_check_update.grid(row=1, column=0, sticky='ew', padx=9, pady=(0, 9))
         self.update_actions = ctk.CTkFrame(bar, fg_color='transparent')
-        self.btn_update_install = self._button(self.update_actions, 'Download / install', self._auto_update, width=130)
-        self.btn_update_notes = self._button(self.update_actions, 'Release notes', self._show_release_notes, secondary=True, width=98)
-        self.btn_update_defer = self._button(self.update_actions, 'Defer', self._defer_update, secondary=True, width=60)
-        for column, button in enumerate((self.btn_update_install, self.btn_update_notes, self.btn_update_defer)):
-            button.grid(row=0, column=column, padx=(0, 8), pady=(0, 8))
+        self.update_actions.grid_columnconfigure((0, 1), weight=1, uniform='updater')
+        self.btn_update_install = self._button(
+            self.update_actions, 'Download / install', self._auto_update, height=29)
+        self.btn_update_notes = self._button(
+            self.update_actions, 'Release notes', self._show_release_notes,
+            secondary=True, height=29)
+        self.btn_update_defer = self._button(
+            self.update_actions, 'Defer', self._defer_update, secondary=True, height=29)
+        self.btn_update_install.grid(row=0, column=0, columnspan=2,
+                                     sticky='ew', padx=8, pady=(0, 5))
+        self.btn_update_notes.grid(row=1, column=0, sticky='ew', padx=(8, 3), pady=(0, 8))
+        self.btn_update_defer.grid(row=1, column=1, sticky='ew', padx=(3, 8), pady=(0, 8))
 
     def _setup_dashboard_frame(self):
         outer = self.frame_dashboard
@@ -504,17 +544,38 @@ class PanaceaApp(ctk.CTk):
 
     def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
         row = ctk.CTkFrame(parent, fg_color='transparent')
-        row.pack(fill='x', padx=14, pady=2)
+        row.pack(fill='x', padx=12, pady=3)
         row.grid_columnconfigure(1, weight=1)
         if icon:
-            ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(row=0, column=0, rowspan=2, padx=(0, 10))
-        ctk.CTkLabel(row, text=title, height=18, font=self._font(13, True), anchor='w').grid(row=0, column=1, sticky='ew')
-        description = ctk.CTkLabel(row, text=detail, height=16, text_color=MUTED, font=self._font(11), anchor='w', justify='left')
+            ctk.CTkLabel(row, text='', image=self.icons_active[icon], width=26).grid(
+                row=0, column=0, rowspan=2, padx=(0, 7))
+        heading = ctk.CTkLabel(
+            row, text=title, height=18, font=self._font(13, True), anchor='w',
+            justify='left')
+        heading.grid(row=0, column=1, sticky='ew')
+        description = ctk.CTkLabel(
+            row, text=detail, height=16, text_color=MUTED,
+            font=self._font(11), anchor='w', justify='left')
         description.grid(row=1, column=1, sticky='ew')
-        button = self._button(row, label, command, secondary=True, maintenance=maintenance, width=112)
-        button.grid(row=0, column=2, rowspan=2, padx=(12, 0))
-        row.bind('<Configure>', lambda event: description.configure(
-            wraplength=max(100, event.width / description._get_widget_scaling() - (170 if icon else 130))))
+        button = self._button(
+            row, label, command, secondary=True, maintenance=maintenance, width=105)
+        button.grid(row=0, column=2, rowspan=2, padx=(10, 0))
+
+        def fit(event):
+            available = event.width / max(row._get_widget_scaling(), 0.01)
+            narrow = available < 400
+            if row.__dict__.get('_action_narrow') != narrow:
+                row._action_narrow = narrow
+                if narrow:
+                    button.grid_configure(row=2, column=1, rowspan=1,
+                                          padx=0, pady=(5, 2), sticky='w')
+                else:
+                    button.grid_configure(row=0, column=2, rowspan=2,
+                                          padx=(10, 0), pady=0, sticky='')
+            remaining = available - (46 if icon else 12) - (0 if narrow else 135)
+            heading.configure(wraplength=max(110, remaining))
+            description.configure(wraplength=max(110, remaining))
+        row.bind('<Configure>', fit)
         return button
 
     def _setup_cleaning_frame(self):
@@ -536,15 +597,15 @@ class PanaceaApp(ctk.CTk):
         self.quick_cleanup_button = self._button(
             quick, 'Run quick cleanup', self.run_quick_cleanup,
             maintenance=True, height=38, width=164)
-        self.quick_cleanup_button.grid(row=0, column=1, rowspan=3, padx=(8, 14), pady=10)
+        self.quick_cleanup_button.grid(row=3, column=0, columnspan=2, sticky='w', padx=14, pady=(8, 5))
         self.quick_cleanup_status = ctk.CTkLabel(
             quick, text=self._quick_cleanup_summary, font=self._font(11),
             text_color=MUTED, anchor='w', justify='left', wraplength=680)
-        self.quick_cleanup_status.grid(row=3, column=0, columnspan=2, sticky='ew', padx=14, pady=(2, 6))
+        self.quick_cleanup_status.grid(row=4, column=0, columnspan=2, sticky='ew', padx=14, pady=(2, 6))
         self.quick_cleanup_bar = ctk.CTkProgressBar(
             quick, height=7, progress_color=COL_GOLD, fg_color=BORDER)
         self.quick_cleanup_bar.set(0)
-        self.quick_cleanup_bar.grid(row=4, column=0, columnspan=2, sticky='ew', padx=14, pady=(0, 11))
+        self.quick_cleanup_bar.grid(row=5, column=0, columnspan=2, sticky='ew', padx=14, pady=(0, 11))
         quick.bind('<Configure>', lambda event: self.quick_cleanup_status.configure(
             wraplength=max(180, event.width / self.quick_cleanup_status._get_widget_scaling() - 28)))
 
@@ -616,8 +677,12 @@ class PanaceaApp(ctk.CTk):
                 self._add_tool_btn(card, text, detail, command, name)
         row = ctk.CTkFrame(body, fg_color='transparent')
         row.pack(fill='x', pady=(6, 0))
-        self._button(row, 'Restore point', self.run_create_restore, secondary=True, maintenance=True).pack(side='left', padx=(0, 8))
-        self._button(row, 'Battery report', self.run_battery_report, secondary=True, maintenance=True).pack(side='left')
+        self._button(
+            row, 'Restore point', self.run_create_restore,
+            secondary=True, maintenance=True).pack(fill='x', pady=(0, 5))
+        self._button(
+            row, 'Battery report', self.run_battery_report,
+            secondary=True, maintenance=True).pack(fill='x')
         self._section_log(body, 'tools_log', 'Command output')
 
     def _add_tool_btn(self, parent, text, desc, cmd, name):
@@ -636,9 +701,12 @@ class PanaceaApp(ctk.CTk):
         ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
         row = ctk.CTkFrame(card, fg_color='transparent')
         row.pack(fill='x', padx=16, pady=(0, 14))
-        for text, uri in actions:
-            self._button(row, text, lambda u=uri, t=text: self.run_launch(u, t),
-                         secondary=True, width=150).pack(side='left', padx=(0, 8))
+        for index, (text, uri) in enumerate(actions):
+            self._button(
+                row, text, lambda u=uri, t=text: self.run_launch(u, t),
+                secondary=True, width=140).grid(row=index, column=0, sticky='ew',
+                                                 pady=(0, 5) if index < len(actions) - 1 else 0)
+        row.grid_columnconfigure(0, weight=1)
 
     def _setup_apps_frame(self):
         body = self._section_body(self.frame_apps, 'Installed apps', 'Review installed software using Windows settings.')
@@ -675,8 +743,10 @@ class PanaceaApp(ctk.CTk):
         actions = ctk.CTkFrame(master, fg_color='transparent')
         actions.pack(fill='x', padx=14, pady=(0, 10))
         self.btn_restore_turbo = self._button(actions, 'Restore saved settings', self._restore_saved_turbo, secondary=True, maintenance=True)
-        self.btn_restore_turbo.pack(side='left')
-        self._button(actions, 'Refresh state', self._load_turbo_states, secondary=True, width=112).pack(side='right')
+        self.btn_restore_turbo.pack(fill='x', pady=(0, 5))
+        self._button(
+            actions, 'Refresh state', self._load_turbo_states,
+            secondary=True).pack(fill='x')
         card = self._card(body)
         card.pack(fill='x')
         config = [('power', 'High performance', 'More power use, heat and battery drain.', lambda: self.perf_mgr.set_power_plan(True), lambda: self.perf_mgr.set_power_plan(False)), ('visual', 'Visual effects preset', 'Save the Windows performance preference.', lambda: self.perf_mgr.set_visual_effects(False), lambda: self.perf_mgr.set_visual_effects(True)), ('sysmain', 'Pause SysMain', 'Pause application preloading.', lambda: self.perf_mgr.set_sysmain(False), lambda: self.perf_mgr.set_sysmain(True)), ('wsearch', 'Pause Windows Search', 'Pause background indexing.', lambda: self.perf_mgr.set_wsearch(False), lambda: self.perf_mgr.set_wsearch(True)), ('spooler', 'Pause Print Spooler', 'Printing is unavailable while active.', lambda: self.perf_mgr.set_spooler(False), lambda: self.perf_mgr.set_spooler(True))]
@@ -1511,7 +1581,7 @@ class PanaceaApp(ctk.CTk):
                 self.app_update_status.configure(text=f'Panacea {VERSION} is up to date', text_color=MUTED)
             else:
                 self.app_update_status.configure(text=f'Panacea {self._release.version} available', text_color=COL_BLUE)
-                self.update_actions.grid(row=1, column=0, columnspan=3, sticky='w', padx=18)
+                self.update_actions.grid(row=2, column=0, sticky='ew')
         def failed(exc):
             self.app_update_status.configure(text=f'Update check failed: {exc}', text_color=COL_WARNING)
             self.btn_check_update.configure(text='Retry check')

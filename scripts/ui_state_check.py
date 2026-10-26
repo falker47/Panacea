@@ -82,6 +82,8 @@ def fixture(ui, app, name, releases):
     """Apply real presentation/controller methods to explicit synthetic inputs."""
     app.select_frame(CASES[name][0])
     if name.startswith('cleanup-'):
+        # Fixtures target the optional individual tools, collapsed in normal UX.
+        app._toggle_cleanup_tools()
         gate = threading.Event()
         releases.append(gate)
         app.cleanup_mgr.last_result = SimpleNamespace(errors=[], skipped=[], skipped_counts={})

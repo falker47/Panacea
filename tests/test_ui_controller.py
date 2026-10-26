@@ -378,7 +378,29 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
-            expect(all(icon.cget('size') == (24, 24) for icon in app.icons.values()), 'Sidebar icon dimensions changed')
+            expect(all(icon.cget('size') == (31, 31) for icon in app.icons.values()), 'Sidebar navigation icons must be 31px')
+            expect(app.brand_icon.cget('size') == (68, 68), 'Original brand logo should render at 68px')
+            for branding in (app.brand_title, app.brand_tagline):
+                inside(branding, app.sidebar_frame, 'Sidebar branding')
+                rendered = branding._label
+                required = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                '-displayof', rendered, branding.cget('text')))
+                expect(required <= rendered.winfo_width() + 2,
+                       f'Branding text clips: {branding.cget("text")}')
+            expect(app.brand_title.cget('font').cget('size') == 28, 'Panacea title is undersized')
+            expect(app.brand_tagline.cget('font').cget('size') == 11, 'System maintenance subtitle is undersized')
+            for root, label, _, _ in app.NAV_GROUPS:
+                button = app.nav_buttons[root]
+                expect(button.cget('text') == label, f'{root} navigation label changed')
+                expect(button.cget('font').cget('size') == 15, f'{root} navigation font is undersized')
+                expect(button.cget('font').cget('family') == 'Segoe UI Semibold',
+                       f'{root} navigation font should be semibold')
+                inside(button, app.sidebar_frame, root + ' navigation')
+                rendered = button._text_label
+                required = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                                '-displayof', rendered, label))
+                expect(required <= rendered.winfo_width() + 2,
+                       f'{root} navigation text clips: {required}px > {rendered.winfo_width()}px')
             for name in ('cpu', 'memory', 'drive'):
                 expect(app.action_icons[name].cget('size') == (22, 22), f'{name} metric icon was resized')
             dashboard_labels = list(_native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel))
@@ -411,15 +433,35 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
             app.select_frame('Cleaning')
             app.update()
-            card = app.preview_label.master
-            analyze = next(button for button in _native_widgets(card, panacea_ui.ctk.CTkButton)
-                           if button.cget('text') in ('Analyze', 'Preview'))
-            expect(analyze.cget('text') == 'Analyze', 'Cleanup analysis action should be named Analyze')
-            button_bounds, card_bounds = _native_bounds(analyze), _native_bounds(card)
-            expect(abs((button_bounds[1] + button_bounds[3]) - (card_bounds[1] + card_bounds[3])) <= 8 * scale,
-                   'Analyze is not centered across the complete result card')
-            inside(analyze, card, 'Analyze')
-            inside(card, app.frame_cleaning, 'Cleanup analysis card')
+            # Quick cleanup is the first visible action; individual tools stay
+            # available on demand without crowding the initial viewport.
+            quick = app.quick_cleanup_card
+            expect(not app.cleanup_individuals_frame.winfo_manager(),
+                   'Individual cleanup tools must start collapsed')
+            inside(app.quick_cleanup_button, quick, 'Quick cleanup action')
+            inside(quick, app.frame_cleaning, 'Quick cleanup card')
+            app._toggle_cleanup_tools()
+            app.update()
+            expect(bool(app.cleanup_individuals_frame.winfo_manager()),
+                   'Individual cleanup tools should expand')
+            expect(not hasattr(app, 'preview_label') and not hasattr(app, 'cleanup_reasons_button'),
+                   'Individual tools must not create the duplicate analysis card')
+            visible_titles = [label.cget('text') for label in
+                              _native_widgets(app.cleanup_individuals_frame, panacea_ui.ctk.CTkLabel)
+                              if label.cget('text')]
+            expected = ('Delete temporary files', 'Recycle Bin', 'Component store',
+                        'Windows Disk Cleanup')
+            expect([title for title in visible_titles if title in expected] == list(expected),
+                   'Expanded cleanup tools must show exactly the four manual operations')
+            buttons = [button.cget('text') for button in
+                       _native_widgets(app.cleanup_individuals_frame, panacea_ui.ctk.CTkButton)]
+            expect(buttons == ['Clean now', 'Empty bin', 'Clean store', 'Open utility'],
+                   f'Unexpected individual cleanup actions: {buttons}')
+            expect(not any(label.cget('image') for label in
+                           _native_widgets(quick, panacea_ui.ctk.CTkLabel)),
+                   'Quick cleanup must remain icon-free')
+            app._toggle_cleanup_tools()
+            app.update()
             app.select_frame('Resurrect')
             app.update()
             resurrection_canvas = app.god_log.master.master._parent_canvas
@@ -438,7 +480,8 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                    'Every Resurrection phase must have a visible status')
             for name, status in app._resurrection_rows.items():
                 phase = status.master
-                phase_labels = list(_native_widgets(phase, panacea_ui.ctk.CTkLabel))
+                phase_labels = [label for label in _native_widgets(phase, panacea_ui.ctk.CTkLabel)
+                                if label.winfo_ismapped()]
                 for label in phase_labels:
                     inside(label, phase, f'{name} phase text')
                     rendered = label._label
@@ -641,7 +684,7 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
                 else:
                     found.extend(actions(child))
             return found
-        for name in ('Cleaning', 'Disk', 'Tools', 'Apps', 'Turbo', 'Resurrect'):
+        for name in ('Cleaning', 'Apps', 'Tools', 'Disk', 'Turbo', 'Startup', 'Resurrect'):
             app.select_frame(name)
             app.update()
             frame = app.frames[name]
@@ -847,10 +890,15 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
     try:
         app.update()
         app.focus_force()
-        for index, name in enumerate(app.frames, 1):
+        for index, (name, _, _, _) in enumerate(app.NAV_GROUPS, 1):
             app.event_generate(f'<Control-Key-{index}>')
             app.update()
             assert app.active_frame == name
+        app.select_frame('Tools')
+        app.subnav_buttons['Disk'].invoke()
+        app.update()
+        assert app.active_frame == 'Disk'
+        assert app.active_group == 'Tools'
         button = app.nav_buttons['Dashboard']
         button._canvas.focus_force()
         app.update()
@@ -916,15 +964,20 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         panacea_ui.tk.Tk.maxsize(app, 1366, 768)
         panacea_ui.tk.Tk.geometry(app, '1366x768')
         app.select_frame('Cleaning')
+        app._toggle_cleanup_tools()
         app.update()
-        analyze_button = next(button for button in _native_widgets(app.preview_label.master, panacea_ui.ctk.CTkButton)
-                              if button.cget('text') == 'Analyze')
         log = app.clean_log
         toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
         assert not log.winfo_manager()
+        # Analysis remains accessible from Overview, not the individual-cleanup panel.
+        app.select_frame('Dashboard')
+        app.update()
+        analyze_button = next(button for button in _native_widgets(app.card_sys, panacea_ui.ctk.CTkButton)
+                              if button.cget('text') == 'Analyze')
         activate(analyze_button)
         assert entered.wait(3)
         app.dispatcher.drain()
+        app.select_frame('Cleaning')
         app.update()
         assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
         assert 'Fixture analysis line 59' in log.get('1.0', 'end')
@@ -960,12 +1013,16 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.update()
         assert not app.workers.busy()
         assert not log.winfo_manager(), 'Completion must preserve manual closure'
-        assert 'Analysis completed' in app.preview_label.cget('text')
+        assert 'Analysis completed' in app.dash_preview_status.cget('text')
+        app.select_frame('Dashboard')
+        app.update()
         activate(analyze_button)
         app.workers.join(3)
         app.dispatcher.drain()
         app.update()
         assert len(runs) == 2
+        app.select_frame('Cleaning')
+        app.update()
         assert log.winfo_ismapped(), 'A new explicit run must reopen output and leave it open at completion'
         app.select_frame('Dashboard')
         app.select_frame('Cleaning')

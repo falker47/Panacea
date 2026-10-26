@@ -45,6 +45,14 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
 
+; Persist the selected setup language beside the installed executable.
+; The Windows-protected file remains available after EXE-only verified updates.
+[INI]
+Filename: "{app}\panacea-language.ini"; Section: "Panacea"; Key: "Language"; String: "{language}"
+
+[UninstallDelete]
+Type: files; Name: "{app}\panacea-language.ini"
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 

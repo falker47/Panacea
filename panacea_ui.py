@@ -208,10 +208,10 @@ class PanaceaApp(ctk.CTk):
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=220, height=49, anchor='w',
+                                  secondary=True, width=220, height=48, anchor='w',
                                   image=self.icons[icon], compound='left')
             button.configure(font=self._font(14))
-            button.grid(row=row, column=0, padx=11, pady=5, sticky='ew')
+            button.grid(row=row, column=0, padx=11, pady=4, sticky='ew')
             self.nav_buttons[name] = button
         ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=8, column=0, sticky='ew', padx=17, pady=(10, 6))
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')

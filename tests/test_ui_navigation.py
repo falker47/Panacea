@@ -49,7 +49,7 @@ def test_navigating_between_sibling_views_preserves_both_visible_panels():
     assert app._setup_functions['Cleaning'].call_count == 1
     assert app._setup_functions['Apps'].call_count == 1
     assert app.active_group == 'Cleaning'
-    assert app.group_frames['Cleaning'].grid.call_count == 3
+    assert app.group_frames['Cleaning'].grid.call_count == 1
     assert app._setup_functions['Turbo'].call_count == 0
     app.select_frame('Unknown')
     assert app.active_frame == 'Cleaning'
@@ -65,8 +65,19 @@ def test_pair_reflow_uses_actual_usable_panel_width_by_section():
     assert not PanaceaApp._group_requires_stack('Turbo', 670)
 
 
-def test_guided_steps_reflow_before_becoming_an_endless_vertical_list():
-    assert PanaceaApp._steps_need_stack(540)
-    assert PanaceaApp._steps_need_stack(589)
-    assert not PanaceaApp._steps_need_stack(600)
-    assert not PanaceaApp._steps_need_stack(800)
+def test_guided_steps_use_three_four_three_with_readable_narrow_fallbacks():
+    assert PanaceaApp._step_layout_mode(360) == '1'
+    assert PanaceaApp._step_layout_mode(540) == '2'
+    assert PanaceaApp._step_layout_mode(729) == '2'
+    assert PanaceaApp._step_layout_mode(760) == '343'
+
+
+def test_reselecting_a_visible_group_skips_redundant_grid_and_navigation_redraw():
+    app = _navigation_app()
+    app.select_frame('Cleaning')
+    redraw_count = app.group_frames['Cleaning'].grid.call_count
+    app.nav_buttons['Cleaning'].configure.reset_mock()
+    app.select_frame('Apps')  # The sibling was already visible.
+    app.select_frame('Cleaning')
+    assert app.group_frames['Cleaning'].grid.call_count == redraw_count
+    app.nav_buttons['Cleaning'].configure.assert_not_called()

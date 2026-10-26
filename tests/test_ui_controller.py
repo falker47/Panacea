@@ -1251,15 +1251,57 @@ def test_real_tk_compact_polish_prevents_duplicate_headings_and_vertical_voids(m
         canvas = app.god_log.master.master._parent_canvas
         width = canvas.winfo_width() / app.god_log.master.master._get_widget_scaling()
         # The timeline has its own 16px horizontal inset.
-        expected = not app._steps_need_stack(width - 16)
+        expected_layout = app._step_layout_mode(width - 16)
+        assert app._resurrection_layout_mode == expected_layout
+        expected = expected_layout != '1'
         assert app._resurrection_two_columns == expected
         if expected:
             assert abs(app._resurrection_phases[0].winfo_rooty() -
                        app._resurrection_phases[1].winfo_rooty()) <= 4
         assert len(app._resurrection_phases) == 10
         warning = next(label for label in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkLabel)
-                       if label.cget('text').startswith('Permanent deletion:'))
-        assert warning.cget('height') <= 116
+                       if label.cget('text').startswith('A new restore point must be verified first.'))
+        assert warning.cget('height') <= 174
         assert app._resurrection_phases[0].winfo_rooty() - canvas.winfo_rooty() < 540
+    finally:
+        _destroy_real_app(app)
+
+
+def test_readable_restart_age_warns_only_after_seven_days():
+    from panacea_ui import PanaceaApp
+    assert PanaceaApp._restart_age('6d 23h 59m', 'it') == (
+        'Ultimo riavvio · 6 g 23 h fa', False)
+    assert PanaceaApp._restart_age('7d 0h 0m', 'it') == (
+        'Ultimo riavvio · 7 g 0 h fa', True)
+    assert PanaceaApp._restart_age('0d 2h 18m', 'en') == (
+        'Last restart · 2h 18m ago', False)
+    assert PanaceaApp._restart_age('Unknown', 'it') == (
+        'Ultimo riavvio · Non disponibile', False)
+
+
+@isolated_tk_test
+def test_three_four_three_guided_grid_preserves_order_and_expandable_information(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, 1260, 810)
+        panacea_ui.tk.Tk.geometry(app, '1200x760')
+        app.select_frame('Resurrect')
+        app.update()
+        assert app._resurrection_layout_mode == '343'
+        phases = app._resurrection_phases
+        assert len(phases) == 10
+        rows = [phases[:3], phases[3:7], phases[7:]]
+        for items in rows:
+            assert max(w.winfo_rooty() for w in items) - min(w.winfo_rooty() for w in items) <= 3
+        assert phases[0].winfo_rooty() < phases[3].winfo_rooty() < phases[7].winfo_rooty()
+        buttons = [b for b in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkButton)
+                   if b.cget('text') == 'i']
+        assert len(buttons) == 10
+        assert not any(b.cget('text') == 'Details' for b in buttons)
+        assert not app._resurrection_info_labels['Restore point'].winfo_manager()
+        app._toggle_resurrection_info('Restore point')
+        app.update()
+        assert app._resurrection_info_labels['Restore point'].winfo_ismapped()
     finally:
         _destroy_real_app(app)

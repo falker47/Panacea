@@ -2,11 +2,12 @@
 
 SVG sources, licenses and pre-rendered 96px PNGs live in assets/icons/lucide.
 Pillow only resizes/tints their alpha masks at runtime; no SVG engine, icon
-font, network access or hand-drawn substitute is involved.
+font or network access is required. A battery status icon is drawn locally
+from the reported charge level, without any external imagery.
 """
 from functools import lru_cache
 
-from PIL import Image
+from PIL import Image, ImageColor, ImageDraw
 
 from modules.utils import resource_path
 
@@ -68,3 +69,50 @@ def make_icon(name, color='#C0CEE0', size=24):
     icon = Image.new('RGBA', (size, size), color)
     icon.putalpha(alpha)
     return icon
+
+
+@lru_cache(maxsize=48)
+def make_battery_icon(percent=None, *, plugged=False, charging=False,
+                      color='#76b6e2', size=96):
+    """Native battery pictogram. Only the confirmed percentage fills its body."""
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise ValueError('Icon size must be a positive integer')
+    if percent is not None and (isinstance(percent, bool) or not isinstance(percent, (int, float))
+                                or not 0 <= percent <= 100):
+        raise ValueError('Battery percent must be between 0 and 100 or None')
+    tint = ImageColor.getrgb(color)
+    canvas = Image.new('RGBA', (96, 96), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle((11, 25, 81, 70), radius=9, outline=tint, width=5)
+    draw.rounded_rectangle((83, 39, 91, 57), radius=2, fill=tint)
+    if percent is not None and percent > 0:
+        end = 19 + round(percent / 100 * 55)
+        if end > 19:
+            draw.rounded_rectangle((19, 33, end, 62), radius=3, fill=tint)
+    if charging:
+        gold = ImageColor.getrgb('#e4c579')
+        draw.polygon([(51, 18), (39, 47), (52, 44), (45, 79),
+                      (68, 45), (55, 47), (63, 18)], fill=gold)
+    elif plugged:
+        draw.ellipse((59, 15, 78, 34), fill=ImageColor.getrgb('#78c8a8'))
+    if size != 96:
+        canvas = canvas.resize((size, size), Image.Resampling.LANCZOS)
+    return canvas
+
+
+@lru_cache(maxsize=4)
+def make_windows_icon(color='#76b6e2', size=96):
+    """Compact four-pane Windows mark, rendered locally without an icon font."""
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise ValueError('Icon size must be a positive integer')
+    image = Image.new('RGBA', (96, 96), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    paint = ImageColor.getrgb(color)
+    for left, top, right, bottom in (
+        (10, 12, 43, 44), (51, 12, 86, 44),
+        (10, 52, 43, 84), (51, 52, 86, 84),
+    ):
+        pen.rectangle((left, top, right, bottom), fill=paint)
+    if size != 96:
+        image = image.resize((size, size), Image.Resampling.LANCZOS)
+    return image

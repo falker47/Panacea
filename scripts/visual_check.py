@@ -5,6 +5,7 @@ import logging
 import hashlib
 import ctypes
 import sys
+import time
 from pathlib import Path
 
 
@@ -31,6 +32,7 @@ def main():
     names = ["Dashboard", "Cleaning", "Apps", "Tools", "Disk", "Turbo", "Startup", "Resurrect"]
     observations = []
     errors = []
+    navigation_measurements = []
     class DispatchErrors(logging.Handler):
         def emit(self, record):
             errors.append(record.getMessage())
@@ -42,8 +44,12 @@ def main():
 
     def capture(index):
         name = names[index]
+        started = time.perf_counter()
         app.select_frame(name)
         app.update_idletasks()
+        navigation_measurements.append({
+            'view': name,
+            'first_navigation_ms': round((time.perf_counter() - started) * 1000, 1)})
         app.after(300, lambda: save(index))
 
     def save(index):
@@ -59,7 +65,15 @@ def main():
         else:
             dpi = ctypes.windll.user32.GetDpiForWindow(app.winfo_id()) if sys.platform == 'win32' else None
             sources = ['panacea_ui.py', 'version.py', 'modules/system_monitor.py', 'modules/ui_icons.py']
-            evidence = {"views": observations, "callback_errors": errors,
+            for section in ('Dashboard', 'Cleaning', 'Tools', 'Turbo', 'Resurrect'):
+                started = time.perf_counter()
+                app.select_frame(section)
+                app.update_idletasks()
+                navigation_measurements.append({
+                    'view': section,
+                    'warm_navigation_ms': round((time.perf_counter() - started) * 1000, 1)})
+            evidence = {"views": observations, "navigation_timings": navigation_measurements,
+                        "callback_errors": errors,
                         "scaling_method": "CTk widget simulation; window scaling fixed at 1. No Windows display setting changed.",
                         "native_window_dpi": dpi,
                         "screen_pixels": [app.winfo_screenwidth(), app.winfo_screenheight()],

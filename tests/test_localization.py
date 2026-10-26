@@ -103,3 +103,19 @@ def test_compact_ux_copy_has_italian_translation_and_safe_maintenance_warning():
     assert 'Eliminazione definitiva' in result
     assert 'punti di ripristino' in result
     assert 'annullamento' in result
+
+
+
+def test_dashboard_power_and_guided_safety_are_fully_localized():
+    from modules.localization import WARNINGS
+    assert translate('Plugged In', 'it') == 'Collegato alla corrente'
+    assert translate('On Battery', 'it') == 'Alimentazione a batteria'
+    assert translate('Charging', 'it') == 'In carica'
+    assert translate('Restart recommended', 'it') == 'Riavvio consigliato'
+    assert translate('Browser cache', 'it') == 'Cache browser'
+    assert translate('Temp files', 'it') == 'File temporanei'
+    warning = next(k for k in WARNINGS if k.startswith('A new restore point must be verified first.'))
+    translated = translate(warning, 'it')
+    assert 'Prima di procedere' in translated
+    assert 'termina il passaggio in corso' in translated
+    assert 'non avvia i successivi' in translated

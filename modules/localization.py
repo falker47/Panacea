@@ -39,6 +39,11 @@ Analysis optional · No files deleted => Analisi facoltativa · Nessun file elim
 Loading Windows details… => Caricamento dettagli di Windows…
 Uptime: — => Attività: —
 Power: — => Alimentazione: —
+Last restart: — => Ultimo riavvio: —
+Restart recommended => Riavvio consigliato
+Plugged In => Collegato alla corrente
+On Battery => Alimentazione a batteria
+Charging => In carica
 Windows Update => Windows Update
 Checking… => Verifica in corso…
 Check failed => Verifica non riuscita
@@ -181,6 +186,8 @@ failed => non riuscito
 interrupted => interrotto
 Full sequence output => Output sequenza completa
 Browser caches => Cache dei browser
+Browser cache => Cache browser
+Temp files => File temporanei
 DNS cache => Cache DNS
 Optimize drive => Ottimizza unità
 Disk scan => Analisi disco
@@ -290,6 +297,8 @@ ITALIAN = dict(line.split(" => ", 1) for line in _PAIRS.splitlines())
 WARNINGS = {
     "Permanent deletion: browser caches, temporary files and Recycle Bin items; restore points cannot recover them.\nNetwork reset can interrupt connections or require restart. Save work; cancellation stops between steps.":
         "Eliminazione definitiva di cache dei browser, file temporanei e Cestino: i punti di ripristino non recuperano questi dati.\nIl ripristino della rete può interrompere le connessioni o richiedere un riavvio. Salva il lavoro; l'annullamento avviene tra i passaggi.",
+    "A new restore point must be verified first. Browser caches, temporary files and Recycle Bin contents will then be deleted permanently. A restore point cannot bring them back.\nResetting the network can interrupt your connection or require a restart. Save your work. If you cancel, Panacea finishes the current step and stops before the next one.":
+        "Prima di procedere Panacea deve verificare un nuovo punto di ripristino. Poi eliminerà definitivamente cache dei browser, file temporanei e contenuto del Cestino: il punto di ripristino non può recuperarli.\nIl ripristino della rete può interrompere la connessione o richiedere un riavvio. Salva il lavoro. Se premi Annulla, Panacea termina il passaggio in corso e non avvia i successivi.",
     "Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.":
         "Eliminazione definitiva di cache browser, file temporanei e tutto il Cestino. I punti di ripristino non recuperano i file eliminati.\nIl ripristino rete può disconnetterti o richiedere un riavvio. Salva il lavoro. L'annullamento avviene tra i comandi.",
     "Safety · Verify a new Windows restore point. Deleted files are NOT recoverable.":

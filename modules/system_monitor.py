@@ -261,10 +261,27 @@ class SystemMonitor:
             return platform.processor()
             
     def get_os_info(self):
+        """Read the installed Windows edition without a slow systeminfo subprocess."""
         try:
-            return f"{platform.system()} {platform.release()}"
-        except Exception:
-            return "Windows"
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r'SOFTWARE\Microsoft\Windows NT\CurrentVersion') as key:
+                product = str(winreg.QueryValueEx(key, 'ProductName')[0]).removeprefix('Microsoft ')
+                build = int(winreg.QueryValueEx(key, 'CurrentBuildNumber')[0])
+                edition = str(winreg.QueryValueEx(key, 'EditionID')[0])
+            # Windows 11 may still advertise Windows 10 in ProductName.
+            if build >= 22000 and product.startswith('Windows 10') and 'Server' not in product:
+                product = product.replace('Windows 10', 'Windows 11', 1)
+            edition = {'Professional': 'Pro', 'Core': 'Home',
+                       'CoreSingleLanguage': 'Home Single Language'}.get(edition, edition)
+            if edition and edition.casefold() not in product.casefold():
+                product = f'{product} {edition}'
+            return product
+        except (ImportError, OSError, ValueError, TypeError):
+            try:
+                return f"{platform.system()} {platform.release()}"
+            except Exception:
+                return "Windows"
 
     def get_system_uptime(self):
         """Returns string 'D days, H hours, M mins'"""
@@ -334,7 +351,10 @@ class SystemMonitor:
                 percent = status.BatteryLifePercent
                 if percent > 100 or status.BatteryFlag & 128:
                     return (None, "Unknown")
-                plugged = {0: "On Battery", 1: "Plugged In"}.get(status.ACLineStatus, "Unknown")
+                plugged = {0: 'On Battery', 1: 'Plugged In'}.get(
+                    status.ACLineStatus, 'Unknown')
+                if status.ACLineStatus == 1 and status.BatteryFlag & 8:
+                    plugged = 'Charging'
                 return (percent, plugged)
         except (AttributeError, OSError):
             pass

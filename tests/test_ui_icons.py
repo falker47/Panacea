@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageColor
 import pytest
 
-from modules.ui_icons import ICON_SOURCES, make_icon
+from modules.ui_icons import ICON_SOURCES, make_icon, make_battery_icon, make_windows_icon
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,3 +139,15 @@ def test_vendored_assets_survive_git_checkout_with_autocrlf(tmp_path):
 def test_invalid_sizes_fail_with_clear_configuration_error(size):
     with pytest.raises(ValueError, match='positive integer'):
         make_icon('dashboard', size=size)
+
+
+
+def test_battery_fill_tracks_percent_and_charging_marker_is_distinct():
+    from PIL import ImageChops
+    empty = make_battery_icon(0, color='#76b6e2')
+    full = make_battery_icon(100, color='#76b6e2')
+    charging = make_battery_icon(50, charging=True, color='#76b6e2')
+    assert empty.size == full.size == charging.size == (96, 96)
+    assert ImageChops.difference(empty, full).getbbox() is not None
+    assert ImageChops.difference(charging, full).getbbox() is not None
+    assert make_windows_icon(size=40).size == (40, 40)

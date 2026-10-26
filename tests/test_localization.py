@@ -177,7 +177,7 @@ def test_operation_prefixes_localize_after_specific_result_patterns():
 
 def test_expandable_output_labels_translate_the_visible_prefix():
     assert translate('+ Cleanup details', 'it') == '+ Dettagli pulizia'
-    assert translate('− Command output', 'it') == '− Output comandi'
+    assert translate('− Command output', 'it') == '− Output dei comandi'
     assert translate('+ Cleanup details', 'en') == '+ Cleanup details'
 
 

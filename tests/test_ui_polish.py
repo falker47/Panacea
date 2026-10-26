@@ -284,8 +284,12 @@ def test_explicit_operation_open_is_remembered_until_lazy_section_is_built(app):
 def test_navigation_preserves_manual_output_visibility(app, opened):
     log = app._section_log(None, 'clean_log')
     app._set_section_log_open('clean_log', opened)
-    app.frames = {'Cleaning': Widget(), 'Tools': Widget()}
-    app.nav_buttons = {name: Widget() for name in app.frames}
+    pages = [page for _, _, _, group_pages in app.NAV_GROUPS for page in group_pages]
+    app.frames = {page: Widget() for page in pages}
+    app.group_frames = {root: Widget() for root, _, _, _ in app.NAV_GROUPS}
+    app.nav_buttons = {root: Widget() for root, _, _, _ in app.NAV_GROUPS}
+    app.icons = {}
+    app.icons_active = {}
     app._built_frames = set(app.frames)
     app._setup_functions = {}
     app.select_frame('Tools')

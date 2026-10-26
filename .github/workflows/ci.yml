@@ -34,6 +34,20 @@ jobs:
       - name: Import smoke test
         run: python -c "import panacea_ui, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
 
+      - name: Profile read-only GUI performance across independent processes
+        shell: pwsh
+        run: |
+          python scripts/perf_pass.py --samples 5 --output build/perf/current.json
+          if ($LASTEXITCODE -ne 0) { throw 'Performance probe failed' }
+
+      - name: Retain read-only performance measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Windows-performance
+          path: build/perf
+          if-no-files-found: warn
+
       - name: Build executable
         run: python scripts/build.py
 

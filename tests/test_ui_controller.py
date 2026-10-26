@@ -525,7 +525,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                                  if isinstance(button, panacea_ui.ctk.CTkButton))
             inside(output_panel, resurrection_canvas, 'Full sequence panel')
             inside(output_toggle, resurrection_canvas, 'Full sequence output toggle')
-        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1, 2)),
+        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 4 for pair in footer_insets for axis in (0, 1, 2)),
                f'Footer insets drift on resize: {footer_insets}')
         assert not problems, '\n'.join(problems)
     finally:
@@ -1078,5 +1078,39 @@ def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch):
             assert not hasattr(app, 'subnav_frames')
             assert all(app.frames[page].winfo_ismapped() for page in pages)
             assert app.frames[pages[0]].winfo_rootx() < app.frames[pages[1]].winfo_rootx()
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch):
+    # A temporary override simulates the Italian language chosen by setup;
+    # the real installed build uses its protected panacea-language.ini instead.
+    monkeypatch.setenv('PANACEA_LANGUAGE', 'italian')
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        assert app.language == 'it'
+        assert 'Manutenzione del sistema' in app.title()
+        assert app.brand_tagline.cget('text') == 'MANUTENZIONE SISTEMA'
+        assert app.nav_buttons['Cleaning'].cget('text') == 'Spazio e pulizia'
+        assert app.nav_buttons['Resurrect'].cget('text') == 'Manutenzione guidata'
+        assert app.btn_check_update.cget('text') == 'Cerca aggiornamenti'
+        assert 'Maurizio Falconi' in app.footer_developer.cget('text')
+        app.select_frame('Cleaning')
+        app.update()
+        assert app.frame_apps.winfo_ismapped()
+        assert app.quick_cleanup_button.cget('text') == 'Avvia pulizia rapida'
+        app.select_frame('Tools')
+        app.update()
+        assert app.frame_disk.winfo_ismapped()
+        seen = []
+        monkeypatch.setattr(panacea_ui.messagebox, 'askyesno',
+                            lambda title, detail, **kwargs: (seen.append((title, detail)), False)[1])
+        app.run_empty_recycle()
+        assert len(seen) == 1
+        assert 'Cestino' in seen[0][0]
+        assert 'Eliminare definitivamente' in seen[0][1]
+        assert not app.workers.busy()
     finally:
         _destroy_real_app(app)

@@ -827,7 +827,7 @@ class PanaceaApp(ctk.CTk):
             details.pack_forget()
             self.cleanup_toggle_button.configure(text='Show individual tools')
         else:
-            details.pack(fill='x', pady=(0, 6), before=self.clean_log.master)
+            details.pack(fill='x', pady=(0, 6), before=self._section_log_hosts['clean_log'])
             self.cleanup_toggle_button.configure(text='Hide individual tools')
 
     def _setup_disk_frame(self):

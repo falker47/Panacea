@@ -138,28 +138,44 @@ class PanaceaApp(ctk.CTk):
         self._setup_sidebar()
         self._setup_update_bar()
         self.frames, self.group_frames = {}, {}
-        self._group_stacked = {}
+        self._group_stacked, self.group_scroll, self.group_content = {}, {}, {}
         frame_attrs = {
             'Dashboard': 'dashboard', 'Cleaning': 'cleaning', 'Apps': 'apps',
             'Tools': 'tools', 'Disk': 'disk', 'Turbo': 'turbo',
             'Startup': 'startup', 'Resurrect': 'resurrect',
         }
-        for group, _, _, pages in self.NAV_GROUPS:
-            if len(pages) > 1:
-                host = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
-                host.grid_rowconfigure(0, weight=1)
-                host.grid_columnconfigure((0, 1), weight=1, uniform='panels')
-                host.bind('<Configure>', lambda event, g=group: self._layout_group(g, event))
-            else:
-                host = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
+        for group, label, icon, pages in self.NAV_GROUPS:
+            host = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
             self.group_frames[group] = host
+            if len(pages) > 1:
+                host.grid_columnconfigure(0, weight=1)
+                host.grid_rowconfigure(1, weight=1)
+                header = ctk.CTkFrame(host, fg_color='transparent')
+                header.grid(row=0, column=0, sticky='ew', padx=28, pady=(23, 10))
+                heading = ctk.CTkFrame(header, fg_color='transparent')
+                heading.pack(anchor='center')
+                LLabel(heading, text='', image=self.icons_active[icon], width=38,
+                       height=38).pack(side='left', padx=(0, 9))
+                LLabel(heading, text=label, font=self._font(23, True),
+                       text_color=TEXT).pack(side='left')
+                ctk.CTkFrame(header, fg_color=BORDER, height=1).pack(
+                    fill='x', pady=(13, 0))
+                content = ctk.CTkScrollableFrame(host, fg_color=BG, corner_radius=0)
+                content.grid(row=1, column=0, sticky='nsew', padx=(18, 8), pady=(0, 12))
+                content.grid_columnconfigure((0, 1), weight=1, uniform='panels')
+                self.group_scroll[group] = content
+                self.group_content[group] = content
+                host.bind('<Configure>', lambda event, g=group: self._layout_group(g, event))
             for index, page in enumerate(pages):
-                frame = host if len(pages) == 1 else ctk.CTkFrame(host, fg_color=BG, corner_radius=0)
+                if len(pages) > 1:
+                    frame = ctk.CTkFrame(content, fg_color=SURFACE_ALT,
+                                         border_color=BORDER, border_width=1, corner_radius=12)
+                    frame.grid(row=0, column=index, sticky='nsew',
+                               padx=(0, 9) if index == 0 else (9, 0), pady=(8, 12))
+                else:
+                    frame = host
                 self.frames[page] = frame
                 setattr(self, f'frame_{frame_attrs[page]}', frame)
-                if len(pages) > 1:
-                    frame.grid(row=0, column=index, sticky='nsew',
-                               padx=(0, 5) if index == 0 else (5, 0))
 
         self._setup_functions = {
             'Dashboard': self._setup_dashboard_frame, 'Cleaning': self._setup_cleaning_frame,
@@ -237,8 +253,8 @@ class PanaceaApp(ctk.CTk):
         for name in ('dashboard', 'clean', 'disk', 'tools', 'apps', 'turbo', 'resurrect'):
             idle = make_icon(name, '#a5b5cd', 96)
             active = make_icon(name, COL_GOLD, 96)
-            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(31, 31))
-            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(31, 31))
+            self.icons[name] = ctk.CTkImage(light_image=idle, dark_image=idle, size=(35, 35))
+            self.icons_active[name] = ctk.CTkImage(light_image=active, dark_image=active, size=(35, 35))
         for name in ('cpu', 'memory', 'drive', 'scan', 'restore', 'updates'):
             color = COL_GOLD if name in ('drive', 'restore') else COL_BLUE
             icon = make_icon(name, color, 96)
@@ -249,13 +265,13 @@ class PanaceaApp(ctk.CTk):
         self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(74, 74))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=278, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame = ctk.CTkFrame(self, width=302, corner_radius=0, fg_color='#0e192b')
         self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        brand.grid(row=0, column=0, rowspan=2, padx=(10, 7), pady=(18, 26), sticky='ew')
+        brand.grid(row=0, column=0, rowspan=2, padx=(10, 7), pady=(18, 38), sticky='ew')
         LLabel(brand, image=self.brand_icon, text='', width=74, height=74).grid(
             row=0, column=0, padx=(0, 7))
         lettering = ctk.CTkFrame(brand, fg_color='transparent')
@@ -271,9 +287,9 @@ class PanaceaApp(ctk.CTk):
         self.nav_buttons = {}
         for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=251, height=50, anchor='w',
+                                  secondary=True, width=272, height=52, anchor='w',
                                   image=self.icons[icon], compound='left')
-            button.configure(font=self._font(15, semibold=True))
+            button.configure(font=self._font(16, semibold=True))
             button.grid(row=row, column=0, padx=11, pady=6, sticky='ew')
             self.nav_buttons[name] = button
         ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(
@@ -281,59 +297,51 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=12, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(0, weight=1)
-        self.footer_developer = LLabel(
-            self.sidebar_footer, text='Developed by Maurizio Falconi',
-            height=16, font=self._font(10), text_color=MUTED, anchor='w')
-        self.footer_developer.grid(row=1, column=0, sticky='ew', pady=(3, 0))
-        byline = ctk.CTkFrame(self.sidebar_footer, fg_color='transparent')
-        byline.grid(row=2, column=0, sticky='ew')
-        byline.grid_columnconfigure(1, weight=1)
         self.footer_credit = LLabel(
-            byline, text='falker47', height=17, text_color=COL_GOLD,
-            font=self._font(11, semibold=True), cursor='hand2', anchor='w')
-        self.footer_credit.grid(row=0, column=0, sticky='w')
+            self.sidebar_footer, text='Panacea 2026 — Maurizio Falconi (falker47)',
+            height=19, font=self._font(10, semibold=True),
+            text_color=COL_GOLD, cursor='hand2', anchor='w')
+        self.footer_credit.grid(row=1, column=0, sticky='ew', pady=(4, 2))
         self.footer_credit.bind(
-            '<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
+            '<Button-1>', lambda event: webbrowser.open('https://github.com/falker47'))
         self.footer_version = LLabel(
-            byline, text=f'v{VERSION}', height=17, font=self._font(10),
-            text_color=MUTED, anchor='e')
-        self.footer_version.grid(row=0, column=1, sticky='e')
+            self.sidebar_footer, text=f'v{VERSION}', height=16,
+            font=self._font(10), text_color=MUTED, anchor='e')
+        self.footer_version.grid(row=2, column=0, sticky='ew')
         self._sidebar_brand = brand
         self._sidebar_compact = None
         self.sidebar_frame.bind('<Configure>', self._adjust_sidebar_height)
 
     def _adjust_sidebar_height(self, event):
         """Keep the update and attribution footer fixed on small DPI-scaled windows."""
-        compact = event.height / max(self.sidebar_frame._get_widget_scaling(), 0.01) < 590
+        compact = event.height / max(self.sidebar_frame._get_widget_scaling(), 0.01) < 620
         if self._sidebar_compact == compact:
             return
         self._sidebar_compact = compact
-        self._sidebar_brand.grid_configure(pady=(5, 3) if compact else (18, 26))
+        self._sidebar_brand.grid_configure(pady=(6, 10) if compact else (18, 38))
         for button in self.nav_buttons.values():
-            button.configure(height=42 if compact else 50)
-            button.grid_configure(pady=1 if compact else 6)
+            button.configure(height=44 if compact else 52)
+            button.grid_configure(pady=2 if compact else 6)
 
     def _layout_group(self, group, event):
-        """Default to parallel panels; stack only when neither can remain readable."""
+        """One shared scroll surface, with spacious cards stacked when narrow."""
         host = self.group_frames[group]
         width = event.width / max(host._get_widget_scaling(), 0.01)
-        stacked = width < 610
+        stacked = width < 1000
         if self._group_stacked.get(group) == stacked:
             return
         self._group_stacked[group] = stacked
+        content = self.group_content[group]
         pages = next(pages for root, _, _, pages in self.NAV_GROUPS if root == group)
-        host.grid_columnconfigure(0, weight=1, uniform='' if stacked else 'panels')
-        host.grid_columnconfigure(1, weight=0 if stacked else 1,
-                                  uniform='' if stacked else 'panels')
-        host.grid_rowconfigure(0, weight=1, uniform='rows' if stacked else '')
-        host.grid_rowconfigure(1, weight=1 if stacked else 0,
-                               uniform='rows' if stacked else '')
+        content.grid_columnconfigure(0, weight=1, uniform='' if stacked else 'panels')
+        content.grid_columnconfigure(1, weight=0 if stacked else 1,
+                                     uniform='' if stacked else 'panels')
         for index, page in enumerate(pages):
             self.frames[page].grid_configure(
                 row=index if stacked else 0, column=0 if stacked else index,
-                padx=(0, 0) if stacked else ((0, 5) if index == 0 else (5, 0)),
-                pady=(0, 3) if stacked and index == 0 else
-                     (3, 0) if stacked else 0)
+                sticky='ew' if stacked else 'nsew',
+                padx=(7, 12) if stacked else ((7, 10) if index == 0 else (10, 7)),
+                pady=(10, 4) if stacked and index == 0 else (10, 15))
 
     def select_frame(self, name):
         if name not in self.frames:
@@ -368,24 +376,16 @@ class PanaceaApp(ctk.CTk):
         bar.grid_columnconfigure(0, weight=1)
         self.app_update_status = LLabel(
             bar, text='Checking Panacea updates…', anchor='w',
-            text_color=MUTED, font=self._font(11), justify='left', wraplength=222)
-        self.app_update_status.grid(row=0, column=0, sticky='ew', padx=11, pady=(10, 4))
+            text_color=MUTED, font=self._font(11), justify='left', wraplength=256)
+        self.app_update_status.grid(row=0, column=0, sticky='ew', padx=11, pady=(10, 9))
+        # All actions start hidden; normal up-to-date state never has a button.
         self.btn_check_update = self._button(
-            bar, 'Check updates', self._check_app_update, secondary=True, height=30)
-        self.btn_check_update.grid(row=1, column=0, sticky='ew', padx=9, pady=(0, 9))
+            bar, 'Retry check', self._check_app_update, secondary=True, height=30)
         self.update_actions = ctk.CTkFrame(bar, fg_color='transparent')
-        self.update_actions.grid_columnconfigure((0, 1), weight=1, uniform='updater')
+        self.update_actions.grid_columnconfigure(0, weight=1)
         self.btn_update_install = self._button(
-            self.update_actions, 'Download / install', self._auto_update, height=29)
-        self.btn_update_notes = self._button(
-            self.update_actions, 'Release notes', self._show_release_notes,
-            secondary=True, height=29)
-        self.btn_update_defer = self._button(
-            self.update_actions, 'Defer', self._defer_update, secondary=True, height=29)
-        self.btn_update_install.grid(row=0, column=0, columnspan=2,
-                                     sticky='ew', padx=8, pady=(0, 5))
-        self.btn_update_notes.grid(row=1, column=0, sticky='ew', padx=(8, 3), pady=(0, 8))
-        self.btn_update_defer.grid(row=1, column=1, sticky='ew', padx=(3, 8), pady=(0, 8))
+            self.update_actions, 'Install update', self._auto_update, height=32)
+        self.btn_update_install.grid(row=0, column=0, sticky='ew', padx=9)
 
     def _setup_dashboard_frame(self):
         outer = self.frame_dashboard
@@ -536,10 +536,11 @@ class PanaceaApp(ctk.CTk):
             ])
 
     def _section_body(self, frame, title, detail):
+        """Child of a shared-scroll card, not a second scrollable pane."""
         self._header(frame, title, detail, compact=True)
-        frame.grid_rowconfigure(1, weight=1)
-        body = ctk.CTkScrollableFrame(frame, fg_color=BG, corner_radius=0)
-        body.grid(row=1, column=0, sticky='nsew', padx=14, pady=(0, 8))
+        frame.grid_rowconfigure(1, weight=0)
+        body = ctk.CTkFrame(frame, fg_color='transparent')
+        body.grid(row=1, column=0, sticky='ew', padx=16, pady=(0, 16))
         body.grid_columnconfigure(0, weight=1)
         return body
 
@@ -577,15 +578,25 @@ class PanaceaApp(ctk.CTk):
         if active and active != section:
             self.select_frame(section)
         entry = self.__dict__.get('_section_logs', {}).get(attribute)
-        if entry and isinstance(entry[3], ctk.CTkScrollableFrame):
+        if entry:
             body = entry[3]
-            def reveal():
-                # CTk updates the scrollregion after packing the textbox. Flush
-                # geometry before this one-time reveal, never on streamed lines.
-                body.update_idletasks()
-                if self.__dict__.get('_section_log_open', {}).get(attribute):
-                    body._parent_canvas.yview_moveto(1.0)
-            self.after_idle(reveal)
+            if not isinstance(body, ctk.CTkScrollableFrame):
+                group = next((root for root, _, _, pages in self.NAV_GROUPS
+                              if section in pages), None)
+                body = self.__dict__.get('group_scroll', {}).get(group)
+            if isinstance(body, ctk.CTkScrollableFrame):
+                def reveal():
+                    body.update_idletasks()
+                    if not self.__dict__.get('_section_log_open', {}).get(attribute):
+                        return
+                    canvas = body._parent_canvas
+                    bounds = canvas.bbox('all')
+                    if bounds:
+                        span = max(1, bounds[3] - bounds[1])
+                        current = canvas.yview()[0] * span
+                        target = log.master.winfo_rooty() - canvas.winfo_rooty() + current
+                        canvas.yview_moveto(max(0, min(1, (target - 16) / span)))
+                self.after_idle(reveal)
 
     def _action_row(self, parent, title, detail, label, command, *, maintenance=False, icon=None):
         row = ctk.CTkFrame(parent, fg_color='transparent')
@@ -1614,31 +1625,39 @@ class PanaceaApp(ctk.CTk):
         from modules.updater import UpdateClient
         if self._shutdown.is_set() or self.workers.busy('app-update') or self._update_installing:
             return
+        self.update_actions.grid_forget()
+        self.btn_check_update.grid_forget()
         self.app_update_status.configure(text='Checking Panacea updates…', text_color=MUTED)
         self.btn_check_update.configure(state='disabled')
+
         def check():
             client = UpdateClient(GITHUB_REPO, VERSION)
             return client, client.check()
+
         def checked(result):
             self.update_client, self._release = result
-            self.update_actions.grid_forget()
             if self._release is None:
-                self.app_update_status.configure(text=f'Panacea {VERSION} is up to date', text_color=MUTED)
+                self.app_update_status.configure(
+                    text='Panacea is already up to date.', text_color=MUTED)
             else:
-                self.app_update_status.configure(text=f'Panacea {self._release.version} available', text_color=COL_BLUE)
-                self.update_actions.grid(row=2, column=0, sticky='ew')
+                self.app_update_status.configure(
+                    text=f'You are using Panacea {VERSION}. Update to version {self._release.version} is available.',
+                    text_color=COL_BLUE)
+                self.btn_update_install.configure(state='normal', text='Install update')
+                self.update_actions.grid(row=1, column=0, sticky='ew', pady=(0, 9))
+
         def failed(exc):
-            self.app_update_status.configure(text=f'Update check failed: {exc}', text_color=COL_WARNING)
+            self._release = None
+            self.app_update_status.configure(
+                text=f'Update check failed: {exc}', text_color=COL_WARNING)
             self.btn_check_update.configure(text='Retry check')
-        self.workers.start('app-update-check', check, group='app-update', on_success=checked, on_error=failed, on_done=lambda: self.btn_check_update.configure(state='normal'))
+            self.btn_check_update.grid(row=1, column=0, sticky='ew',
+                                       padx=9, pady=(0, 9))
 
-    def _defer_update(self):
-        self.update_actions.grid_forget()
-        self.app_update_status.configure(text='Update deferred · Use Check updates when ready', text_color=MUTED)
-
-    def _show_release_notes(self):
-        if self._release:
-            webbrowser.open(self._release.release_url)
+        self.workers.start(
+            'app-update-check', check, group='app-update', on_success=checked,
+            on_error=failed,
+            on_done=lambda: self.btn_check_update.configure(state='normal'))
 
     @staticmethod
     def _is_newer(remote, local):
@@ -1677,7 +1696,6 @@ class PanaceaApp(ctk.CTk):
                 return start_self_update(staged, Path(sys.executable), release, client)
             self.workers.start('prepare-update', prepare, group='update-install', on_success=self._update_prepared, on_error=self._update_failed)
         self.btn_update_install.configure(state='disabled')
-        self.btn_check_update.configure(state='disabled')
         self._set_maintenance_state(True)
         self.app_update_status.configure(text='Downloading and verifying…', text_color=COL_BLUE)
         self.workers.start('download-update', download, group='app-update', on_success=downloaded, on_error=self._update_failed)
@@ -1712,10 +1730,9 @@ class PanaceaApp(ctk.CTk):
         self._update_job = None
         self._set_maintenance_state(False)
         self.btn_update_install.configure(state='normal', text='Retry install')
-        self.btn_check_update.configure(state='normal')
         self.app_update_status.configure(text=f'Update failed: {exc}', text_color=COL_WARNING)
         self._remove_update_download()
-        self._show_toast('Update failed', f'{exc}\nUse Release notes for manual download.', 'error')
+        self._show_toast('Update failed', f'{exc}\nRetry the install or download the release manually from GitHub.', 'error')
 
     def _remove_update_download(self):
         # Never enumerate/delete updater or backup files. Download verification cleans

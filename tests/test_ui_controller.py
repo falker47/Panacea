@@ -363,34 +363,32 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             dashboard_canvas.yview_moveto(0)
             app.update()
             labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
-            version, credit, developer = (
-                app.footer_version, app.footer_credit, app.footer_developer)
+            version, credit = app.footer_version, app.footer_credit
             expect(version.cget('text') == f'v{panacea_ui.VERSION}',
                    'Footer must show current version')
-            expect(credit.cget('text') == 'falker47',
-                   'Footer must identify the repository author')
-            expect('Maurizio Falconi' in developer.cget('text'),
-                   'Footer must include developer attribution')
-            expect(abs(baseline(version) - baseline(credit)) <= 2 * scale,
-                   'Version and credit should share a baseline')
-            expect(_native_bounds(credit)[2] <= _native_bounds(version)[0],
-                   'Footer attribution must not overlap the version')
-            expect(_native_bounds(app.update_bar)[3] <= _native_bounds(developer)[1],
-                   'Update controls must precede attribution in the bottom footer')
+            expect(credit.cget('text') == 'Panacea 2026 — Maurizio Falconi (falker47)',
+                   'Footer credit must contain the full attribution')
+            expect(_native_bounds(credit)[3] <= _native_bounds(version)[1] + 2,
+                   'Footer version should sit below the linked credit')
+            expect(_native_bounds(app.update_bar)[3] <= _native_bounds(credit)[1],
+                   'Update status must precede attribution')
+            expect(not app.btn_check_update.winfo_manager(),
+                   'Do not show an update button while checking')
             sidebar = _native_bounds(app.sidebar_frame)
-            footer_bottom = max(_native_bounds(version)[3], _native_bounds(credit)[3])
+            footer_bottom = _native_bounds(version)[3]
             insets = (_native_bounds(credit)[0] - sidebar[0],
-                      sidebar[2] - _native_bounds(version)[2], sidebar[3] - footer_bottom)
+                      sidebar[2] - _native_bounds(version)[2],
+                      sidebar[3] - footer_bottom)
             footer_insets.append(insets)
-            expect(all(0 <= inset <= 20 * scale for inset in insets),
+            expect(all(0 <= inset <= 22 * scale for inset in insets),
                    f'Footer edge insets too large: {insets}')
-            for label in (version, credit, developer, app.app_update_status, app.btn_check_update):
+            for label in (version, credit, app.app_update_status):
                 inside(label, app.sidebar_frame, 'Footer')
             title = next(label for label in labels if label.cget('text') == 'Panacea')
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
-            expect(all(icon.cget('size') == (31, 31) for icon in app.icons.values()), 'Sidebar navigation icons must be 31px')
+            expect(all(icon.cget('size') == (35, 35) for icon in app.icons.values()), 'Sidebar navigation icons must be 35px')
             expect(app.brand_icon.cget('size') == (74, 74), 'Original brand logo should render at 74px')
             for branding in (app.brand_title, app.brand_tagline):
                 inside(branding, app.sidebar_frame, 'Sidebar branding')
@@ -401,10 +399,13 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                        f'Branding text clips: {branding.cget("text")}')
             expect(app.brand_title.cget('font').cget('size') == 32, 'Panacea title is undersized')
             expect(app.brand_tagline.cget('font').cget('size') == 12, 'System maintenance subtitle is undersized')
+            expect(_native_bounds(app.nav_buttons['Dashboard'])[1] -
+                   _native_bounds(app._sidebar_brand)[3] >= 5 * scale,
+                   'The navigation needs breathing room below branding')
             for root, label, _, _ in app.NAV_GROUPS:
                 button = app.nav_buttons[root]
                 expect(button.cget('text') == label, f'{root} navigation label changed')
-                expect(button.cget('font').cget('size') == 15, f'{root} navigation font is undersized')
+                expect(button.cget('font').cget('size') == 16, f'{root} navigation font is undersized')
                 expect(button.cget('font').cget('family') == 'Segoe UI Semibold',
                        f'{root} navigation font should be semibold')
                 inside(button, app.sidebar_frame, root + ' navigation')
@@ -1077,7 +1078,11 @@ def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch):
             assert host.winfo_ismapped()
             assert not hasattr(app, 'subnav_frames')
             assert all(app.frames[page].winfo_ismapped() for page in pages)
-            assert app.frames[pages[0]].winfo_rootx() < app.frames[pages[1]].winfo_rootx()
+            assert app.frames[pages[0]].winfo_rooty() < app.frames[pages[1]].winfo_rooty()
+            assert app.frames[pages[0]].master is app.frames[pages[1]].master
+            assert app.frames[pages[0]].master is app.group_scroll[group]
+            assert not any(isinstance(widget, panacea_ui.ctk.CTkScrollableFrame)
+                           for page in pages for widget in app.frames[page].winfo_children())
     finally:
         _destroy_real_app(app)
 
@@ -1092,11 +1097,11 @@ def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch
         app.update()
         assert app.language == 'it'
         assert 'Manutenzione del sistema' in app.title()
-        assert app.brand_tagline.cget('text') == 'MANUTENZIONE SISTEMA'
+        assert app.brand_tagline.cget('text') == 'SYSTEM MAINTENANCE'
         assert app.nav_buttons['Cleaning'].cget('text') == 'Spazio e pulizia'
         assert app.nav_buttons['Resurrect'].cget('text') == 'Manutenzione guidata'
-        assert app.btn_check_update.cget('text') == 'Cerca aggiornamenti'
-        assert 'Maurizio Falconi' in app.footer_developer.cget('text')
+        assert not app.btn_check_update.winfo_manager()
+        assert app.footer_credit.cget('text') == 'Panacea 2026 — Maurizio Falconi (falker47)'
         app.select_frame('Cleaning')
         app.update()
         assert app.frame_apps.winfo_ismapped()
@@ -1114,3 +1119,59 @@ def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch
         assert not app.workers.busy()
     finally:
         _destroy_real_app(app)
+
+def _mock_update_check(monkeypatch, release=None, error=None):
+    """Exercise UI state without downloading a release or opening Tk."""
+    from modules import updater
+    app = app_without_window()
+    app._update_installing = False
+    app.app_update_status = Mock()
+    app.btn_check_update = Mock()
+    app.btn_update_install = Mock()
+    app.update_actions = Mock()
+    app.workers = Mock()
+    app.workers.busy.return_value = False
+    client = Mock()
+    if error is not None:
+        client.check.side_effect = RuntimeError(error)
+    else:
+        client.check.return_value = release
+    monkeypatch.setattr(updater, 'UpdateClient', lambda *args: client)
+
+    def start(name, operation, **callbacks):
+        try:
+            callbacks['on_success'](operation())
+        except Exception as exc:
+            callbacks['on_error'](exc)
+        callbacks['on_done']()
+
+    app.workers.start.side_effect = start
+    app._check_app_update()
+    return app
+
+
+def test_update_footer_has_no_actions_when_already_current(monkeypatch):
+    app = _mock_update_check(monkeypatch)
+    app.app_update_status.configure.assert_any_call(
+        text='Panacea is already up to date.', text_color=panacea_ui.MUTED)
+    app.update_actions.grid.assert_not_called()
+    app.btn_check_update.grid.assert_not_called()
+
+
+def test_update_footer_has_only_install_action_for_available_release(monkeypatch):
+    release = SimpleNamespace(version='2.0.3')
+    app = _mock_update_check(monkeypatch, release=release)
+    app.app_update_status.configure.assert_any_call(
+        text=f'You are using Panacea {panacea_ui.VERSION}. Update to version 2.0.3 is available.',
+        text_color=panacea_ui.COL_BLUE)
+    app.btn_update_install.configure.assert_any_call(state='normal', text='Install update')
+    app.update_actions.grid.assert_called_once()
+    app.btn_check_update.grid.assert_not_called()
+
+
+def test_update_footer_offers_retry_only_after_check_error(monkeypatch):
+    app = _mock_update_check(monkeypatch, error='network offline')
+    app.update_actions.grid.assert_not_called()
+    app.btn_check_update.grid.assert_called_once()
+    app.app_update_status.configure.assert_any_call(
+        text='Update check failed: network offline', text_color=panacea_ui.COL_WARNING)

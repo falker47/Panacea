@@ -15,17 +15,17 @@ LOCALE_FILE = "panacea-language.ini"
 
 # English copy remains canonical in the UI; only visible presentation is mapped.
 _PAIRS = """
-SYSTEM MAINTENANCE => MANUTENZIONE SISTEMA
 System maintenance => Manutenzione del sistema
 Overview => Panoramica
 Space & Cleanup => Spazio e pulizia
 Diagnostics & Repair => Diagnostica e riparazione
 Performance & Startup => Prestazioni e avvio
 Guided Maintenance => Manutenzione guidata
-Developed by Maurizio Falconi => Sviluppato da Maurizio Falconi
+Panacea is already up to date. => Panacea è già aggiornato all'ultima versione.
 Checking Panacea updates… => Verifica aggiornamenti Panacea…
 Check updates => Cerca aggiornamenti
 Retry check => Riprova controllo
+Install update => Installa aggiornamento
 Download / install => Scarica / installa
 Release notes => Note di rilascio
 Defer => Rimanda
@@ -310,6 +310,8 @@ WARNINGS = {
 PATTERNS = [
     (r"^Panacea ([\w.]+) is up to date$", r"Panacea \1 è aggiornato"),
     (r"^Panacea ([\w.]+) available$", r"Panacea \1 disponibile"),
+    (r"^You are using Panacea ([\w.+-]+)\. Update to version ([\w.+-]+) is available\.$",
+     r"Stai usando Panacea \1. È disponibile l'aggiornamento alla versione \2."),
     (r"^Uptime: (.+)$", r"Attività: \1"),
     (r"^Power: (.+)$", r"Alimentazione: \1"),
     (r"^Battery: (.+)$", r"Batteria: \1"),

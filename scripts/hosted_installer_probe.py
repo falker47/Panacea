@@ -23,6 +23,7 @@ from modules.update_install import (  # noqa: E402
     _assert_admin_directory, _assert_admin_file, install_verified, readiness_path)
 from modules.updater import parse_checksum, verify_file  # noqa: E402
 from scripts.build_installer import validate_setup  # noqa: E402
+from modules.localization import read_installed_language  # noqa: E402
 
 
 def disposable_guard():
@@ -81,13 +82,18 @@ def actual_install_test(args):
     installed = False
     try:
         run_checked([setup, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-                     "/NOCLOSEAPPLICATIONS", f"/DIR={dest}"])
+                     "/NOCLOSEAPPLICATIONS", "/LANG=italian", f"/DIR={dest}"])
         installed = True
         app = dest / "Panacea.exe"
         verify_file(app, expected, portable.stat().st_size)
         _assert_admin_directory(dest)
         _assert_admin_file(app)
         report["checks"]["protected_program_files_and_asset"] = "PASS"
+        language_file = dest / "panacea-language.ini"
+        if (read_installed_language(app) != "it" or
+                "Language=italian" not in language_file.read_text(encoding="utf-8")):
+            raise RuntimeError("Installed UI language was not saved as Italian.")
+        report["checks"]["installer_italian_persisted"] = "PASS"
 
         if not start_link.is_file():
             raise RuntimeError("Panacea Start Menu shortcut was not created.")
@@ -150,6 +156,9 @@ def actual_install_test(args):
             else:
                 raise RuntimeError("Installed app did not acknowledge real GUI startup.")
             verify_file(app, expected, portable.stat().st_size)
+            if read_installed_language(app) != "it":
+                raise RuntimeError("EXE-only update lost installed language selection.")
+            report["checks"]["installer_language_survives_update"] = "PASS"
             report["checks"]["installed_exe_in_place_restart_ready"] = "PASS"
         finally:
             if child is not None:
@@ -183,6 +192,9 @@ def actual_install_test(args):
         if app.exists():
             tail = uninstall_log.read_text(encoding="utf-8", errors="replace")[-2500:] if uninstall_log.exists() else "(no uninstaller log)"
             raise RuntimeError("Uninstaller exited but Panacea.exe still exists: " + str(app) + " | Log: " + tail)
+        if language_file.exists():
+            raise RuntimeError("Uninstaller left the installer-owned language sidecar.")
+        report["checks"]["installer_language_removed_on_uninstall"] = "PASS"
         if sentinel.read_text(encoding="utf-8") != "PRESERVE":
             raise RuntimeError("Uninstaller modified an unrelated sentinel.")
         verify_file(portable, expected, portable.stat().st_size)

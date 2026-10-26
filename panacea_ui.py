@@ -1060,6 +1060,7 @@ class PanaceaApp(ctk.CTk):
             self._resurrection_cards[name] = phase
             self._resurrection_info_labels[name] = explanation
             self._resurrection_phases.append(phase)
+        self._resurrection_timeline = timeline
         self._resurrection_two_columns = None
         timeline.bind('<Configure>', self._layout_resurrection_timeline, add='+')
         self._section_log(body, 'god_log', 'Full sequence output')
@@ -1083,12 +1084,14 @@ class PanaceaApp(ctk.CTk):
         return available < 630
 
     def _layout_resurrection_timeline(self, event):
-        available = event.width / max(event.widget._get_widget_scaling(), 0.01)
+        # CustomTkinter forwards <Configure> from an internal Canvas, not
+        # the CTkFrame whose grid owns the step cards.
+        timeline = self._resurrection_timeline
+        available = event.width / max(timeline._get_widget_scaling(), 0.01)
         two_columns = not self._steps_need_stack(available)
         if self._resurrection_two_columns == two_columns:
             return
         self._resurrection_two_columns = two_columns
-        timeline = event.widget
         timeline.grid_columnconfigure(0, weight=1, uniform='steps' if two_columns else '')
         timeline.grid_columnconfigure(1, weight=1 if two_columns else 0,
                                       uniform='steps' if two_columns else '')

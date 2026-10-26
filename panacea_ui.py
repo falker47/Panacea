@@ -43,6 +43,19 @@ ctk.set_default_color_theme('dark-blue')
 
 class PanaceaApp(ctk.CTk):
     LOG_LINES = 500
+    # Five primary destinations; existing screens remain available as lazy subviews.
+    NAV_GROUPS = (
+        ('Dashboard', 'Overview', 'dashboard', ('Dashboard',)),
+        ('Cleaning', 'Space & Cleanup', 'clean', ('Cleaning', 'Apps')),
+        ('Tools', 'Diagnostics & Repair', 'tools', ('Tools', 'Disk')),
+        ('Turbo', 'Performance & Startup', 'turbo', ('Turbo', 'Startup')),
+        ('Resurrect', 'Guided Maintenance', 'resurrect', ('Resurrect',)),
+    )
+    SUBVIEW_LABELS = {
+        'Cleaning': 'Cleanup', 'Apps': 'Installed apps',
+        'Tools': 'Repair tools', 'Disk': 'Drive optimization',
+        'Turbo': 'Performance settings', 'Startup': 'Startup apps',
+    }
 
     def __init__(self):
         super().__init__()
@@ -85,26 +98,31 @@ class PanaceaApp(ctk.CTk):
             pass
         self._load_icons()
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
         self._setup_sidebar()
         self._setup_update_bar()
+        self._setup_subnav()
         self.frames = {}
-        for name, attr in [('Dashboard', 'dashboard'), ('Cleaning', 'cleaning'), ('Disk', 'disk'), ('Tools', 'tools'), ('Apps', 'apps'), ('Turbo', 'turbo'), ('Resurrect', 'resurrect')]:
+        for name, attr in [('Dashboard', 'dashboard'), ('Cleaning', 'cleaning'),
+                           ('Apps', 'apps'), ('Tools', 'tools'), ('Disk', 'disk'),
+                           ('Turbo', 'turbo'), ('Startup', 'startup'), ('Resurrect', 'resurrect')]:
             frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
             self.frames[name] = frame
             setattr(self, f'frame_{attr}', frame)
-        self._setup_functions = {'Dashboard': self._setup_dashboard_frame, 'Cleaning': self._setup_cleaning_frame,
-                                 'Disk': self._setup_disk_frame, 'Tools': self._setup_tools_frame,
-                                 'Apps': self._setup_apps_frame, 'Turbo': self._setup_turbo_frame,
-                                 'Resurrect': self._setup_resurrect_frame}
+        self._setup_functions = {
+            'Dashboard': self._setup_dashboard_frame, 'Cleaning': self._setup_cleaning_frame,
+            'Apps': self._setup_apps_frame, 'Tools': self._setup_tools_frame,
+            'Disk': self._setup_disk_frame, 'Turbo': self._setup_turbo_frame,
+            'Startup': self._setup_startup_frame, 'Resurrect': self._setup_resurrect_frame,
+        }
         self._built_frames = set()
         self.operation_label = ctk.CTkLabel(self, text='Ready · No operation running', text_color=MUTED, anchor='w', font=self._font(11))
-        self.operation_label.grid(row=2, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
+        self.operation_label.grid(row=3, column=1, sticky='ew', padx=(28, 22), pady=(2, 10))
         self.operation_label.bind('<Configure>', lambda event: self.operation_label.configure(wraplength=max(200, event.width / self.operation_label._get_widget_scaling() - 4)))
         if self._maintenance_uncertain:
             self.operation_label.configure(text=self.maintenance_guard.last_error, text_color=COL_WARNING)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
-        for index, name in enumerate(self.frames, 1):
+        for index, (name, _, _, _) in enumerate(self.NAV_GROUPS, 1):
             self.bind(f'<Control-Key-{index}>', lambda event, n=name: self.select_frame(n))
         self.select_frame('Dashboard')
         self.after(20, self._drain_callbacks)
@@ -171,11 +189,11 @@ class PanaceaApp(ctk.CTk):
         self.brand_icon = ctk.CTkImage(light_image=original, dark_image=original, size=(51, 51))
 
     def _setup_sidebar(self):
-        self.sidebar_frame = ctk.CTkFrame(self, width=190, corner_radius=0, fg_color='#0e192b')
-        self.sidebar_frame.grid(row=0, column=0, rowspan=3, sticky='nsew')
+        self.sidebar_frame = ctk.CTkFrame(self, width=228, corner_radius=0, fg_color='#0e192b')
+        self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky='nsew')
         self.sidebar_frame.grid_propagate(False)
         self.sidebar_frame.grid_columnconfigure(0, weight=1)
-        self.sidebar_frame.grid_rowconfigure(9, weight=1)
+        self.sidebar_frame.grid_rowconfigure(7, weight=1)
         brand = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         brand.grid(row=0, column=0, rowspan=2, padx=11, pady=(18, 20), sticky='ew')
         ctk.CTkLabel(brand, image=self.brand_icon, text='', width=51, height=51).grid(row=0, column=0, padx=(0, 8))
@@ -186,19 +204,15 @@ class PanaceaApp(ctk.CTk):
         self.brand_tagline = ctk.CTkLabel(lettering, text='SYSTEM MAINTENANCE', height=12, font=self._font(8), text_color=COL_GOLD, anchor='w')
         self.brand_tagline.pack(anchor='w')
         self.nav_buttons = {}
-        names = [('Dashboard', 'dashboard', 'Dashboard'), ('Cleaning', 'clean', 'Cleanup'),
-                 ('Disk', 'disk', 'Disk'), ('Tools', 'tools', 'Tools'),
-                 ('Apps', 'apps', 'Apps'), ('Turbo', 'turbo', 'Turbo'),
-                 ('Resurrect', 'resurrect', 'Resurrection')]
-        for row, (name, icon, label) in enumerate(names, 2):
+        for row, (name, label, icon, _) in enumerate(self.NAV_GROUPS, 2):
             button = self._button(self.sidebar_frame, label, lambda n=name: self.select_frame(n),
-                                  secondary=True, width=163, height=38, anchor='w',
+                                  secondary=True, width=205, height=40, anchor='w',
                                   image=self.icons[icon], compound='left')
             button.grid(row=row, column=0, padx=10, pady=3, sticky='ew')
             self.nav_buttons[name] = button
-        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=10, column=0, sticky='ew', padx=17, pady=(10, 6))
+        ctk.CTkFrame(self.sidebar_frame, fg_color=BORDER, height=1).grid(row=8, column=0, sticky='ew', padx=17, pady=(10, 6))
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
-        self.sidebar_footer.grid(row=11, column=0, sticky='ew', padx=14, pady=(0, 10))
+        self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=14, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(1, weight=1)
         footer = ctk.CTkLabel(self.sidebar_footer, text=f'© {datetime.now().year} falker47',
                               height=18, text_color=MUTED, font=self._font(10), cursor='hand2')
@@ -206,6 +220,21 @@ class PanaceaApp(ctk.CTk):
         footer.bind('<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
         ctk.CTkLabel(self.sidebar_footer, text=f'v{VERSION}', height=18, text_color=MUTED,
                      font=self._font(10), anchor='e').grid(row=0, column=1, sticky='e')
+
+    def _setup_subnav(self):
+        """Compact secondary navigation for groups containing more than one view."""
+        self.subnav_frames, self.subnav_buttons = {}, {}
+        for group, _, _, pages in self.NAV_GROUPS:
+            if len(pages) < 2:
+                continue
+            strip = ctk.CTkFrame(self, fg_color='transparent', corner_radius=0)
+            for index, page in enumerate(pages):
+                button = self._button(strip, self.SUBVIEW_LABELS[page],
+                                      lambda p=page: self.select_frame(p),
+                                      secondary=True, height=30, width=166)
+                button.grid(row=0, column=index, padx=(0, 8))
+                self.subnav_buttons[page] = button
+            self.subnav_frames[group] = strip
 
     def select_frame(self, name):
         if name not in self.frames:
@@ -215,16 +244,26 @@ class PanaceaApp(ctk.CTk):
             self._built_frames.add(name)
         for frame in self.frames.values():
             frame.grid_forget()
-        self.frames[name].grid(row=1, column=1, sticky='nsew', padx=(6, 0))
-        self.active_frame = name
+        self.frames[name].grid(row=2, column=1, sticky='nsew', padx=(6, 0))
+        group = next((root for root, _, _, pages in self.NAV_GROUPS if name in pages), name)
+        self.active_frame, self.active_group = name, group
+        for root, strip in self.__dict__.get('subnav_frames', {}).items():
+            strip.grid_forget()
+            if root == group:
+                strip.grid(row=1, column=1, sticky='w', padx=(24, 12), pady=(6, 3))
+        for page, button in self.__dict__.get('subnav_buttons', {}).items():
+            active = page == name
+            button.configure(fg_color='#263a56' if active else SURFACE_ALT,
+                             border_color=COL_GOLD if active else BORDER,
+                             text_color=TEXT if active else MUTED)
         for key, button in self.nav_buttons.items():
-            selected = key == name
-            icon_key = {'Cleaning': 'clean', 'Resurrect': 'resurrect'}.get(key, key.lower())
-            icon_set = getattr(self, 'icons_active' if selected else 'icons', None)
+            selected = key == group
+            icon_key = next((icon for root, _, icon, _ in self.NAV_GROUPS if root == key), key.lower())
+            icon_set = self.__dict__.get('icons_active' if selected else 'icons', {})
             kwargs = {'fg_color': '#263a56' if selected else 'transparent',
                       'border_color': COL_GOLD if selected else '#0e192b',
                       'text_color': TEXT if selected else MUTED}
-            if icon_set and icon_key in icon_set:
+            if icon_key in icon_set:
                 kwargs['image'] = icon_set[icon_key]
             button.configure(**kwargs)
 
@@ -250,7 +289,7 @@ class PanaceaApp(ctk.CTk):
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
         frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(frame, text='Dashboard', font=self._font(22, True), anchor='w').grid(
+        ctk.CTkLabel(frame, text='Overview', font=self._font(22, True), anchor='w').grid(
             row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
         # A compact system summary, with a separate truthful Windows Update status.
@@ -487,7 +526,7 @@ class PanaceaApp(ctk.CTk):
         self._section_log(body, 'clean_log', 'Cleanup details')
 
     def _setup_disk_frame(self):
-        body = self._section_body(self.frame_disk, 'Disk', 'Optimize a local drive with the method selected by Windows.')
+        body = self._section_body(self.frame_disk, 'Drive optimization', 'Select a drive; Windows chooses the correct optimization method.')
         card = self._card(body)
         card.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(card, fg_color='transparent')
@@ -513,7 +552,7 @@ class PanaceaApp(ctk.CTk):
         self._set_drives(self.__dict__.get('_drive_info', [{'letter': value} for value in self._drive_values]))
 
     def _setup_tools_frame(self):
-        body = self._section_body(self.frame_tools, 'Tools', 'Choose one diagnostic or repair. Changes require confirmation.')
+        body = self._section_body(self.frame_tools, 'Repair tools', 'Check integrity or repair Windows and network issues.')
         for title, entries in [
             ('WINDOWS INTEGRITY', [('System file scan', 'Verify and repair protected files.', 'sfc /scannow', 'SFC scan'), ('Image health', 'Check the component image for recorded corruption.', 'DISM /Online /Cleanup-Image /CheckHealth', 'DISM health check'), ('Repair image', 'Repair corruption; may use Windows Update.', 'DISM /Online /Cleanup-Image /RestoreHealth', 'DISM repair')]),
             ('NETWORK', [('Flush DNS', 'Clear cached DNS records.', 'ipconfig /flushdns', 'DNS flush'), ('Reset Winsock', 'May interrupt connections and require a restart.', 'netsh winsock reset', 'Network reset')])]:
@@ -529,29 +568,45 @@ class PanaceaApp(ctk.CTk):
         self._section_log(body, 'tools_log', 'Command output')
 
     def _add_tool_btn(self, parent, text, desc, cmd, name):
-        return self._action_row(parent, text, desc, 'Run', lambda: self.run_cmd(cmd, name), maintenance=True)
+        labels = {'SFC scan': 'Scan', 'DISM health check': 'Check', 'DISM repair': 'Repair',
+                  'DNS flush': 'Flush', 'Network reset': 'Reset'}
+        return self._action_row(parent, text, desc, labels.get(name, 'Run'),
+                                lambda: self.run_cmd(cmd, name), maintenance=True)
+
+    def _windows_settings_card(self, body, title, detail, actions, icon):
+        card = self._card(body)
+        card.pack(fill='x', pady=(0, 10))
+        heading = ctk.CTkFrame(card, fg_color='transparent')
+        heading.pack(fill='x', padx=16, pady=(14, 4))
+        ctk.CTkLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
+        ctk.CTkLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
+        ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
+        row = ctk.CTkFrame(card, fg_color='transparent')
+        row.pack(fill='x', padx=16, pady=(0, 14))
+        for text, uri in actions:
+            self._button(row, text, lambda u=uri, t=text: self.run_launch(u, t),
+                         secondary=True, width=150).pack(side='left', padx=(0, 8))
 
     def _setup_apps_frame(self):
-        body = self._section_body(self.frame_apps, 'Apps', 'Manage software and startup behavior in Windows.')
-        for title, detail, actions, icon in [
-            ('Installed apps', 'Review storage use, repair or uninstall apps.', [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps'),
-            ('Startup apps', 'Choose what runs when you sign in.', [('Startup settings', 'ms-settings:startupapps')], 'turbo')]:
-            card = self._card(body)
-            card.pack(fill='x', pady=(0, 10))
-            heading = ctk.CTkFrame(card, fg_color='transparent')
-            heading.pack(fill='x', padx=16, pady=(14, 4))
-            ctk.CTkLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
-            ctk.CTkLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
-            ctk.CTkLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
-            row = ctk.CTkFrame(card, fg_color='transparent')
-            row.pack(fill='x', padx=16, pady=(0, 14))
-            for text, uri in actions:
-                self._button(row, text, lambda u=uri, t=text: self.run_launch(u, t), secondary=True, width=150).pack(side='left', padx=(0, 8))
-        self.apps_status = ctk.CTkLabel(body, text='Windows handles app changes. Return here when finished.', font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
+        body = self._section_body(self.frame_apps, 'Installed apps', 'Review installed software using Windows settings.')
+        self._windows_settings_card(
+            body, 'Installed apps', 'Review storage use, repair or uninstall apps.',
+            [('Apps settings', 'ms-settings:appsfeatures'), ('Classic programs', 'appwiz.cpl')], 'apps')
+        self.apps_status = ctk.CTkLabel(body, text='Windows handles app changes. Return here when finished.',
+                                        font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
         self.apps_status.pack(fill='x', padx=2, pady=5)
 
+    def _setup_startup_frame(self):
+        body = self._section_body(self.frame_startup, 'Startup apps', 'Choose which apps launch when you sign in.')
+        self._windows_settings_card(
+            body, 'Startup apps', 'Review startup impact and disable unnecessary auto-start entries.',
+            [('Startup settings', 'ms-settings:startupapps')], 'turbo')
+        self.startup_status = ctk.CTkLabel(body, text='Windows manages startup changes. Return here when finished.',
+                                           font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
+        self.startup_status.pack(fill='x', padx=2, pady=5)
+
     def _setup_turbo_frame(self):
-        body = self._section_body(self.frame_turbo, 'Turbo', 'Original settings are saved before changes and restored when turned off.')
+        body = self._section_body(self.frame_turbo, 'Performance settings', 'Original settings are saved before changes and restored when turned off.')
         self.turbo_vars, self.turbo_switches = {}, {}
         master = self._card(body)
         master.pack(fill='x', pady=(0, 8))
@@ -1017,12 +1072,18 @@ class PanaceaApp(ctk.CTk):
             else:
                 raise ValueError('Unsupported Windows settings destination')
             self.operation_label.configure(text=f'Opened · {desc} · Continue in Windows', text_color=MUTED)
-            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
-                self.apps_status.configure(text=f'Opened {desc} · Changes are managed in Windows.', text_color=MUTED)
+            if target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                for label_name in ('apps_status', 'startup_status'):
+                    label = self.__dict__.get(label_name)
+                    if label is not None:
+                        label.configure(text=f'Opened {desc} · Changes are managed in Windows.', text_color=MUTED)
         except Exception as exc:
             self.operation_label.configure(text=f'Failed · {desc}: {exc}', text_color=COL_WARNING)
-            if 'apps_status' in self.__dict__ and target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
-                self.apps_status.configure(text=f'{desc} unavailable: {exc}', text_color=COL_WARNING)
+            if target in ('ms-settings:appsfeatures', 'ms-settings:startupapps', 'appwiz.cpl'):
+                for label_name in ('apps_status', 'startup_status'):
+                    label = self.__dict__.get(label_name)
+                    if label is not None:
+                        label.configure(text=f'{desc} unavailable: {exc}', text_color=COL_WARNING)
             self._show_toast(desc, str(exc), 'error')
 
     def run_battery_report(self):

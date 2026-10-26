@@ -166,3 +166,10 @@ def test_natural_dynamic_update_and_maintenance_text_never_mix_languages():
 def test_system_operations_and_updater_errors_keep_information_in_italian(source, expected):
     assert translate(source, 'it') == expected
     assert translate(source, 'en') == source
+
+
+def test_operation_prefixes_localize_after_specific_result_patterns():
+    assert translate('Result: Restart required.', 'it') == 'Risultato: Riavvio necessario.'
+    assert translate('Guided Maintenance: Restart required.', 'it') == (
+        'Manutenzione guidata: Riavvio necessario.')
+    assert translate('Quick cleanup: completed', 'it') == 'Pulizia rapida: completato'

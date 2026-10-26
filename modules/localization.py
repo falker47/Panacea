@@ -518,7 +518,6 @@ PATTERNS = [
     (r"^(\d+) / (\d+) steps$", r"\1 / \2 passaggi"),
     (r"^(.+) steps finished$", r"\1 passaggi terminati"),
     (r"^(.+) finished$", r"\1 completati"),
-    (r"^(.+) automatic steps completed$", r"\1 passaggi automatici completati"),
     (r"^(.+) files deleted$", r"\1 file eliminati"),
     (r"^(.+) files$", r"\1 file"),
     (r"^(.+) skipped$", r"\1 ignorati"),
@@ -561,9 +560,6 @@ PATTERNS = [
      r"La release deve contenere esattamente un file \1."),
     (r"^Maintenance guard records cannot be verified: (.+)$",
      r"Impossibile verificare i record di sicurezza della manutenzione: \1"),
-    (r"^([^:]+): (.+)$", lambda match:
-     f"{translate(match.group(1), 'it')}: {translate(match.group(2), 'it')}"
-     if translate(match.group(1), 'it') != match.group(1) else match.group(0)),
     (r"^Quick cleanup: (.+)$", lambda match: f"Pulizia rapida: {translate(match.group(1), 'it')}"),
     (r"^Quick cleanup failed: (.+)$", r"Pulizia rapida non riuscita: \1"),
     (r"^(\d+)/(\d+) attempted$", r"\1/\2 tentati"),
@@ -580,6 +576,9 @@ PATTERNS = [
     (r"^(.+) MB logical bytes freed$", r"\1 MB logici liberati"),
     (r"^Found (\d+) eligible files\.\.\.$", r"Trovati \1 file idonei…"),
     (r"^Deleted (\d+) files\.\.\.$", r"Eliminati \1 file…"),
+    (r"^([^:]+): (.+)$", lambda match:
+     f"{translate(match.group(1), 'it')}: {translate(match.group(2), 'it')}"
+     if translate(match.group(1), 'it') != match.group(1) else match.group(0)),
 ]
 
 def _normalize(language):

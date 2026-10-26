@@ -32,17 +32,26 @@ def test_unknown_icon_is_a_configuration_error():
 
 
 @pytest.mark.parametrize('size', [20, 24, 30, 36, 96])
-def test_resurrection_is_exact_original_chalice_at_requested_size(size):
-    with Image.open(ROOT / 'assets' / 'panacea_icon.png') as original:
-        expected = original.convert('RGBA').resize((size, size), Image.Resampling.LANCZOS)
-    # Gold gradients and the original border survive even for inactive colors.
-    for color in ('#a5b5cd', '#e4c579', '#76b6e2'):
-        actual = make_icon('resurrect', color, size)
-        assert actual.mode == 'RGBA'
-        assert actual.size == (size, size)
-        assert actual.tobytes() == expected.tobytes()
-        low, high = actual.getchannel('A').getextrema()
-        assert low == 0 and high > 0
+def test_resurrection_keeps_original_chalice_mark_without_the_square_border(size):
+    inactive = make_icon('resurrect', '#a5b5cd', size)
+    active = make_icon('resurrect', '#e4c579', size)
+    assert inactive.mode == active.mode == 'RGBA'
+    assert inactive.size == active.size == (size, size)
+    assert inactive.getchannel('A').tobytes() == active.getchannel('A').tobytes()
+    assert inactive.convert('RGB').getextrema() == tuple(
+        (value, value) for value in ImageColor.getrgb('#a5b5cd'))
+    assert active.getbbox() is not None
+    # The original boxed icon's continuous outer border must not be present.
+    assert all(active.getpixel((0, i))[3] == 0 for i in range(size))
+    assert all(active.getpixel((size - 1, i))[3] == 0 for i in range(size))
+    assert all(active.getpixel((i, 0))[3] == 0 for i in range(size))
+    assert all(active.getpixel((i, size - 1))[3] == 0 for i in range(size))
+
+
+def test_full_brand_image_remains_distinct_from_the_navigation_glyph():
+    with Image.open(ROOT / 'assets' / 'panacea_icon.png') as image:
+        full = image.convert('RGBA').resize((96, 96), Image.Resampling.LANCZOS)
+    assert full.tobytes() != make_icon('resurrect', '#e4c579', 96).tobytes()
 
 
 @pytest.mark.parametrize('color', ['#a5b5cd', '#e4c579', '#76b6e2'])

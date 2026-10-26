@@ -25,6 +25,7 @@ def median(values):
 
 def child(output):
     logging.getLogger("PanaceaLogger").addHandler(logging.NullHandler())
+    sys.path.insert(0, str(ROOT))
     from idle_probe import process_sample
     import customtkinter as ctk
     from panacea_ui import PanaceaApp
@@ -114,10 +115,14 @@ def main():
     samples = []
     for index in range(args.samples):
         path = args.output.with_name(f"{args.output.stem}-sample-{index}.json")
-        subprocess.run(
+        completed = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--child", "--output", str(path)],
-            cwd=ROOT, check=True, timeout=75,
+            cwd=ROOT, check=False, timeout=75, capture_output=True, text=True,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if completed.returncode:
+            raise RuntimeError(
+                f"GUI sample {index} failed (exit={completed.returncode}):\n"
+                f"{completed.stdout[-4000:]}\n{completed.stderr[-4000:]}")
         samples.append(json.loads(path.read_text(encoding="utf-8")))
     report = {
         "platform": platform.platform(),

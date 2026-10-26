@@ -75,6 +75,53 @@ def profile_disk_widgets(build):
     }
 
 
+def profile_resurrect_widgets(build):
+    """Trace guided-maintenance widget construction, with overlapping inclusive times.
+
+    Instrumentation stays in the benchmark process; it does not modify the app.
+    """
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    import tkinter as tk
+    import customtkinter as ctk
+    from panacea_ui import PanaceaApp, _LocalizedText
+
+    targets = (
+        ("scroller_init", ctk.CTkScrollableFrame, "__init__"),
+        ("frame_init", ctk.CTkFrame, "__init__"),
+        ("label_init", _LocalizedText, "__init__"),
+        ("button_init", ctk.CTkButton, "__init__"),
+        ("progress_init", ctk.CTkProgressBar, "__init__"),
+        ("card", PanaceaApp, "_card"),
+        ("button", PanaceaApp, "_button"),
+        ("section_log", PanaceaApp, "_section_log"),
+        ("tk_grid", tk.Grid, "grid"),
+        ("tk_grid_configure", tk.Grid, "grid_configure"),
+        ("tk_pack", tk.Pack, "pack"),
+    )
+    measures, counts = {}, {}
+    with ExitStack() as scope:
+        for key, owner, method in targets:
+            original = getattr(owner, method)
+
+            def timed(self, *args, _original=original, _key=key, **kwargs):
+                start = time.perf_counter()
+                try:
+                    return _original(self, *args, **kwargs)
+                finally:
+                    measures[_key] = measures.get(_key, 0.) + (
+                        time.perf_counter() - start) * 1000
+                    counts[_key] = counts.get(_key, 0) + 1
+
+            scope.enter_context(patch.object(owner, method, timed))
+        build()
+    return {
+        key: {"total_ms": round(measures.get(key, 0), 2),
+              "calls": counts.get(key, 0)}
+        for key, _, _ in targets
+    }
+
+
 def child(output):
     logging.getLogger("PanaceaLogger").addHandler(logging.NullHandler())
     sys.path.insert(0, str(ROOT))
@@ -90,6 +137,7 @@ def child(output):
     flush_ms = (time.perf_counter() - started) * 1000 - init_ms
     setup_times = {}
     disk_trace = {}
+    resurrect_trace = {}
     for key, fn in tuple(app._setup_functions.items()):
         def wrap(original, section):
             def traced():
@@ -97,6 +145,9 @@ def child(output):
                 try:
                     if section == "Disk":
                         disk_trace.update(profile_disk_widgets(original))
+                        return None
+                    if section == "Resurrect":
+                        resurrect_trace.update(profile_resurrect_widgets(original))
                         return None
                     return original()
                 finally:
@@ -107,6 +158,7 @@ def child(output):
         "startup": {"constructor_ms": round(init_ms, 2),
                     "first_geometry_flush_ms": round(flush_ms, 2)},
         "cold": {}, "warm": {}, "idle": {}, "disk_trace": disk_trace,
+        "resurrect_trace": resurrect_trace,
     }
     failures = []
     event_loop_delays = []
@@ -214,6 +266,14 @@ def main():
         "disk_trace_median_ms": {
             key: median([sample["disk_trace"][key]["total_ms"] for sample in samples])
             for key in samples[0]["disk_trace"]
+        },
+        "resurrect_trace_median_ms": {
+            key: median([sample["resurrect_trace"][key]["total_ms"] for sample in samples])
+            for key in samples[0]["resurrect_trace"]
+        },
+        "resurrect_trace_calls": {
+            key: samples[0]["resurrect_trace"][key]["calls"]
+            for key in samples[0]["resurrect_trace"]
         },
         "disk_setup_median_ms": median([sample["cold"]["Tools"].get("disk_setup_ms") for sample in samples]),
         "event_loop_median_ms": {

@@ -148,7 +148,12 @@ Printing is unavailable while active. => La stampa non è disponibile durante la
 Unknown => Sconosciuto
 Active => Attivo
 Inactive => Inattivo
-Resurrection => Ripristino guidato
+Resurrection => Manutenzione guidata
+SEQUENCE STATUS => STATO DELLA SEQUENZA
+Before you start => Prima di iniziare
+Maintenance steps => Passaggi di manutenzione
+Select Details for step information and results. => Seleziona Dettagli per informazioni e risultati del passaggio.
+Details => Dettagli
 10 steps · Verified restore point required => 10 passaggi · Punto di ripristino verificato obbligatorio
 Start sequence => Avvia sequenza
 Cancel after step => Annulla dopo il passaggio
@@ -232,7 +237,8 @@ Confirm quick cleanup => Conferma pulizia rapida
 Select a drive => Seleziona un'unità
 Choose a valid drive letter. => Scegli una lettera di unità valida.
 Create restore point => Crea punto di ripristino
-Confirm Resurrection => Conferma ripristino guidato
+Confirm Resurrection => Conferma manutenzione guidata
+Confirm Guided Maintenance => Conferma manutenzione guidata
 Maintenance running… => Manutenzione in corso…
 Cancel after current step => Annulla dopo il passaggio corrente
 Cancellation requested… => Annullamento richiesto…
@@ -319,6 +325,7 @@ PATTERNS = [
     (r"^(.+) GB free / (.+) GB$", r"\1 GB liberi / \2 GB"),
     (r"^(.+)% used$", r"\1% utilizzato"),
     (r"^(.+) original settings saved$", r"\1 impostazioni originali salvate"),
+    (r"^(\d+) / (\d+) steps$", r"\1 / \2 passaggi"),
     (r"^(.+) steps finished$", r"\1 passaggi terminati"),
     (r"^(.+) finished$", r"\1 completati"),
     (r"^(.+) files deleted$", r"\1 file eliminati"),

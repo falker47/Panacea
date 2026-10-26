@@ -43,6 +43,11 @@ def test_italian_translates_navigation_and_status_while_english_is_unchanged():
     assert translate('Install update', 'it') == 'Installa aggiornamento'
     assert translate('You are using Panacea 2.0.2. Update to version 2.0.3 is available.', 'it') == "Stai usando Panacea 2.0.2. È disponibile l'aggiornamento alla versione 2.0.3."
     assert translate('Guided Maintenance', 'it') == 'Manutenzione guidata'
+    assert translate('Resurrection', 'it') == 'Manutenzione guidata'
+    assert translate('Confirm Guided Maintenance', 'it') == 'Conferma manutenzione guidata'
+    assert translate('Maintenance steps', 'it') == 'Passaggi di manutenzione'
+    assert translate('0 / 10 steps', 'it') == '0 / 10 passaggi'
+    assert translate('10 / 10 steps', 'en') == '10 / 10 steps'
     assert translate('Space & Cleanup', 'it') == 'Spazio e pulizia'
     assert translate('Panacea 2.0.2 is up to date', 'it') == 'Panacea 2.0.2 è aggiornato'
     assert translate('Ready · No operation running', 'it') == 'Pronto · Nessuna operazione in corso'

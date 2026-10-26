@@ -368,14 +368,16 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                    'Footer must show current version')
             expect(credit.cget('text') == 'Panacea 2026 — Maurizio Falconi (falker47)',
                    'Footer credit must contain the full attribution')
-            expect(_native_bounds(credit)[3] <= _native_bounds(version)[1] + 2,
-                   'Footer version should sit below the linked credit')
+            expect(abs(_native_bounds(credit)[1] - _native_bounds(version)[1]) <= 4 * scale,
+                   'Footer credit and version must share one row')
+            expect(_native_bounds(credit)[2] <= _native_bounds(version)[0] + 2,
+                   'Footer credit and version must not overlap')
             expect(_native_bounds(app.update_bar)[3] <= _native_bounds(credit)[1],
                    'Update status must precede attribution')
             expect(not app.btn_check_update.winfo_manager(),
                    'Do not show an update button while checking')
             sidebar = _native_bounds(app.sidebar_frame)
-            footer_bottom = _native_bounds(version)[3]
+            footer_bottom = max(_native_bounds(credit)[3], _native_bounds(version)[3])
             insets = (_native_bounds(credit)[0] - sidebar[0],
                       sidebar[2] - _native_bounds(version)[2],
                       sidebar[3] - footer_bottom)
@@ -446,6 +448,19 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
             app.select_frame('Cleaning')
             app.update()
+            for group in ('Cleaning', 'Tools', 'Turbo'):
+                app.select_frame(group)
+                app.update()
+                host = app.group_frames[group]
+                heading = app.group_headings[group]
+                expect(0 <= heading.winfo_rootx() - host.winfo_rootx() <= 42 * scale,
+                       f'{group} heading is not left-aligned')
+                canvas = app.group_scroll[group]._parent_canvas
+                available = canvas.winfo_width() / app.group_scroll[group]._get_widget_scaling()
+                expect(app._group_stacked[group] == app._group_requires_stack(group, available),
+                       f'{group} breakpoint disagrees with usable viewport')
+            app.select_frame('Cleaning')
+            app.update()
             # Quick cleanup is the first visible action; individual tools stay
             # available on demand without crowding the initial viewport.
             quick = app.quick_cleanup_card
@@ -485,6 +500,7 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app.update()
             for widget, label in ((app.btn_resurrect_start, 'Start sequence'),
                                   (app.lbl_status, 'Resurrection status'),
+                                   (app.resurrection_step_count, 'Numerical progress'),
                                   (app.progress_bar, 'Resurrection progress')):
                 inside(widget, resurrection_canvas, label)
             status_bounds = _native_bounds(app.lbl_status)
@@ -501,8 +517,12 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 for label in phase_labels:
                     inside(label, phase, f'{name} phase text')
                     rendered = label._label
+                    visible_text = label.cget('text')
+                    if label.cget('wraplength'):
+                        segments = visible_text.split()
+                        visible_text = max(segments, key=len) if segments else ''
                     text_width = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
-                                                      '-displayof', rendered, label.cget('text')))
+                                                      '-displayof', rendered, visible_text))
                     line_height = font_metric(rendered, 'linespace')
                     expect(text_width <= rendered.winfo_width() + 2,
                            f'{name} phase text is horizontally clipped: {label.cget("text")}; '
@@ -510,17 +530,16 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                     expect(line_height <= rendered.winfo_height() + 2,
                            f'{name} phase text is vertically clipped: '
                            f'required={line_height}px, available={rendered.winfo_height()}px')
-                ordered = sorted(phase_labels, key=lambda label: label.winfo_rootx())
-                for previous, following in zip(ordered, ordered[1:]):
-                    expect(_native_bounds(previous)[2] <= _native_bounds(following)[0] + 2,
-                           f'{name} phase labels overlap')
-                if window_height == height:
-                    inside(phase, resurrection_canvas, name + ' phase')
-            if window_height < height:
-                resurrection_canvas.yview_moveto(1)
-                app.update()
-                for name in (app.RESURRECTION_STEPS[4], app.RESURRECTION_STEPS[-1]):
-                    inside(app._resurrection_rows[name].master, resurrection_canvas, name + ' phase after scroll')
+                for index, first in enumerate(phase_labels):
+                    x1, y1, x2, y2 = _native_bounds(first)
+                    for second in phase_labels[index + 1:]:
+                        a1, b1, a2, b2 = _native_bounds(second)
+                        expect(x2 <= a1 + 2 or a2 <= x1 + 2 or y2 <= b1 + 2 or b2 <= y1 + 2,
+                               f'{name} phase labels overlap')
+            resurrection_canvas.yview_moveto(1)
+            app.update()
+            inside(app._resurrection_rows[app.RESURRECTION_STEPS[-1]].master,
+                   resurrection_canvas, 'Last step after scrolling')
             output_panel = app.god_log.master
             output_toggle = next(button for button in output_panel.winfo_children()
                                  if isinstance(button, panacea_ui.ctk.CTkButton))

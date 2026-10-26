@@ -53,3 +53,13 @@ def test_navigating_between_sibling_views_preserves_both_visible_panels():
     assert app._setup_functions['Turbo'].call_count == 0
     app.select_frame('Unknown')
     assert app.active_frame == 'Cleaning'
+
+
+def test_pair_reflow_uses_actual_usable_panel_width_by_section():
+    # Canvas width is measured after sidebar, outer padding and scrollbar.
+    assert PanaceaApp._group_requires_stack('Cleaning', 610)
+    assert not PanaceaApp._group_requires_stack('Cleaning', 625)
+    assert PanaceaApp._group_requires_stack('Tools', 625)
+    assert not PanaceaApp._group_requires_stack('Tools', 640)
+    assert PanaceaApp._group_requires_stack('Turbo', 650)
+    assert not PanaceaApp._group_requires_stack('Turbo', 670)

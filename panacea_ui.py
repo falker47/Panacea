@@ -137,7 +137,7 @@ class PanaceaApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self._setup_sidebar()
         self._setup_update_bar()
-        self.frames, self.group_frames = {}, {}
+        self.frames, self.group_frames, self.group_headings = {}, {}, {}
         self._group_stacked, self.group_scroll, self.group_content = {}, {}, {}
         frame_attrs = {
             'Dashboard': 'dashboard', 'Cleaning': 'cleaning', 'Apps': 'apps',
@@ -153,7 +153,8 @@ class PanaceaApp(ctk.CTk):
                 header = ctk.CTkFrame(host, fg_color='transparent')
                 header.grid(row=0, column=0, sticky='ew', padx=28, pady=(23, 10))
                 heading = ctk.CTkFrame(header, fg_color='transparent')
-                heading.pack(anchor='center')
+                heading.pack(anchor='w')
+                self.group_headings[group] = heading
                 LLabel(heading, text='', image=self.icons_active[icon], width=38,
                        height=38).pack(side='left', padx=(0, 9))
                 LLabel(heading, text=label, font=self._font(23, True),
@@ -165,7 +166,9 @@ class PanaceaApp(ctk.CTk):
                 content.grid_columnconfigure((0, 1), weight=1, uniform='panels')
                 self.group_scroll[group] = content
                 self.group_content[group] = content
-                host.bind('<Configure>', lambda event, g=group: self._layout_group(g, event))
+                # Use the actual scroller viewport after subtracting the sidebar and scrollbar.
+                content._parent_canvas.bind(
+                    '<Configure>', lambda event, g=group: self._layout_group(g, event), add='+')
             for index, page in enumerate(pages):
                 if len(pages) > 1:
                     frame = ctk.CTkFrame(content, fg_color=SURFACE_ALT,
@@ -297,17 +300,18 @@ class PanaceaApp(ctk.CTk):
         self.sidebar_footer = ctk.CTkFrame(self.sidebar_frame, fg_color='transparent')
         self.sidebar_footer.grid(row=9, column=0, sticky='ew', padx=12, pady=(0, 10))
         self.sidebar_footer.grid_columnconfigure(0, weight=1)
+        self.sidebar_footer.grid_columnconfigure(1, weight=0)
         self.footer_credit = LLabel(
             self.sidebar_footer, text='Panacea 2026 — Maurizio Falconi (falker47)',
             height=19, font=self._font(10, semibold=True),
             text_color=COL_GOLD, cursor='hand2', anchor='w')
-        self.footer_credit.grid(row=1, column=0, sticky='ew', pady=(4, 2))
+        self.footer_credit.grid(row=1, column=0, sticky='w', padx=(0, 5), pady=(4, 2))
         self.footer_credit.bind(
             '<Button-1>', lambda event: webbrowser.open('https://github.com/falker47'))
         self.footer_version = LLabel(
             self.sidebar_footer, text=f'v{VERSION}', height=16,
             font=self._font(10), text_color=MUTED, anchor='e')
-        self.footer_version.grid(row=2, column=0, sticky='ew')
+        self.footer_version.grid(row=1, column=1, sticky='e', pady=(4, 2))
         self._sidebar_brand = brand
         self._sidebar_compact = None
         self.sidebar_frame.bind('<Configure>', self._adjust_sidebar_height)
@@ -323,15 +327,20 @@ class PanaceaApp(ctk.CTk):
             button.configure(height=44 if compact else 52)
             button.grid_configure(pady=2 if compact else 6)
 
+    @staticmethod
+    def _group_requires_stack(group, available_width):
+        """Use two readable panels whenever they can fit in the scroll viewport."""
+        minimum = {'Cleaning': 300, 'Tools': 305, 'Turbo': 320}[group]
+        return available_width < 2 * minimum + 20
+
     def _layout_group(self, group, event):
-        """One shared scroll surface, with spacious cards stacked when narrow."""
-        host = self.group_frames[group]
-        width = event.width / max(host._get_widget_scaling(), 0.01)
-        stacked = width < 1000
+        """Reflow from the real canvas width, accounting for DPI and scrollbar."""
+        content = self.group_content[group]
+        width = event.width / max(content._get_widget_scaling(), 0.01)
+        stacked = self._group_requires_stack(group, width)
         if self._group_stacked.get(group) == stacked:
             return
         self._group_stacked[group] = stacked
-        content = self.group_content[group]
         pages = next(pages for root, _, _, pages in self.NAV_GROUPS if root == group)
         content.grid_columnconfigure(0, weight=1, uniform='' if stacked else 'panels')
         content.grid_columnconfigure(1, weight=0 if stacked else 1,
@@ -372,7 +381,7 @@ class PanaceaApp(ctk.CTk):
         bar = ctk.CTkFrame(self.sidebar_footer, fg_color=SURFACE_ALT,
                            border_color=BORDER, border_width=1, corner_radius=9)
         self.update_bar = bar
-        bar.grid(row=0, column=0, sticky='ew', pady=(0, 7))
+        bar.grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 7))
         bar.grid_columnconfigure(0, weight=1)
         self.app_update_status = LLabel(
             bar, text='Checking Panacea updates…', anchor='w',
@@ -394,11 +403,12 @@ class PanaceaApp(ctk.CTk):
         frame = ctk.CTkScrollableFrame(outer, fg_color=BG, corner_radius=0)
         frame.grid(row=0, column=0, sticky='nsew')
         frame.grid_columnconfigure(0, weight=1)
-        LLabel(frame, text='Overview', font=self._font(22, True), anchor='w').grid(
-            row=0, column=0, sticky='w', padx=18, pady=(8, 7))
+        self.dashboard_heading = LLabel(frame, text='Overview', font=self._font(22, True), anchor='w')
+        self.dashboard_heading.grid(row=0, column=0, sticky='w', padx=18, pady=(8, 7))
 
         # A compact system summary, with a separate truthful Windows Update status.
         info = self._card(frame)
+        self.dashboard_summary = info
         info.grid(row=1, column=0, padx=18, pady=(0, 7), sticky='ew')
         info.grid_columnconfigure((0, 1), weight=1, uniform='overview')
         system = ctk.CTkFrame(info, fg_color='transparent')
@@ -428,6 +438,7 @@ class PanaceaApp(ctk.CTk):
             row=0, column=2, rowspan=2, padx=(5, 10), pady=10)
 
         body = ctk.CTkFrame(frame, fg_color='transparent')
+        self.dashboard_metrics = body
         body.grid(row=2, column=0, padx=18, pady=(0, 5), sticky='ew')
         body.grid_columnconfigure((0, 1, 2), weight=1, uniform='metrics')
         self.card_cpu, self.card_ram, self.card_disk = [self._card(body) for _ in range(3)]
@@ -534,6 +545,19 @@ class PanaceaApp(ctk.CTk):
                 label.configure(wraplength=max(110, event.width / label._get_widget_scaling() - 24))
                 for label in items
             ])
+        outer.bind('<Configure>', self._adjust_dashboard_spacing, add='+')
+
+    def _adjust_dashboard_spacing(self, event):
+        """Spend spare vertical room on section gaps, preserving small-window scroll."""
+        logical_height = event.height / max(self.frame_dashboard._get_widget_scaling(), 0.01)
+        gap = min(72, max(0, int((logical_height - 640) * 0.22)))
+        if self.__dict__.get('_dashboard_gap') == gap:
+            return
+        self._dashboard_gap = gap
+        self.dashboard_heading.grid_configure(pady=(8 + gap, 7 + gap // 2))
+        self.dashboard_summary.grid_configure(pady=(0, 7 + gap))
+        self.dashboard_metrics.grid_configure(pady=(0, 5 + gap))
+        self.card_sys.grid_configure(pady=(0, 4 + gap // 2))
 
     def _section_body(self, frame, title, detail):
         """Paired cards share one scroller; standalone maintenance keeps its own."""
@@ -759,7 +783,8 @@ class PanaceaApp(ctk.CTk):
         heading = ctk.CTkFrame(card, fg_color='transparent')
         heading.pack(fill='x', padx=16, pady=(14, 4))
         LLabel(heading, image=self.icons_active[icon], text='', width=28).pack(side='left', padx=(0, 10))
-        LLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
+        if title:
+            LLabel(heading, text=title, font=self._font(16, True)).pack(side='left')
         LLabel(card, text=detail, font=self._font(12), text_color=MUTED, anchor='w').pack(fill='x', padx=16, pady=(0, 12))
         row = ctk.CTkFrame(card, fg_color='transparent')
         row.pack(fill='x', padx=16, pady=(0, 14))
@@ -782,7 +807,7 @@ class PanaceaApp(ctk.CTk):
     def _setup_startup_frame(self):
         body = self._section_body(self.frame_startup, 'Startup apps', 'Choose which apps launch when you sign in.')
         self._windows_settings_card(
-            body, 'Startup apps', 'Review startup impact and disable unnecessary auto-start entries.',
+            body, None, 'Review startup impact and disable unnecessary auto-start entries.',
             [('Startup settings', 'ms-settings:startupapps')], 'turbo')
         self.startup_status = LLabel(body, text='Windows manages startup changes. Return here when finished.',
                                            font=self._font(11), text_color=MUTED, anchor='w', wraplength=650)
@@ -845,52 +870,164 @@ class PanaceaApp(ctk.CTk):
     }
 
     def _setup_resurrect_frame(self):
-        body = self._section_body(self.frame_resurrect, 'Resurrection', '10 steps · Verified restore point required')
-        card = self._card(body)
-        card.pack(fill='x', pady=(0, 6))
-        self.lbl_status = LLabel(card, text='Ready · No steps run', height=22, font=self._font(15, True), anchor='w', justify='left')
-        self.lbl_status.pack(fill='x', padx=14, pady=(8, 4))
-        self.progress_bar = ctk.CTkProgressBar(card, height=8, progress_color=COL_GOLD, fg_color=BORDER)
+        # Presentation only: the guarded ten-step executor and restore-point gate
+        # remain unchanged. One scroller owns hero, steps and expandable output.
+        host = self.frame_resurrect
+        host.grid_columnconfigure(0, weight=1)
+        host.grid_rowconfigure(0, weight=1)
+        body = ctk.CTkScrollableFrame(host, fg_color=BG, corner_radius=0)
+        body.grid(row=0, column=0, sticky='nsew', padx=(18, 8), pady=(8, 10))
+
+        header = ctk.CTkFrame(body, fg_color='transparent')
+        header.pack(fill='x', padx=8, pady=(10, 20))
+        LLabel(header, text='', image=self.icons_active['resurrect'],
+               width=42, height=42).pack(side='left', padx=(0, 12))
+        heading = ctk.CTkFrame(header, fg_color='transparent')
+        heading.pack(side='left', fill='x', expand=True)
+        LLabel(heading, text='Guided Maintenance', font=self._font(26, True),
+               anchor='w').pack(fill='x')
+        subtitle = LLabel(
+            heading, text='10 steps · Verified restore point required',
+            font=self._font(13), text_color=MUTED, anchor='w', justify='left')
+        subtitle.pack(fill='x', pady=(4, 0))
+        heading.bind('<Configure>', lambda event: subtitle.configure(
+            wraplength=max(180, event.width / subtitle._get_widget_scaling() - 12)))
+
+        hero = self._card(body)
+        hero.pack(fill='x', padx=8, pady=(0, 16))
+        hero.grid_columnconfigure(0, weight=1)
+        top = ctk.CTkFrame(hero, fg_color='transparent')
+        top.grid(row=0, column=0, sticky='ew', padx=20, pady=(18, 8))
+        LLabel(top, text='SEQUENCE STATUS', font=self._font(11, semibold=True),
+               text_color=COL_GOLD, anchor='w').pack(fill='x')
+        self.lbl_status = LLabel(
+            top, text='Ready · No steps run', font=self._font(19, True),
+            height=30, anchor='w', justify='left')
+        self.lbl_status.pack(fill='x', pady=(5, 0))
+        self.resurrection_step_count = LLabel(
+            hero, text='0 / 10 steps', text_color=MUTED,
+            font=self._font(13, semibold=True), anchor='w')
+        self.resurrection_step_count.grid(row=1, column=0, sticky='ew',
+                                          padx=20, pady=(2, 9))
+        self.progress_bar = ctk.CTkProgressBar(
+            hero, height=14, corner_radius=7,
+            progress_color=COL_GOLD, fg_color='#283951')
         self.progress_bar.set(0)
-        self.progress_bar.pack(fill='x', padx=14, pady=(0, 6))
-        row = ctk.CTkFrame(card, fg_color='transparent')
-        row.pack(fill='x', padx=14, pady=(0, 8))
-        self.btn_resurrect_start = self._button(row, 'Start sequence', self.run_god_mode, maintenance=True)
-        self.btn_resurrect_start.pack(side='right')
-        self.btn_resurrect_cancel = self._button(row, 'Cancel after step', self._cancel_resurrect, secondary=True)
-        warning = LLabel(body, text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.', height=28, text_color=COL_WARNING, font=self._font(10), anchor='w', justify='left', wraplength=650)
-        warning.pack(fill='x', padx=2, pady=(0, 6))
-        card.bind('<Configure>', lambda event: (
-            warning.configure(wraplength=max(180, event.width / warning._get_widget_scaling() - 4)),
-            self.lbl_status.configure(wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 28)),
-        ))
+        self.progress_bar.grid(row=2, column=0, sticky='ew',
+                               padx=20, pady=(0, 15))
+        actions = ctk.CTkFrame(hero, fg_color='transparent')
+        actions.grid(row=3, column=0, sticky='ew', padx=20, pady=(0, 20))
+        self.btn_resurrect_start = self._button(
+            actions, 'Start sequence', self.run_god_mode,
+            maintenance=True, width=178, height=44)
+        self.btn_resurrect_start.configure(font=self._font(14, semibold=True))
+        self.btn_resurrect_start.pack(side='left')
+        self.btn_resurrect_cancel = self._button(
+            actions, 'Cancel after step', self._cancel_resurrect,
+            secondary=True, height=38, width=178)
+        self._resurrection_action_stacked = None
+        actions.bind('<Configure>', self._layout_resurrection_actions, add='+')
+        hero.bind('<Configure>', lambda event: self.lbl_status.configure(
+            wraplength=max(180, event.width / self.lbl_status._get_widget_scaling() - 40)))
+
+        safety = ctk.CTkFrame(
+            body, fg_color='#252b35', border_color='#8d6d40',
+            border_width=1, corner_radius=10)
+        safety.pack(fill='x', padx=8, pady=(0, 20))
+        LLabel(safety, text='Before you start', text_color=COL_WARNING,
+               font=self._font(15, True), anchor='w').pack(fill='x', padx=18,
+                                                           pady=(15, 5))
+        warning = LLabel(
+            safety,
+            text='Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.',
+            height=96, text_color=TEXT, font=self._font(12),
+            anchor='w', justify='left', wraplength=640)
+        warning.pack(fill='x', padx=18, pady=(0, 15))
+        safety.bind('<Configure>', lambda event: warning.configure(
+            wraplength=max(170, event.width / warning._get_widget_scaling() - 38)))
+
+        LLabel(body, text='Maintenance steps', font=self._font(19, True),
+               anchor='w').pack(fill='x', padx=8, pady=(0, 5))
+        LLabel(body, text='Select Details for step information and results.',
+               text_color=MUTED, font=self._font(12), anchor='w',
+               justify='left').pack(fill='x', padx=8, pady=(0, 12))
         timeline = ctk.CTkFrame(body, fg_color='transparent')
-        timeline.pack(fill='x')
-        timeline.grid_columnconfigure((0, 1), weight=1, uniform='phases')
+        timeline.pack(fill='x', padx=8, pady=(0, 18))
+        timeline.grid_columnconfigure(0, weight=1)
         self._resurrection_rows = {}
+        self._resurrection_cards = {}
         self._resurrection_info_labels = {}
+        self._resurrection_phases = []
         for index, name in enumerate(self.RESURRECTION_STEPS):
             phase = self._card(timeline)
-            phase.grid(row=index % 5, column=index // 5, sticky='nsew', padx=(0, 4) if index < 5 else (4, 0), pady=2)
+            phase.grid(row=index, column=0, sticky='nsew', pady=5)
             phase.grid_columnconfigure(1, weight=1)
-            LLabel(phase, text=f'{index + 1:02}', height=24, text_color=COL_GOLD, font=self._font(13, True), width=22).grid(row=0, column=0, padx=(3, 2), pady=4)
-            display = {'Drive optimization': 'Optimize drive', 'Disk health scan': 'Disk scan', 'Windows image health': 'Image health', 'System file scan': 'System files'}.get(name, name)
-            LLabel(phase, text=display, height=20, anchor='w', font=self._font(12, True)).grid(row=0, column=1, sticky='ew')
-            status = LLabel(phase, text='Not started', height=20, width=62, anchor='e', font=self._font(10), text_color=MUTED)
-            status.grid(row=0, column=2, padx=(3, 4))
+            LLabel(phase, text=f'{index + 1:02}', height=40, width=40,
+                   text_color=COL_GOLD, font=self._font(18, True)).grid(
+                       row=0, column=0, rowspan=2, sticky='n',
+                       padx=(14, 10), pady=(12, 0))
+            title = LLabel(
+                phase, text=name, font=self._font(15, True),
+                height=24, anchor='w', justify='left')
+            title.grid(row=0, column=1, sticky='ew', pady=(12, 3))
             self._button(
-                phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
-                secondary=True, width=26, height=24).grid(row=0, column=3, padx=(0, 4), pady=2)
+                phase, 'Details', lambda n=name: self._toggle_resurrection_info(n),
+                secondary=True, width=80, height=29).grid(
+                    row=0, column=2, padx=(8, 12), pady=(11, 2), sticky='e')
+            status = LLabel(
+                phase, text='Not started', height=23,
+                font=self._font(12, semibold=True),
+                anchor='w', text_color=MUTED, justify='left')
+            status.grid(row=1, column=1, columnspan=2,
+                        sticky='ew', pady=(0, 13))
             explanation = LLabel(
-                phase, text=self.RESURRECTION_HELP[name], font=self._font(10),
-                text_color=MUTED, anchor='w', justify='left', wraplength=230)
-            explanation.grid(row=1, column=1, columnspan=3, sticky='ew', padx=(0, 7), pady=(0, 7))
+                phase, text=self.RESURRECTION_HELP[name],
+                font=self._font(12), text_color=MUTED,
+                anchor='w', justify='left')
+            explanation.grid(row=2, column=1, columnspan=2,
+                             sticky='ew', padx=(0, 13), pady=(0, 14))
             explanation.grid_remove()
-            phase.bind('<Configure>', lambda event, label=explanation: label.configure(
-                wraplength=max(90, event.width / label._get_widget_scaling() - 60)))
-            self._resurrection_info_labels[name] = explanation
+            phase.bind('<Configure>', lambda event, title=title, detail=explanation: (
+                title.configure(wraplength=max(100, event.width / title._get_widget_scaling() - 160)),
+                detail.configure(wraplength=max(150, event.width / detail._get_widget_scaling() - 87)),
+            ))
             self._resurrection_rows[name] = status
+            self._resurrection_cards[name] = phase
+            self._resurrection_info_labels[name] = explanation
+            self._resurrection_phases.append(phase)
+        self._resurrection_two_columns = None
+        timeline.bind('<Configure>', self._layout_resurrection_timeline, add='+')
         self._section_log(body, 'god_log', 'Full sequence output')
+
+    def _layout_resurrection_actions(self, event):
+        narrow = event.width / max(self.btn_resurrect_start._get_widget_scaling(), 0.01) < 410
+        if self._resurrection_action_stacked == narrow:
+            return
+        self._resurrection_action_stacked = narrow
+        self.btn_resurrect_start.pack_configure(
+            side='top' if narrow else 'left', fill='x' if narrow else 'none',
+            pady=(0, 8) if narrow else 0)
+        if self.btn_resurrect_cancel.winfo_manager():
+            self.btn_resurrect_cancel.pack_configure(
+                side='top' if narrow else 'left', fill='x' if narrow else 'none',
+                padx=0 if narrow else (12, 0))
+
+    def _layout_resurrection_timeline(self, event):
+        available = event.width / max(event.widget._get_widget_scaling(), 0.01)
+        two_columns = available >= 780
+        if self._resurrection_two_columns == two_columns:
+            return
+        self._resurrection_two_columns = two_columns
+        timeline = event.widget
+        timeline.grid_columnconfigure(0, weight=1, uniform='steps' if two_columns else '')
+        timeline.grid_columnconfigure(1, weight=1 if two_columns else 0,
+                                      uniform='steps' if two_columns else '')
+        for index, phase in enumerate(self._resurrection_phases):
+            phase.grid_configure(
+                row=index // 2 if two_columns else index,
+                column=index % 2 if two_columns else 0,
+                padx=(0, 7) if two_columns and index % 2 == 0 else
+                     (7, 0) if two_columns else 0, pady=6)
 
     def _toggle_resurrection_info(self, name):
         label = self._resurrection_info_labels.get(name)
@@ -986,10 +1123,11 @@ class PanaceaApp(ctk.CTk):
             if self.__dict__.get('_close_when_idle'):
                 self._on_close()
         def error(exc):
-            self.operation_label.configure(text=f'Failed · {name}: {exc}', text_color=COL_RED)
-            self._show_toast(f'{name} failed', str(exc), 'error')
+            display_name = 'Guided Maintenance' if name == 'Resurrection' else name
+            self.operation_label.configure(text=f'Failed · {display_name}: {exc}', text_color=COL_RED)
+            self._show_toast(f'{display_name} failed', str(exc), 'error')
             if output:
-                self._log_section(output, f'{name} failed: {exc}', 'err')
+                self._log_section(output, f'{display_name} failed: {exc}', 'err')
             if on_error:
                 on_error(exc)
             if name == 'Resurrection':
@@ -1024,7 +1162,8 @@ class PanaceaApp(ctk.CTk):
             if output:
                 self._open_operation_output(output)
             self._set_maintenance_state(True)
-            self.operation_label.configure(text=f'Running · {name}', text_color=MUTED)
+            display_name = 'Guided Maintenance' if name == 'Resurrection' else name
+            self.operation_label.configure(text=f'Running · {display_name}', text_color=MUTED)
         return started
 
     def _show_result(self, name, result):
@@ -1527,6 +1666,9 @@ class PanaceaApp(ctk.CTk):
 
     def _resurrection_progress(self, progress, text):
         self.progress_bar.set(progress)
+        count = self.__dict__.get('resurrection_step_count')
+        if count is not None:
+            count.configure(text=f'{round(progress * len(self.RESURRECTION_STEPS))} / {len(self.RESURRECTION_STEPS)} steps')
         self.lbl_status.configure(text=text, text_color=MUTED)
 
     def _set_resurrection_step(self, name, state, detail=''):
@@ -1536,6 +1678,11 @@ class PanaceaApp(ctk.CTk):
             color = {'completed': COL_SUCCESS, 'failed': COL_RED, 'running': COL_GOLD}.get(state, MUTED)
             label.configure(text={'pending': 'Not started', 'running': 'Running…', 'completed': 'Completed',
                                   'failed': 'Failed / partial', 'not run': 'Not run'}.get(state, state), text_color=color)
+        phase = self.__dict__.get('_resurrection_cards', {}).get(name)
+        if phase is not None:
+            phase.configure(border_color={
+                'running': COL_GOLD, 'completed': COL_SUCCESS,
+                'failed': COL_RED}.get(state, BORDER))
         explanation = self.__dict__.get('_resurrection_info_labels', {}).get(name)
         if explanation is not None:
             basic = self.RESURRECTION_HELP[name]
@@ -1547,6 +1694,9 @@ class PanaceaApp(ctk.CTk):
         for name in self.RESURRECTION_STEPS:
             row = attempted.get(name)
             self._set_resurrection_step(name, 'completed' if row and row['success'] else 'failed' if row else 'not run', row['message'] if row else '')
+        count = self.__dict__.get('resurrection_step_count')
+        if count is not None:
+            count.configure(text=f"{len(result['steps'])} / {result['total']} steps")
         text = f"{result['status'].capitalize()} · {len(result['steps'])}/{result['total']} steps finished"
         color = COL_SUCCESS if result['status'] == 'completed' else COL_WARNING if result['status'] in ('partial', 'cancelled') else COL_RED
         self.lbl_status.configure(text=text, text_color=color)
@@ -1612,7 +1762,7 @@ class PanaceaApp(ctk.CTk):
         if self._update_installing or self._update_downloading or self.workers.busy():
             self._show_toast('Operation in progress', 'Wait for the current operation to finish.', 'warning')
             return
-        if not self._confirm('Confirm Resurrection', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
+        if not self._confirm('Confirm Guided Maintenance', 'Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.', parent=self):
             return
         self._resurrect_cancel.clear()
         def done():
@@ -1623,8 +1773,12 @@ class PanaceaApp(ctk.CTk):
                 self._set_resurrection_step(name, 'pending')
             self.btn_resurrect_start.configure(text='Maintenance running…')
             self.btn_resurrect_cancel.configure(state='normal', text='Cancel after current step')
-            self.btn_resurrect_cancel.pack(side='left', padx=10)
+            self.btn_resurrect_cancel.pack(
+                side='top' if self._resurrection_action_stacked else 'left',
+                fill='x' if self._resurrection_action_stacked else 'none',
+                padx=0 if self._resurrection_action_stacked else (12, 0))
             self.progress_bar.set(0)
+            self.resurrection_step_count.configure(text='0 / 10 steps')
             self.lbl_status.configure(text='Starting · Verifying restore point', text_color=MUTED)
 
     def _check_app_update(self):

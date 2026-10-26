@@ -470,6 +470,13 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             expect(not app.cleanup_individuals_frame.winfo_manager(),
                    'Individual cleanup tools must start collapsed')
             inside(app.quick_cleanup_button, quick, 'Quick cleanup action')
+            expect(not app.quick_cleanup_status.winfo_manager() and
+                   not app.quick_cleanup_bar.winfo_manager(),
+                   'Quick cleanup should not show idle status or idle progress')
+            ql, _, qr, _ = _native_bounds(quick)
+            bl, _, br, _ = _native_bounds(app.quick_cleanup_button)
+            expect(abs((ql + qr) - (bl + br)) <= 5 * scale,
+                   'Quick cleanup action should be centered in its card')
             expect(bool(quick.winfo_ismapped()), 'Quick cleanup card must be available')
             expect(_native_bounds(app.frame_cleaning)[0] <= _native_bounds(quick)[0]
                    and _native_bounds(quick)[2] <= _native_bounds(app.frame_cleaning)[2],
@@ -1291,21 +1298,23 @@ def test_readable_restart_age_warns_only_after_seven_days():
 
 
 @isolated_tk_test
-def test_three_four_three_guided_grid_preserves_order_and_expandable_information(monkeypatch):
+def test_five_by_two_guided_grid_preserves_order_and_expandable_information(monkeypatch):
     app = _safe_real_app(monkeypatch)
     try:
         app.update()
-        panacea_ui.tk.Tk.maxsize(app, 1260, 810)
-        panacea_ui.tk.Tk.geometry(app, '1200x760')
+        panacea_ui.tk.Tk.maxsize(app, 1800, 900)
+        panacea_ui.tk.Tk.geometry(app, '1660x760')
         app.select_frame('Resurrect')
         app.update()
-        assert app._resurrection_layout_mode == '343'
+        assert app._resurrection_layout_mode == '5'
         phases = app._resurrection_phases
         assert len(phases) == 10
-        rows = [phases[:3], phases[3:7], phases[7:]]
+        rows = [phases[:5], phases[5:]]
         for items in rows:
             assert max(w.winfo_rooty() for w in items) - min(w.winfo_rooty() for w in items) <= 3
-        assert phases[0].winfo_rooty() < phases[3].winfo_rooty() < phases[7].winfo_rooty()
+            assert all(items[i].winfo_rootx() < items[i + 1].winfo_rootx()
+                       for i in range(4))
+        assert phases[0].winfo_rooty() < phases[5].winfo_rooty()
         buttons = [b for b in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkButton)
                    if b.cget('text') == 'i']
         assert len(buttons) == 10

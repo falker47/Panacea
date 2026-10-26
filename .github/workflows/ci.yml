@@ -53,10 +53,15 @@ jobs:
       - name: Capture read-only Windows UX evidence
         shell: pwsh
         run: |
-          python scripts/visual_check.py --width 1020 --height 700 --scale 1 --settle-ms 500 --output build/ui-evidence/100
-          if ($LASTEXITCODE -ne 0) { throw 'Default UI screenshot capture failed' }
-          python scripts/visual_check.py --width 1020 --height 700 --scale 1.5 --settle-ms 500 --output build/ui-evidence/150
-          if ($LASTEXITCODE -ne 0) { throw '150 percent UI screenshot capture failed' }
+          foreach ($lang in @('en', 'it')) {
+            $env:PANACEA_LANGUAGE = $lang
+            foreach ($pct in @(100, 125, 150)) {
+              $scale = $pct / 100
+              python scripts/visual_check.py --width 1020 --height 700 --scale $scale --settle-ms 500 --output "build/ui-evidence/$lang-$pct"
+              if ($LASTEXITCODE -ne 0) { throw "GUI capture failed: $lang $pct percent" }
+            }
+          }
+          Remove-Item Env:PANACEA_LANGUAGE -ErrorAction SilentlyContinue
 
       - name: Preserve UI screenshots for review
         if: always()

@@ -86,7 +86,7 @@ def test_compact_ux_copy_has_italian_translation_and_safe_maintenance_warning():
     for source in (
         'Manage or uninstall programs in Windows.',
         'Disable unnecessary apps at sign-in.',
-        'Windows selects TRIM or defragmentation.',
+        'Windows uses the appropriate optimization method for each drive.',
         'Open Windows drive optimizer',
         'Original settings are saved for restoration.',
         'Saved settings unavailable · Refresh state',
@@ -119,3 +119,31 @@ def test_dashboard_power_and_guided_safety_are_fully_localized():
     assert 'Prima di procedere' in translated
     assert 'termina il passaggio in corso' in translated
     assert 'non avvia i successivi' in translated
+
+
+@pytest.mark.parametrize(('source', 'expected'), [
+    ('Create restore point', 'Crea punto di ripristino'),
+    ('Windows uses the appropriate optimization method for each drive.',
+     'Windows usa il metodo di ottimizzazione adatto a ogni unità.'),
+    ('No available updates', 'Nessun aggiornamento disponibile'),
+    ('2 recommended, 1 optional', '2 consigliati, 1 facoltativo'),
+    ('Run DISM repair?', 'Eseguire Riparazione DISM?'),
+    ('Run Windows optimization on C:?', "Ottimizzare l'unità C: con Windows?"),
+    ('3/10 finished · Restore point', '3/10 completati · Punto di ripristino'),
+    ('Result: Restart required.', 'Risultato: Riavvio necessario.'),
+    ('Quick cleanup failed: access denied', 'Pulizia rapida non riuscita: access denied'),
+    ('Cancellation requested; the current command will finish.',
+     "Annullamento richiesto: il comando in corso terminerà prima dell'arresto."),
+])
+def test_final_copy_audit_translates_actions_live_status_and_warnings(source, expected):
+    assert translate(source, 'it') == expected
+    assert translate(source, 'en') == source
+
+
+def test_natural_dynamic_update_and_maintenance_text_never_mix_languages():
+    assert translate('Download and verify Panacea 2.0.3?', 'it') == (
+        'Scaricare e verificare Panacea 2.0.3?')
+    text = translate('2 files · 1.5 MB freed · 0 skipped · 0 errors', 'it')
+    assert text == '2 file · 1.5 MB liberati · 0 ignorati · 0 errori'
+    assert translate('Running · Guided Maintenance', 'it') == (
+        'In esecuzione · Manutenzione guidata')

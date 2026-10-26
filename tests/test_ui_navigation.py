@@ -65,11 +65,13 @@ def test_pair_reflow_uses_actual_usable_panel_width_by_section():
     assert not PanaceaApp._group_requires_stack('Turbo', 670)
 
 
-def test_guided_steps_use_three_four_three_with_readable_narrow_fallbacks():
+def test_guided_steps_use_two_rows_of_five_when_readable_with_responsive_fallbacks():
     assert PanaceaApp._step_layout_mode(360) == '1'
     assert PanaceaApp._step_layout_mode(540) == '2'
-    assert PanaceaApp._step_layout_mode(729) == '2'
-    assert PanaceaApp._step_layout_mode(760) == '343'
+    assert PanaceaApp._step_layout_mode(729) == '3'
+    assert PanaceaApp._step_layout_mode(960) == '3'
+    assert PanaceaApp._step_layout_mode(1180) == '5'
+    assert PanaceaApp._step_layout_mode(1400) == '5'
 
 
 def test_reselecting_a_visible_group_skips_redundant_grid_and_navigation_redraw():

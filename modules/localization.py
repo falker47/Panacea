@@ -64,7 +64,7 @@ Create => Crea
 Save Windows state · confirmation required => Salva lo stato di Windows · conferma richiesta
 Activity details => Dettagli attività
 Cleanup => Pulizia
-One confirmed cleanup or individual tools. Protected files remain untouched. => Pulizia confermata unica o strumenti singoli. I file protetti non vengono toccati.
+One confirmed cleanup or individual tools. Protected files remain untouched. => Pulizia rapida o strumenti singoli. I file protetti non vengono toccati.
 Quick cleanup => Pulizia rapida
 Temporary files · Recycle Bin · Windows component store => File temporanei · Cestino · Componenti Windows
 Then Windows Disk Cleanup opens for manual selection. => Poi si apre Pulizia disco di Windows per la selezione manuale.
@@ -136,7 +136,7 @@ Startup settings => Impostazioni di avvio
 Windows manages startup changes. Return here when finished. => Windows gestisce le modifiche all'avvio. Torna qui al termine.
 Disable unnecessary apps at sign-in. => Disattiva gli avvii automatici non necessari.
 Manage or uninstall programs in Windows. => Gestisci o disinstalla i programmi in Windows.
-Windows selects TRIM or defragmentation. => Windows sceglie TRIM o deframmentazione.
+Windows selects TRIM or defragmentation. => Windows usa il metodo di ottimizzazione adatto all'unità.
 Open Windows drive optimizer => Apri ottimizzazione unità Windows.
 Original settings are saved for restoration. => Le impostazioni originali vengono salvate per il ripristino.
 Adjust Windows animations. => Regola le animazioni di Windows.
@@ -290,6 +290,68 @@ switches show the current Windows state => gli interruttori mostrano lo stato Wi
 Automatic steps attempted => Passaggi automatici tentati
 No cleanup started => Pulizia non avviata
 No further sequence steps will start => Non verranno avviati altri passaggi
+Quick cleanup or individual tools. Protected files are skipped. => Pulizia rapida o strumenti singoli. I file protetti vengono ignorati.
+Windows uses the appropriate optimization method for each drive. => Windows usa il metodo di ottimizzazione adatto a ogni unità.
+Disk · Let Windows use the optimization appropriate for the drive. => Disco · Windows usa il metodo di ottimizzazione adatto all'unità.
+Windows selects the appropriate optimization method. This may take several minutes. => Windows sceglie il metodo di ottimizzazione adatto. Potrebbero servire diversi minuti.
+Create a restore point · confirmation required => Crea un punto di ripristino · conferma richiesta
+Temporary files · Reasons and original details => File temporanei · Motivi e dettagli originali
+Partial / failed => Parziale / non riuscito
+SKIPPED => IGNORATO
+ERROR => ERRORE
+No available updates => Nessun aggiornamento disponibile
+Check unavailable => Verifica non disponibile
+Check incomplete => Verifica incompleta
+Check Failed => Verifica non riuscita
+Check Timed Out => Verifica scaduta
+Parse Error => Errore nella lettura dei risultati
+This operation can take several minutes. => L'operazione può richiedere diversi minuti.
+Restart required · see command output. => Riavvio necessario · Consulta l'output dei comandi.
+Windows Disk Cleanup could not be opened. => Impossibile aprire Pulizia disco di Windows.
+Windows drive optimization could not be opened. => Impossibile aprire Ottimizzazione unità di Windows.
+Continue in Windows => Continua in Windows
+Changes are managed in Windows. => Le modifiche vengono gestite in Windows.
+Windows Disk Cleanup not opened => Pulizia disco di Windows non aperta
+Windows Disk Cleanup opened => Pulizia disco di Windows aperta
+choose and confirm categories in Windows => scegli e conferma le categorie in Windows
+command completion unknown => esito del comando non verificabile
+sequence stopped => sequenza interrotta
+closing or cancellation requested => chiusura o annullamento richiesto
+Starting => Avvio
+Quick cleanup failed => Pulizia rapida non riuscita
+Cancellation requested; the current command will finish. => Annullamento richiesto: il comando in corso terminerà prima dell'arresto.
+Stopped before cleanup: a new restore point could not be verified. Enable System Protection in Windows and retry. => Pulizia non avviata: impossibile verificare un nuovo punto di ripristino. Attiva Protezione sistema in Windows e riprova.
+Command completion unknown · sequence stopped; restart Windows before retrying. => Esito del comando non verificabile · Sequenza interrotta. Riavvia Windows prima di riprovare.
+Drive command completion unknown · sequence stopped; restart Windows before retrying. => Esito dell'ottimizzazione non verificabile · Sequenza interrotta. Riavvia Windows prima di riprovare.
+Windows Disk Cleanup launch failed => Apertura di Pulizia disco di Windows non riuscita
+automatic steps attempted => passaggi automatici tentati
+attempted => tentati
+Installation failed; old app retained. => Installazione non riuscita; è stata mantenuta la versione precedente.
+Verifying the release in the trusted helper. => Verifica della release nel processo protetto.
+Retry the install or download the release manually from GitHub. => Riprova l'installazione oppure scarica la release manualmente da GitHub.
+Could not open the report => Impossibile aprire il report
+Battery report saved to => Report batteria salvato in
+Optimization failed => Ottimizzazione non riuscita
+No new restore point could be verified. Windows may have throttled creation or protection is unavailable. => Impossibile verificare un nuovo punto di ripristino. Windows potrebbe averne limitato la creazione oppure Protezione sistema non è disponibile.
+Restore point created and verified => Punto di ripristino creato e verificato
+In use (Windows sharing/lock violation) => In uso (blocco o condivisione Windows)
+Access denied by Windows => Accesso negato da Windows
+No longer present => Elemento non più presente
+Reparse points refused => Collegamenti di reindirizzamento esclusi
+Hard links refused => Hard link esclusi
+Case-sensitive directories refused => Cartelle con distinzione maiuscole/minuscole escluse
+Object identity could not be verified => Identità dell'elemento non verificabile
+Outside authorized paths => Fuori dalle cartelle autorizzate
+Unsupported path format => Percorso non supportato
+Ambiguous path refused => Percorso ambiguo escluso
+Windows handle protection unavailable => Protezione dei file Windows non disponibile
+Expected directory unavailable => Cartella prevista non disponibile
+Nonregular objects refused => Elementi non regolari esclusi
+Temporary location could not be verified => Percorso temporaneo non verificabile
+Other filesystem errors => Altri errori del file system
+Other recorded errors => Altri errori registrati
+Progress reporting error => Errore durante l'aggiornamento dell'avanzamento
+Other recorded reasons => Altri motivi registrati
 """.strip()
 
 ITALIAN = dict(line.split(" => ", 1) for line in _PAIRS.splitlines())
@@ -348,6 +410,7 @@ PATTERNS = [
     (r"^(\d+) / (\d+) steps$", r"\1 / \2 passaggi"),
     (r"^(.+) steps finished$", r"\1 passaggi terminati"),
     (r"^(.+) finished$", r"\1 completati"),
+    (r"^(.+) automatic steps completed$", r"\1 passaggi automatici completati"),
     (r"^(.+) files deleted$", r"\1 file eliminati"),
     (r"^(.+) files$", r"\1 file"),
     (r"^(.+) skipped$", r"\1 ignorati"),
@@ -357,7 +420,9 @@ PATTERNS = [
     (r"^(.+) freed$", r"\1 liberati"),
     (r"^(.+) automatic steps attempted$", r"\1 passaggi automatici tentati"),
     (r"^(.+) automatic steps completed$", r"\1 passaggi automatici completati"),
-    (r"^Run (.+)\?$", r"Eseguire \1?"),
+    (r"^Run Windows optimization on ([A-Za-z]:)\?$", r"Ottimizzare l'unità \1 con Windows?"),
+    (r"^Download and verify Panacea ([\w.+-]+)\?$", r"Scaricare e verificare Panacea \1?"),
+    (r"^Run (.+)\?$", lambda match: f"Eseguire {translate(match.group(1), 'it')}?"),
     (r"^Run Windows optimization on (.+)\?$", r"Eseguire l'ottimizzazione Windows su \1?"),
     (r"^Downloading · (.+)%$", r"Download · \1%"),
     (r"^(.+) available for restoration$", r"\1 disponibili per il ripristino"),
@@ -366,14 +431,29 @@ PATTERNS = [
     (r"^Drive query failed: (.+)$", r"Ricerca unità non riuscita: \1"),
     (r"^Drive information unavailable: (.+)$", r"Informazioni unità non disponibili: \1"),
     (r"^Metrics unavailable: (.+)$", r"Metriche non disponibili: \1"),
-    (r"^(.+) unavailable: (.+)$", r"\1 non disponibile: \2"),
-    (r"^Opened (.+)$", r"Aperto \1"),
+    (r"^(.+) unavailable: (.+)$", lambda match: f"{translate(match.group(1), 'it')} non disponibile: {translate(match.group(2), 'it')}"),
+    (r"^Opened (.+)$", lambda match: f"Aperto {translate(match.group(1), 'it')}"),
     (r"^Failed · (.+)$", r"Errore · \1"),
     (r"^Running · (.+)$", r"In esecuzione · \1"),
     (r"^Stopped · (.+)$", r"Interrotto · \1"),
     (r"^Completed · (.+)$", r"Completato · \1"),
-    (r"^(.+) failed$", r"\1 non riuscito"),
-    (r"^Result: (.+)$", r"Risultato: \1"),
+    (r"^(.+) failed$", lambda match: f"{translate(match.group(1), 'it')} non riuscito"),
+    (r"^Quick cleanup: (.+)$", lambda match: f"Pulizia rapida: {translate(match.group(1), 'it')}"),
+    (r"^Quick cleanup failed: (.+)$", r"Pulizia rapida non riuscita: \1"),
+    (r"^(\d+)/(\d+) attempted$", r"\1/\2 tentati"),
+    (r"^(\d+) recommended, (\d+) optional$", lambda match:
+     f"{match.group(1)} consigliati, {match.group(2)} "
+     f"{'facoltativo' if match.group(2) == '1' else 'facoltativi'}"),
+    (r"^(\d+) recommended updates$", r"\1 aggiornamenti consigliati"),
+    (r"^(\d+) optional updates$", r"\1 aggiornamenti facoltativi"),
+    (r"^Result: (.+)$", lambda match: f"Risultato: {translate(match.group(1), 'it')}"),
+    (r"^Optimization of ([A-Za-z]:) completed\.$", r"Ottimizzazione dell'unità \1 completata."),
+    (r"^Optimization of ([A-Za-z]:) failed with exit code (\d+)\.$", r"Ottimizzazione dell'unità \1 non riuscita (codice \2)."),
+    (r"^Restore point created and verified \(sequence (\d+)\)\.$", r"Punto di ripristino creato e verificato (sequenza \1)."),
+    (r"^(.+) files removed$", r"\1 file rimossi"),
+    (r"^(.+) MB logical bytes freed$", r"\1 MB logici liberati"),
+    (r"^Found (\d+) eligible files\.\.\.$", r"Trovati \1 file idonei…"),
+    (r"^Deleted (\d+) files\.\.\.$", r"Eliminati \1 file…"),
 ]
 
 def _normalize(language):
@@ -430,6 +510,7 @@ def translate(text, language="en"):
     if " · " in text:
         return " · ".join(translate(part, "it") for part in text.split(" · "))
     for pattern, replacement in PATTERNS:
-        if re.fullmatch(pattern, text):
-            return re.sub(pattern, replacement, text)
+        match = re.fullmatch(pattern, text)
+        if match:
+            return replacement(match) if callable(replacement) else match.expand(replacement)
     return text

@@ -113,7 +113,7 @@ class PanaceaApp(ctk.CTk):
         self._fonts = {}
         self._pending_logs = {}
         self._preview_summary = 'Analysis optional · No files deleted'
-        self._quick_cleanup_summary = 'Ready · No cleanup started'
+        self._quick_cleanup_summary = ''
         self._drive_values = []
         self._turbo_states = {}
         self._turbo_master = None
@@ -597,7 +597,7 @@ class PanaceaApp(ctk.CTk):
             'Analyze', self.run_preview_temp, 226)
         restore, restore_detail = action_card(
             1, (5, 0), 'restore', 'Restore point',
-            'Save Windows state · confirmation required', 'Create',
+            'Create a restore point · confirmation required', 'Create',
             self.run_create_restore, 210)
 
         for card, label, reserved in ((scan, self.dash_preview_status, 174),
@@ -746,32 +746,25 @@ class PanaceaApp(ctk.CTk):
     def _setup_cleaning_frame(self):
         body = self._section_body(
             self.frame_cleaning, 'Cleanup',
-            'One confirmed cleanup or individual tools. Protected files remain untouched.')
+            'Quick cleanup or individual tools. Protected files are skipped.')
         quick = self._card(body)
         quick.pack(fill='x', pady=(0, 8))
-        quick.grid_columnconfigure(0, weight=0)
+        quick.grid_columnconfigure(0, weight=1)
         self.quick_cleanup_card = quick
-        quick.grid_columnconfigure(1, weight=1)
         self.quick_cleanup_button = self._button(
             quick, 'Run quick cleanup', self.run_quick_cleanup,
             image=self.compact_icons['clean'], compound='left',
             maintenance=True, height=42, width=170)
         self.quick_cleanup_button.grid(
-            row=0, column=0, sticky='w', padx=(14, 10), pady=(13, 11))
+            row=0, column=0, padx=14, pady=(13, 13))
         self.quick_cleanup_status = LLabel(
-            quick, text=self._quick_cleanup_summary,
-            font=self._font(11), text_color=MUTED,
+            quick, text='', font=self._font(11), text_color=MUTED,
             anchor='w', justify='left')
-        self.quick_cleanup_status.grid(
-            row=0, column=1, sticky='ew', padx=(0, 14), pady=(12, 10))
         self.quick_cleanup_bar = ctk.CTkProgressBar(
             quick, height=7, progress_color=COL_GOLD, fg_color=BORDER)
         self.quick_cleanup_bar.set(0)
-        self.quick_cleanup_bar.grid(
-            row=1, column=0, columnspan=2, sticky='ew',
-            padx=14, pady=(0, 13))
         quick.bind('<Configure>', lambda event: self.quick_cleanup_status.configure(
-            wraplength=max(104, event.width / self.quick_cleanup_status._get_widget_scaling() - 212)))
+            wraplength=max(120, event.width / self.quick_cleanup_status._get_widget_scaling() - 36)))
         self.cleanup_toggle_button = self._button(
             body, 'Show individual tools', self._toggle_cleanup_tools,
             secondary=True, image=self.compact_icons['tools'],
@@ -806,7 +799,7 @@ class PanaceaApp(ctk.CTk):
             self.cleanup_toggle_button.configure(text='Hide individual tools')
 
     def _setup_disk_frame(self):
-        body = self._section_body(self.frame_disk, 'Drive optimization', 'Windows selects TRIM or defragmentation.')
+        body = self._section_body(self.frame_disk, 'Drive optimization', 'Windows uses the appropriate optimization method for each drive.')
         card = self._card(body)
         card.pack(fill='x', pady=(0, 8))
         row = ctk.CTkFrame(card, fg_color='transparent')
@@ -851,7 +844,7 @@ class PanaceaApp(ctk.CTk):
         row = ctk.CTkFrame(body, fg_color='transparent')
         row.pack(fill='x', pady=(6, 0))
         self._button(
-            row, 'Restore point', self.run_create_restore,
+            row, 'Create restore point', self.run_create_restore,
             image=self.compact_icons['restore'], compound='left', anchor='w',
             secondary=True, maintenance=True, height=40).pack(fill='x', pady=(0, 6))
         self._button(
@@ -982,14 +975,14 @@ class PanaceaApp(ctk.CTk):
         'Recycle Bin': 'Cleanup · Permanently delete all items in the Recycle Bin.',
         'DNS cache': 'Network · Refresh locally cached domain-name lookups.',
         'Network reset': 'Network · Reset Winsock; a restart may be needed.',
-        'Drive optimization': 'Disk · Let Windows choose TRIM or defragmentation.',
+        'Drive optimization': 'Disk · Let Windows use the optimization appropriate for the drive.',
         'Disk health scan': 'Disk · Scan the file system for errors (online CHKDSK).',
         'Windows image health': 'Repair · Check recorded corruption in the Windows component image.',
         'System file scan': 'Repair · Scan and repair protected Windows files (SFC).',
     }
 
     def _setup_resurrect_frame(self):
-        """Compact, readable two-column guided maintenance without engine changes."""
+        """Guided maintenance cards reflow without changing operation semantics."""
         host = self.frame_resurrect
         host.grid_columnconfigure(0, weight=1)
         host.grid_rowconfigure(0, weight=1)
@@ -1106,6 +1099,7 @@ class PanaceaApp(ctk.CTk):
                 phase, 'i', lambda n=name: self._toggle_resurrection_info(n),
                 secondary=True, width=27, height=27)
             detail_button.configure(font=self._font(12, True), text_color=MUTED)
+            detail_button._canvas.configure(takefocus=1)
             detail_button.grid(
                 row=0, column=2, rowspan=2,
                 padx=(4, 8), pady=8, sticky='e')
@@ -1150,8 +1144,14 @@ class PanaceaApp(ctk.CTk):
 
     @staticmethod
     def _step_layout_mode(available):
-        """3–4–3 when roomy; two columns on laptops, one only when necessary."""
-        return '343' if available >= 730 else '2' if available >= 430 else '1'
+        """Five cards per row when readable; responsive three/two/one fallback."""
+        if available >= 1180:
+            return '5'
+        if available >= 610:
+            return '3'
+        if available >= 430:
+            return '2'
+        return '1'
 
     def _layout_resurrection_timeline(self, event):
         timeline = self._resurrection_timeline
@@ -1160,24 +1160,15 @@ class PanaceaApp(ctk.CTk):
         if self._resurrection_layout_mode == layout:
             return
         self._resurrection_layout_mode = layout
-        self._resurrection_two_columns = layout != '1'
-        timeline.grid_columnconfigure(tuple(range(12)), weight=1,
-                                      uniform='steps')
+        columns = int(layout)
+        self._resurrection_two_columns = columns > 1
+        # Thirty equal grid units preserve ordering for 5/3/2/1 responsive columns.
+        timeline.grid_columnconfigure(tuple(range(30)), weight=1, uniform='steps')
+        span = 30 // columns
         for index, phase in enumerate(self._resurrection_phases):
-            if layout == '343':
-                if index < 3:
-                    row, column, span = 0, index * 4, 4
-                elif index < 7:
-                    row, column, span = 1, (index - 3) * 3, 3
-                else:
-                    row, column, span = 2, (index - 7) * 4, 4
-            elif layout == '2':
-                row, column, span = index // 2, (index % 2) * 6, 6
-            else:
-                row, column, span = index, 0, 12
             phase.grid_configure(
-                row=row, column=column, columnspan=span,
-                sticky='nsew', padx=4, pady=4)
+                row=index // columns, column=(index % columns) * span,
+                columnspan=span, sticky='nsew', padx=4, pady=4)
 
     def _toggle_resurrection_info(self, name):
         label = self._resurrection_info_labels.get(name)
@@ -1557,10 +1548,10 @@ class PanaceaApp(ctk.CTk):
         button = self.__dict__.get('cleanup_reasons_button')
         if button is not None:
             button.configure(state='normal' if partial else 'disabled')
-        for line in (title, totals, issues, *groups):
+        for line in (title, totals, issues, *groups,
+                     *(f'SKIPPED · {item}' for item in skipped),
+                     *(f'ERROR · {item}' for item in errors)):
             self.log_msg(line)
-        if partial:
-            self.log_msg('View reasons: all original skipped/error details are available above.')
 
     def _show_temp_failure(self, exc, before, *, preview):
         current = self.cleanup_mgr.last_result
@@ -1579,7 +1570,7 @@ class PanaceaApp(ctk.CTk):
         if not details:
             return
         dialog = ctk.CTkToplevel(self)
-        dialog.title('Temporary files · Reasons and original details')
+        dialog.title(self._t('Temporary files · Reasons and original details'))
         dialog.geometry('820x480')
         dialog.minsize(500, 300)
         dialog.transient(self)
@@ -1618,6 +1609,16 @@ class PanaceaApp(ctk.CTk):
         label = self.__dict__.get('quick_cleanup_status')
         if label is not None:
             label.configure(text=self._quick_cleanup_summary, text_color=color)
+            if self._quick_cleanup_summary:
+                label.grid(row=1, column=0, sticky='ew', padx=14, pady=(0, 8))
+            else:
+                label.grid_remove()
+        bar = self.__dict__.get('quick_cleanup_bar')
+        if bar is not None:
+            if self._quick_cleanup_summary:
+                bar.grid(row=2, column=0, sticky='ew', padx=14, pady=(0, 13))
+            else:
+                bar.grid_remove()
 
     def _quick_cleanup_progress(self, finished, total, result):
         bar = self.__dict__.get('quick_cleanup_bar')

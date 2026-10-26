@@ -28,7 +28,7 @@ def main():
     app = PanaceaApp()
     app.geometry(f"{args.width}x{args.height}")
     app.attributes("-topmost", True)
-    names = ["Dashboard", "Cleaning", "Disk", "Tools", "Apps", "Turbo", "Resurrect"]
+    names = ["Dashboard", "Cleaning", "Apps", "Tools", "Disk", "Turbo", "Startup", "Resurrect"]
     observations = []
     errors = []
     class DispatchErrors(logging.Handler):

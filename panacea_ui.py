@@ -199,7 +199,7 @@ class PanaceaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.language = resolve_language()
-        self.title(f'Panacea · {translate("System maintenance", self.language)} · {VERSION}')
+        self.title(f'Panacea {VERSION}')
         self.configure(fg_color=BG)
         self.withdraw()
         self.geometry('1020x680')

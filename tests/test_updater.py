@@ -255,3 +255,16 @@ def test_invalid_http_status_is_classified_as_network_failure():
         raise http.client.BadStatusLine('broken HTTP response')
     with pytest.raises(updater.UpdateNetworkError):
         updater.UpdateClient(REPO, '1.47', opener=broken).check()
+
+
+@pytest.mark.parametrize("installed", ["2.0.0", "2.0.1"])
+def test_installed_v2_offers_published_v202(installed):
+    candidate = manifest()
+    candidate["tag_name"] = "v2.0.2"
+    candidate["html_url"] = f"https://github.com/{REPO}/releases/tag/v2.0.2"
+    for asset in candidate["assets"]:
+        asset["browser_download_url"] = asset["browser_download_url"].replace(TAG, "v2.0.2")
+    offered = updater.UpdateClient(REPO, installed, opener=fake_opener(candidate)).check()
+    assert offered.version == "2.0.2"
+    assert offered.exe_url.endswith("/v2.0.2/Panacea.exe")
+    assert updater.UpdateClient(REPO, "2.0.2", opener=fake_opener(candidate)).check() is None

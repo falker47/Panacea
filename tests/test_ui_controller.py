@@ -274,6 +274,7 @@ def test_real_tk_first_mapping_retains_a_usable_requested_size(monkeypatch):
         app.update()
         scale = app._get_window_scaling()
         assert app.winfo_ismapped()
+        assert app.title() == f'Panacea {panacea_ui.VERSION}'
         assert app.winfo_width() / scale >= 760
         assert app.winfo_height() / scale >= 420
         if app.winfo_screenwidth() >= 1100 * scale + 48 and app.winfo_screenheight() >= 700 * scale + 120:
@@ -1179,7 +1180,7 @@ def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch
     try:
         app.update()
         assert app.language == 'it'
-        assert 'Manutenzione del sistema' in app.title()
+        assert app.title() == f'Panacea {panacea_ui.VERSION}'
         assert app.brand_tagline.cget('text') == 'SYSTEM MAINTENANCE'
         assert app.nav_buttons['Cleaning'].cget('text') == 'Spazio e pulizia'
         assert app.nav_buttons['Resurrect'].cget('text') == 'Manutenzione guidata'

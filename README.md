@@ -5,7 +5,7 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The current stable version is **2.0.1**. See the [2.0.1 release notes](docs/releases/2.0.1.md) for the five-section interface, Quick cleanup, and Guided Maintenance updates. Official [GitHub Releases](https://github.com/falker47/Panacea/releases/latest) remain authoritative; CI artifacts and draft releases do not imply stable publication.
+The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.0.2 release notes](docs/releases/2.0.2.md) for the new interface, localization and performance improvements, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
 
 See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
 The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.

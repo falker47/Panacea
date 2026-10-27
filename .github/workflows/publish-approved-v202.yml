@@ -1,0 +1,72 @@
+name: Publish approved Panacea v2.0.2
+
+# This workflow is pinned to v2.0.2; ordinary releases keep the manual draft process.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-2-0-2:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: panacea-approved-v2-0-2-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      CI_RUN_ID: ${{ github.event.workflow_run.id }}
+      RELEASE_TAG: v2.0.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Require current main commit and exact stable version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GH_REPO/branches/main" --jq .commit.sha)" = "$SOURCE_SHA"
+          test "$(python -c 'from version import VERSION; print(VERSION)')" = "2.0.2"
+          test -s docs/releases/2.0.2.md
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "::error::Release v2.0.2 already exists; refusing to overwrite it."
+            exit 1
+          fi
+      - name: Retrieve and verify Windows assets from this successful CI run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$CI_RUN_ID" --repo "$GH_REPO" --name Panacea-Windows-candidate --dir release-assets
+          test -s release-assets/Panacea.exe
+          test -s release-assets/PanaceaSetup.exe
+          (cd release-assets && sha256sum --check Panacea.exe.sha256 && sha256sum --check PanaceaSetup.exe.sha256)
+      - name: Publish stable v2.0.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GH_REPO" --target "$SOURCE_SHA" --latest \
+            --title "Panacea v2.0.2" --notes-file docs/releases/2.0.2.md \
+            release-assets/Panacea.exe release-assets/Panacea.exe.sha256 \
+            release-assets/PanaceaSetup.exe release-assets/PanaceaSetup.exe.sha256
+      - name: Verify publication and required assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '
+            select(.draft == false and .prerelease == false
+              and .tag_name == "v2.0.2"
+              and ([.assets[].name] | sort) ==
+                  (["Panacea.exe", "Panacea.exe.sha256", "PanaceaSetup.exe", "PanaceaSetup.exe.sha256"] | sort)) | .html_url
+          ' | tee published-url.txt
+          test -s published-url.txt

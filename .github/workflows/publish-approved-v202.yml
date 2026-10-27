@@ -32,18 +32,31 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - name: Require current main commit and exact stable version
+        id: gate
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test "$(gh api "repos/$GH_REPO/branches/main" --jq .commit.sha)" = "$SOURCE_SHA"
-          test "$(python -c 'from version import VERSION; print(VERSION)')" = "2.0.2"
+          if test "$(python -c 'from version import VERSION; print(VERSION)')" != "2.0.2"; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           test -s docs/releases/2.0.2.md
           if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "::error::Release v2.0.2 already exists; refusing to overwrite it."
-            exit 1
+            # Repeat CI on this or future main commits must be harmless.
+            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '
+              select(.draft == false and .prerelease == false
+                and ([.assets[].name] | sort) ==
+                    (["Panacea.exe", "Panacea.exe.sha256", "PanaceaSetup.exe", "PanaceaSetup.exe.sha256"] | sort)) | .html_url
+            ' | tee existing-release.txt
+            test -s existing-release.txt
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Retrieve and verify Windows assets from this successful CI run
+        if: steps.gate.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -52,6 +65,7 @@ jobs:
           test -s release-assets/PanaceaSetup.exe
           (cd release-assets && sha256sum --check Panacea.exe.sha256 && sha256sum --check PanaceaSetup.exe.sha256)
       - name: Publish stable v2.0.2
+        if: steps.gate.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +74,7 @@ jobs:
             release-assets/Panacea.exe release-assets/Panacea.exe.sha256 \
             release-assets/PanaceaSetup.exe release-assets/PanaceaSetup.exe.sha256
       - name: Verify publication and required assets
+        if: steps.gate.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail

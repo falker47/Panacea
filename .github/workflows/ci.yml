@@ -34,6 +34,22 @@ jobs:
       - name: Import smoke test
         run: python -c "import panacea_ui, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
 
+      - name: Profile read-only GUI performance across independent processes
+        shell: pwsh
+        run: |
+          python scripts/perf_pass.py --samples 5 --output build/perf/current.json
+          if ($LASTEXITCODE -ne 0) { throw 'Performance probe failed' }
+          python scripts/perf_pass.py --samples 5 --affinity-cores 2 --output build/perf/two-core.json
+          if ($LASTEXITCODE -ne 0) { throw 'Two-core performance probe failed' }
+
+      - name: Retain read-only performance measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Windows-performance
+          path: build/perf
+          if-no-files-found: warn
+
       - name: Build executable
         run: python scripts/build.py
 
@@ -49,6 +65,27 @@ jobs:
           $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged GUI smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke failed: $($process.ExitCode)" }
+
+      - name: Capture read-only Windows UX evidence
+        shell: pwsh
+        run: |
+          foreach ($lang in @('en', 'it')) {
+            $env:PANACEA_LANGUAGE = $lang
+            foreach ($pct in @(100, 125, 150)) {
+              $scale = $pct / 100
+              python scripts/visual_check.py --width 1020 --height 700 --scale $scale --settle-ms 500 --output "build/ui-evidence/$lang-$pct"
+              if ($LASTEXITCODE -ne 0) { throw "GUI capture failed: $lang $pct percent" }
+            }
+          }
+          Remove-Item Env:PANACEA_LANGUAGE -ErrorAction SilentlyContinue
+
+      - name: Preserve UI screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-UI-visual-QA
+          path: build/ui-evidence
+          if-no-files-found: warn
 
       - name: Ensure Inno Setup compiler is available on the disposable runner
         shell: pwsh
@@ -70,6 +107,25 @@ jobs:
           $actual = (Get-FileHash -LiteralPath dist/PanaceaSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           $manifest = (Get-Content -LiteralPath dist/PanaceaSetup.exe.sha256 -Raw).Trim()
           if ($manifest -cne "$actual  PanaceaSetup.exe") { throw 'Setup SHA-256 mismatch' }
+
+      - name: Measure packaged window startup and binary sizes
+        shell: pwsh
+        run: |
+          python scripts/packaged_probe.py --exe dist/Panacea.exe --output build/perf/packaged.json --samples 5
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged startup probe failed' }
+          @{
+            portable_bytes = (Get-Item dist/Panacea.exe).Length
+            installer_bytes = (Get-Item dist/PanaceaSetup.exe).Length
+          } | ConvertTo-Json | Set-Content build/perf/package-sizes.json -Encoding utf8
+
+      - name: Preserve packaged performance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Windows-packaged-performance
+          path: |
+            build/perf/packaged.json
+            build/perf/package-sizes.json
+          if-no-files-found: error
 
       - name: Save candidate executable and checksum
         uses: actions/upload-artifact@v4

@@ -574,3 +574,39 @@ function Get-CimInstance { param([string]$ClassName)
         return result.stdout
     monkeypatch.setattr(monitor, '_query_output', isolated_query)
     assert monitor.get_ram_info() == 'DDR4 @ 2400 MHz (1 module)'
+
+
+
+def test_windows_product_edition_from_registry_without_spawning_processes(monkeypatch):
+    from contextlib import nullcontext
+    import sys
+    class Registry:
+        HKEY_LOCAL_MACHINE = object()
+        @staticmethod
+        def OpenKey(root, path):
+            assert 'CurrentVersion' in path
+            return nullcontext(object())
+        @staticmethod
+        def QueryValueEx(key, name):
+            return {'ProductName': ('Windows 10 Pro', 1),
+                    'CurrentBuildNumber': ('22631', 1),
+                    'EditionID': ('Professional', 1)}[name]
+    monkeypatch.setitem(sys.modules, 'winreg', Registry)
+    assert bare_monitor().get_os_info() == 'Windows 11 Pro'
+
+
+def test_battery_flag_distinguishes_actively_charging_from_plugged_in(monkeypatch):
+    def make_query(flag):
+        def query(pointer):
+            pointer._obj.BatteryLifePercent = 52
+            pointer._obj.ACLineStatus = 1
+            pointer._obj.BatteryFlag = flag
+            return 1
+        return query
+    api = SimpleNamespace()
+    monkeypatch.setattr(monitoring.ctypes, 'windll',
+                        SimpleNamespace(kernel32=api), raising=False)
+    api.GetSystemPowerStatus = make_query(8)
+    assert bare_monitor().get_battery_status() == (52, 'Charging')
+    api.GetSystemPowerStatus = make_query(0)
+    assert bare_monitor().get_battery_status() == (52, 'Plugged In')

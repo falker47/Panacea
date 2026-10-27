@@ -1,0 +1,642 @@
+"""Interface translations and locale selection for installed and portable Panacea.
+
+The installer writes its Inno Setup language beside the protected executable.
+Portable/source builds instead use the Windows user UI language. Translation is
+presentation-only: operation identifiers, commands and file paths stay unchanged.
+"""
+import configparser
+import locale
+import os
+from pathlib import Path
+import re
+import sys
+
+LOCALE_FILE = "panacea-language.ini"
+
+# English copy remains canonical in the UI; only visible presentation is mapped.
+_PAIRS = """
+System maintenance => Manutenzione del sistema
+Overview => Panoramica
+Space & Cleanup => Spazio e pulizia
+Diagnostics & Repair => Diagnostica e riparazione
+Performance & Startup => Prestazioni e avvio
+Guided Maintenance => Manutenzione guidata
+Panacea is already up to date. => Panacea è già aggiornato all'ultima versione.
+Checking Panacea updates… => Verifica aggiornamenti Panacea…
+Check updates => Cerca aggiornamenti
+Retry check => Riprova controllo
+Install update => Installa aggiornamento
+Download / install => Scarica / installa
+Release notes => Note di rilascio
+Defer => Rimanda
+Update deferred => Aggiornamento rimandato
+Use Check updates when ready => Usa Cerca aggiornamenti quando vuoi
+Ready => Pronto
+Ready · No operation running => Pronto · Nessuna operazione in corso
+Ready · No cleanup started => Pronto · Pulizia non avviata
+Ready · No steps run => Pronto · Nessun passaggio eseguito
+Analysis optional · No files deleted => Analisi facoltativa · Nessun file eliminato
+Loading Windows details… => Caricamento dettagli di Windows…
+Uptime: — => Attività: —
+Power: — => Alimentazione: —
+Last restart: — => Ultimo riavvio: —
+Restart recommended => Riavvio consigliato
+Plugged In => Collegato alla corrente
+On Battery => Alimentazione a batteria
+Charging => In carica
+Windows Update => Windows Update
+Checking… => Verifica in corso…
+Check failed => Verifica non riuscita
+View => Apri
+CPU => CPU
+Memory (RAM) => Memoria (RAM)
+System drive => Unità di sistema
+Loading processor… => Caricamento processore…
+RAM: — => RAM: —
+Loading memory details… => Caricamento dettagli memoria…
+Storage: — => Archiviazione: —
+Checking space… => Verifica dello spazio…
+Loading disk details… => Caricamento dettagli unità…
+Temporary files => File temporanei
+Restore point => Punto di ripristino
+Analyze => Analizza
+Create => Crea
+Save Windows state · confirmation required => Salva lo stato di Windows · conferma richiesta
+Activity details => Dettagli attività
+Cleanup => Pulizia
+One confirmed cleanup or individual tools. Protected files remain untouched. => Pulizia rapida o strumenti singoli. I file protetti non vengono toccati.
+Quick cleanup => Pulizia rapida
+Temporary files · Recycle Bin · Windows component store => File temporanei · Cestino · Componenti Windows
+Then Windows Disk Cleanup opens for manual selection. => Poi si apre Pulizia disco di Windows per la selezione manuale.
+Run quick cleanup => Avvia pulizia rapida
+Show individual tools => Mostra strumenti singoli
+Hide individual tools => Nascondi strumenti singoli
+Delete temporary files => Elimina file temporanei
+Permanent deletion after confirmation; no analysis required => Eliminazione definitiva dopo conferma; analisi non necessaria
+Clean now => Pulisci ora
+Recycle Bin => Cestino
+Permanently empty all items · confirmation required => Svuota definitivamente tutti gli elementi · conferma richiesta
+Empty bin => Svuota cestino
+Component store => Componenti Windows
+Windows removes superseded components. => Windows rimuove i componenti sostituiti.
+Clean store => Pulisci componenti
+Windows Disk Cleanup => Pulizia disco di Windows
+Choose categories in the Windows utility. => Scegli le categorie nell'utilità Windows.
+Open utility => Apri utilità
+Cleanup details => Dettagli pulizia
+Drive optimization => Ottimizzazione unità
+Select a drive; Windows chooses the correct optimization method. => Seleziona un'unità; Windows sceglie il metodo di ottimizzazione.
+Loading… => Caricamento…
+No drives => Nessuna unità
+Refresh => Aggiorna
+Reading local drives… => Lettura unità locali…
+Optimize selected drive => Ottimizza unità selezionata
+Windows chooses TRIM or defragmentation. May take several minutes. => Windows sceglie TRIM o deframmentazione. Può richiedere diversi minuti.
+Optimize => Ottimizza
+Windows drive optimization => Ottimizzazione unità Windows
+View schedules and drive health in Windows. => Controlla programmazione e stato unità in Windows.
+Optimization output => Risultato ottimizzazione
+Repair tools => Strumenti di riparazione
+Check integrity or repair Windows and network issues. => Verifica l'integrità o ripara problemi di Windows e della rete.
+WINDOWS INTEGRITY => INTEGRITÀ WINDOWS
+NETWORK => RETE
+System file scan => Analisi file di sistema
+Verify and repair protected files. => Verifica e ripara i file protetti.
+SFC scan => Analisi SFC
+Scan => Analizza
+Image health => Integrità immagine
+Check the component image for recorded corruption. => Controlla i danni registrati nell'immagine di sistema.
+DISM health check => Controllo integrità DISM
+Check => Controlla
+Repair image => Ripara immagine
+Repair corruption; may use Windows Update. => Ripara i danni; può usare Windows Update.
+DISM repair => Riparazione DISM
+Repair => Ripara
+Flush DNS => Svuota DNS
+Clear cached DNS records. => Cancella i record DNS memorizzati.
+DNS flush => Svuotamento DNS
+Flush => Svuota
+Reset Winsock => Reimposta Winsock
+May interrupt connections and require a restart. => Può interrompere le connessioni e richiedere un riavvio.
+Network reset => Ripristino rete
+Reset => Ripristina
+Run => Esegui
+Battery report => Report batteria
+Command output => Output dei comandi
+Installed apps => App installate
+Review installed software using Windows settings. => Gestisci il software installato tramite le impostazioni di Windows.
+Review storage use, repair or uninstall apps. => Controlla lo spazio, ripara o disinstalla le app.
+Apps settings => Impostazioni app
+Classic programs => Programmi classici
+Windows handles app changes. Return here when finished. => Windows gestisce le modifiche alle app. Torna qui al termine.
+Startup apps => App all'avvio
+Choose which apps launch when you sign in. => Scegli quali app avviare all'accesso.
+Review startup impact and disable unnecessary auto-start entries. => Controlla l'impatto all'avvio e disattiva le app non necessarie.
+Startup settings => Impostazioni di avvio
+Windows manages startup changes. Return here when finished. => Windows gestisce le modifiche all'avvio. Torna qui al termine.
+Disable unnecessary apps at sign-in. => Disattiva gli avvii automatici non necessari.
+Manage or uninstall programs in Windows. => Gestisci o disinstalla i programmi in Windows.
+Windows selects TRIM or defragmentation. => Windows usa il metodo di ottimizzazione adatto all'unità.
+Open Windows drive optimizer => Apri ottimizzazione unità Windows.
+Original settings are saved for restoration. => Le impostazioni originali vengono salvate per il ripristino.
+Adjust Windows animations. => Regola le animazioni di Windows.
+Stops app preloading. => Ferma il precaricamento delle app.
+Stops background indexing. => Ferma l'indicizzazione in background.
+Saved settings unavailable · Refresh state => Impostazioni salvate non disponibili · Aggiorna stato
+Performance settings => Impostazioni prestazioni
+Original settings are saved before changes and restored when turned off. => Le impostazioni originali vengono salvate e ripristinate alla disattivazione.
+All settings => Tutte le impostazioni
+Reading saved originals… => Lettura impostazioni salvate…
+Restore saved settings => Ripristina impostazioni salvate
+Refresh state => Aggiorna stato
+High performance => Prestazioni elevate
+More power use, heat and battery drain. => Aumenta consumi, calore e uso della batteria.
+Visual effects preset => Effetti visivi
+Save the Windows performance preference. => Salva le preferenze di prestazioni Windows.
+Pause SysMain => Sospendi SysMain
+Pause application preloading. => Sospendi il precaricamento delle applicazioni.
+Pause Windows Search => Sospendi Windows Search
+Pause background indexing. => Sospendi l'indicizzazione in background.
+Pause Print Spooler => Sospendi spooler di stampa
+Printing is unavailable while active. => La stampa non è disponibile durante la sospensione.
+Unknown => Sconosciuto
+Active => Attivo
+Inactive => Inattivo
+Resurrection => Manutenzione guidata
+SEQUENCE STATUS => STATO DELLA SEQUENZA
+Before you start => Prima di iniziare
+Maintenance steps => Passaggi di manutenzione
+Select Details for step information and results. => Seleziona Dettagli per informazioni e risultati del passaggio.
+Details => Dettagli
+10 steps · Verified restore point required => 10 passaggi · Punto di ripristino verificato obbligatorio
+Start sequence => Avvia sequenza
+Cancel after step => Annulla dopo il passaggio
+Not started => Non avviato
+Running… => In esecuzione…
+Completed => Completato
+Failed => Non riuscito
+Failed / partial => Non riuscito / parziale
+Not run => Non eseguito
+pending => in attesa
+running => in esecuzione
+completed => completato
+partial => parziale
+cancelled => annullato
+failed => non riuscito
+interrupted => interrotto
+Full sequence output => Output sequenza completa
+Browser caches => Cache dei browser
+Browser cache => Cache browser
+Temp files => File temporanei
+DNS cache => Cache DNS
+Optimize drive => Ottimizza unità
+Disk scan => Analisi disco
+Disk health scan => Verifica disco
+Windows image health => Integrità immagine Windows
+System files => File di sistema
+Available => Disponibile
+Unavailable => Non disponibile
+Local => Locale
+No available local drive => Nessuna unità locale disponibile
+Cannot read drive => Impossibile leggere l'unità
+Capacity unavailable => Capacità non disponibile
+Space available => Spazio disponibile
+Low free space => Spazio libero insufficiente
+Memory unavailable => Memoria non disponibile
+Drive information unavailable => Informazioni unità non disponibili
+Processor details unavailable => Dettagli processore non disponibili
+Memory details unavailable => Dettagli memoria non disponibili
+Disk details unavailable => Dettagli disco non disponibili
+Command state unknown => Stato del comando sconosciuto
+Operation in progress => Operazione in corso
+Wait for the current operation to finish. => Attendi il termine dell'operazione corrente.
+Failed · See sequence output => Errore · Consulta l'output della sequenza
+Metrics unavailable => Metriche non disponibili
+Analysis => Analisi
+No files deleted => Nessun file eliminato
+Scanning temporary files… No files deleted => Analisi file temporanei… Nessun file eliminato
+Not scanned yet => Non ancora analizzato
+Analysis completed => Analisi completata
+Analysis failed => Analisi non riuscita
+Analysis partial => Analisi parziale
+Analysis interrupted => Analisi interrotta
+Cleanup completed => Pulizia completata
+Cleanup failed => Pulizia non riuscita
+Cleanup partial => Pulizia parziale
+Cleanup interrupted => Pulizia interrotta
+files deleted => file eliminati
+files => file
+skipped => ignorati
+errors => errori
+candidates => candidati
+recoverable => recuperabili
+freed => liberati
+about => circa
+Temporary file analysis => Analisi file temporanei
+Temporary file cleanup => Pulizia file temporanei
+Empty Recycle Bin => Svuota cestino
+Disk Cleanup => Pulizia disco
+Command completion unknown => Completamento del comando sconosciuto
+Sequence stopped => Sequenza interrotta
+starting => in avvio
+Completed. => Completato.
+Failed. => Non riuscito.
+See command output. => Consulta l'output dei comandi.
+See drive output. => Consulta l'output dell'unità.
+Restart required. => Riavvio necessario.
+See command output for details. => Consulta l'output dei comandi per i dettagli.
+See optimization output for details. => Consulta l'output dell'ottimizzazione per i dettagli.
+Network connections may be interrupted and a restart may be needed. => La connessione potrebbe interrompersi e potrebbe essere necessario riavviare.
+The operation can take several minutes. Save your work first. => L'operazione può richiedere diversi minuti. Salva prima il lavoro.
+Clean temporary files now => Pulisci file temporanei adesso
+Confirm quick cleanup => Conferma pulizia rapida
+Select a drive => Seleziona un'unità
+Choose a valid drive letter. => Scegli una lettera di unità valida.
+Create restore point => Crea punto di ripristino
+Confirm Resurrection => Conferma manutenzione guidata
+Confirm Guided Maintenance => Conferma manutenzione guidata
+Maintenance running… => Manutenzione in corso…
+Cancel after current step => Annulla dopo il passaggio corrente
+Cancellation requested… => Annullamento richiesto…
+Starting · Verifying restore point => Avvio · Verifica punto di ripristino
+Starting · 0/3 automatic steps attempted => Avvio · 0/3 passaggi automatici tentati
+opened => aperto
+Opened => Aperto
+Ready to retry => Pronto per riprovare
+Restart required => Riavvio necessario
+Optional updates => Aggiornamenti facoltativi
+Update => Aggiornamento
+Update failed => Aggiornamento non riuscito
+Update check failed => Controllo aggiornamenti non riuscito
+Verified · Preparing installation… => Verificato · Preparazione installazione…
+Downloading and verifying… => Download e verifica in corso…
+Verifying downloaded executable… => Verifica eseguibile scaricato…
+Retry install => Riprova installazione
+Finish the current operation before updating. => Termina l'operazione corrente prima di aggiornare.
+Install verified update => Installa aggiornamento verificato
+Update installation in progress => Installazione aggiornamento in corso
+Wait for installation to finish before closing Panacea. => Attendi il termine dell'installazione prima di chiudere Panacea.
+Report saved => Report salvato
+Panacea Manual Point => Punto manuale Panacea
+Component store cleanup => Pulizia componenti Windows
+Restore Turbo settings => Ripristino impostazioni Turbo
+Turbo settings => Impostazioni Turbo
+Turbo setting => Impostazione Turbo
+No saved changes => Nessuna modifica salvata
+Saved originals unavailable => Impostazioni salvate non disponibili
+retry Refresh state => riprova Aggiorna stato
+available for restoration => disponibili per il ripristino
+switches show the current Windows state => gli interruttori mostrano lo stato Windows attuale
+Automatic steps attempted => Passaggi automatici tentati
+No cleanup started => Pulizia non avviata
+No further sequence steps will start => Non verranno avviati altri passaggi
+Running => In esecuzione
+Stopped => Interrotto
+Partial => Parziale
+Cancelled => Annullato
+The app stays open if verification or installation fails. => L'app resterà aperta se la verifica o l'installazione non riesce.
+Unknown Model => Modello sconosciuto
+Temporary-file results could not be verified. => Impossibile verificare i risultati della pulizia dei file temporanei.
+Starting Windows component-store cleanup (DISM). => Avvio della pulizia dei componenti Windows (DISM).
+DISM completion unknown; further maintenance is blocked. => Impossibile verificare il completamento di DISM: le altre operazioni di manutenzione sono bloccate.
+Component cleanup completed; Windows restart required. => Pulizia dei componenti completata; è necessario riavviare Windows.
+Component cleanup completed. => Pulizia dei componenti completata.
+Component cleanup failed. => Pulizia dei componenti non riuscita.
+Recycle bin emptied. => Cestino svuotato.
+Recycle bin is empty (verified). => Cestino vuoto (verificato).
+Invalid restore point description. => Descrizione del punto di ripristino non valida.
+System Restore state could not be verified. Check protection and administrator access. => Impossibile verificare lo stato di Ripristino configurazione di sistema. Controlla Protezione sistema e i permessi di amministratore.
+Restore point creation failed => Creazione del punto di ripristino non riuscita
+Restore point verified => Punto di ripristino verificato
+A positive finite process timeout is required => È richiesto un limite di tempo positivo e finito per il processo
+Process completion could not be verified => Impossibile verificare la conclusione del processo
+Process cleanup could not be verified => Impossibile verificare la chiusura del processo
+Command is not an approved maintenance operation => Il comando non è autorizzato come operazione di manutenzione
+Windows boot identity is unavailable or invalid => Identificativo dell'avvio di Windows non disponibile o non valido
+Windows boot counter is unavailable or invalid => Contatore degli avvii di Windows non disponibile o non valido
+An absolute maintenance guard path is required => È necessario un percorso assoluto per il controllo di sicurezza della manutenzione
+Maintenance guard storage is unavailable => Memorizzazione del controllo di sicurezza della manutenzione non disponibile
+Too many maintenance guard records to verify safely => Troppi record di sicurezza della manutenzione da verificare in sicurezza
+Unsafe maintenance guard record => Record di sicurezza della manutenzione non sicuro
+Invalid maintenance guard record => Record di sicurezza della manutenzione non valido
+Maintenance guard identity does not match its record => Identità del controllo di sicurezza della manutenzione diversa da quella registrata
+The maintenance guard write was interrupted before its record was saved => Il salvataggio del controllo di sicurezza della manutenzione è stato interrotto prima del completamento
+The original Windows boot is unknown; maintenance completion cannot be verified => L'avvio originale di Windows è sconosciuto: impossibile verificare il completamento della manutenzione
+Concurrent maintenance record could not be verified => Impossibile verificare il record di manutenzione concorrente
+Release version is invalid. => Versione della release non valida.
+Release URL is missing. => Indirizzo della release mancante.
+Release URL has an invalid port. => Porta non valida nell'indirizzo della release.
+Release URLs must be plain repository-owned HTTPS URLs. => Gli indirizzi delle release devono essere URL HTTPS diretti appartenenti al repository.
+Update paths cannot traverse links or reparse points. => I percorsi degli aggiornamenti non possono attraversare collegamenti o punti di reindirizzamento.
+Update response exceeds its size limit. => La risposta dell'aggiornamento supera il limite di dimensione.
+Checksum is not ASCII. => Il checksum non è in formato ASCII.
+Checksum must identify exactly Panacea.exe. => Il checksum deve identificare esattamente Panacea.exe.
+Expected SHA-256 is invalid. => SHA-256 atteso non valido.
+Executable exceeds its advertised size. => L'eseguibile supera la dimensione dichiarata.
+Executable size does not match the release. => La dimensione dell'eseguibile non corrisponde alla release.
+Executable SHA-256 does not match the release. => Lo SHA-256 dell'eseguibile non corrisponde a quello della release.
+Executable has no valid DOS/PE header. => L'eseguibile non contiene un'intestazione DOS/PE valida.
+Executable PE header is outside the file. => L'intestazione PE dell'eseguibile è fuori dal file.
+Executable PE signature is invalid. => La firma PE dell'eseguibile non è valida.
+PE header does not describe a supported executable image. => L'intestazione PE non descrive un eseguibile supportato.
+Executable optional/section headers are invalid or truncated. => Le intestazioni opzionali o delle sezioni dell'eseguibile non sono valide o sono incomplete.
+Executable must be a regular file. => L'eseguibile deve essere un file ordinario.
+Repository must be an owner/name pair. => Il repository deve essere indicato come proprietario/nome.
+Update redirect URL is invalid. => Indirizzo di reindirizzamento dell'aggiornamento non valido.
+Update redirect left trusted HTTPS GitHub hosts. => Il reindirizzamento dell'aggiornamento ha lasciato gli host HTTPS GitHub attendibili.
+Release metadata cannot come from the asset CDN. => I metadati della release non possono provenire dalla CDN dei file.
+Release metadata URL is outside this repository. => L'indirizzo dei metadati della release non appartiene a questo repository.
+Asset redirect is outside this repository. => Il reindirizzamento del file è esterno al repository.
+GitHub denied or rate-limited the update check. Try again later. => GitHub ha negato o limitato le richieste di verifica. Riprova più tardi.
+Cannot contact GitHub. Check the connection and retry. => Impossibile contattare GitHub. Controlla la connessione e riprova.
+A verified release manifest is required. => È necessario un manifesto di release verificato.
+Release is not a newer stable executable of valid size. => La release non è una versione stabile più recente con dimensione valida.
+Release page is outside the configured repository. => La pagina della release è esterna al repository configurato.
+Release page does not match its version. => La pagina della release non corrisponde alla versione.
+Release tag and page disagree. => Il tag e la pagina della release non corrispondono.
+Asset URL must identify the exact repository release asset. => L'URL del file deve identificare il file esatto della release del repository.
+GitHub returned invalid release metadata. => GitHub ha restituito metadati della release non validi.
+Release metadata download was interrupted. => Download dei metadati della release interrotto.
+GitHub release metadata is not an object. => I metadati della release GitHub non sono validi.
+Release stability fields are missing. => Mancano i campi che identificano la stabilità della release.
+Release assets are missing or malformed. => I file della release mancano o non sono validi.
+Checksum asset size is invalid. => La dimensione del file di checksum non è valida.
+Checksum download was interrupted. => Download del checksum interrotto.
+Update download cancelled. => Download dell'aggiornamento annullato.
+Download exceeds the advertised executable size. => Il download supera la dimensione dichiarata dell'eseguibile.
+Download was interrupted or could not be written. => Il download è stato interrotto oppure non è stato possibile salvare il file.
+Update state is too large. => I dati dello stato dell'aggiornamento superano il limite di dimensione.
+Update state is malformed. => I dati dello stato dell'aggiornamento non sono validi.
+Staged executable changed while it was opened. => L'eseguibile preparato è cambiato durante l'apertura.
+Staged executable exceeds the update size limit. => L'eseguibile preparato supera il limite di dimensione dell'aggiornamento.
+Cannot acquire the updater transaction guard; retry later. => Impossibile acquisire il blocco di sicurezza dell'aggiornamento; riprova più tardi.
+Another updater transaction is active; retry later. => È già in corso un'altra operazione di aggiornamento; riprova più tardi.
+Readiness marker does not match the recorded operation token. => Il marcatore di avvio non corrisponde al codice dell'operazione registrata.
+Readiness marker is not a completed update for this executable. => Il marcatore di avvio non indica un aggiornamento completato per questo eseguibile.
+Readiness backup checksum is invalid. => Checksum del backup di avvio non valido.
+Readiness executable checksum is invalid. => Checksum dell'eseguibile di avvio non valido.
+Previous update still has pending recovery state. => Un aggiornamento precedente ha ancora uno stato di ripristino in sospeso.
+An unacknowledged update is missing its recovery backup. => Manca il backup di ripristino di un aggiornamento non confermato.
+Installer target must be the current Panacea.exe. => La destinazione dell'installer deve essere l'eseguibile Panacea.exe corrente.
+Previous readiness cleanup is still locked; keep its backup and retry later. => La pulizia del precedente avvio è ancora bloccata; conserva il backup e riprova più tardi.
+The current executable does not exist. => L'eseguibile corrente non esiste.
+A generated update path already exists; no existing files were overwritten. => Il percorso generato per l'aggiornamento esiste già; nessun file esistente è stato sovrascritto.
+The new application exited before it acknowledged readiness. => La nuova applicazione si è chiusa prima di confermare l'avvio.
+Cannot verify update directory permissions. => Impossibile verificare i permessi della cartella degli aggiornamenti.
+Cannot read update directory permissions. => Impossibile leggere i permessi della cartella degli aggiornamenti.
+Automatic executable updates require Windows. => Gli aggiornamenti automatici dell'eseguibile richiedono Windows.
+The installed executable must be owned and writable only by administrators. => L'eseguibile installato deve essere di proprietà degli amministratori e modificabile soltanto da loro.
+Cannot create protected executable permissions. => Impossibile configurare i permessi protetti dell'eseguibile.
+Cannot create protected update permissions. => Impossibile configurare i permessi protetti dell'aggiornamento.
+Cannot create an administrator-protected update workspace. => Impossibile creare una cartella di aggiornamento protetta dagli amministratori.
+Source execution opens the verified release page for manual installation. => L'esecuzione da sorgente apre la pagina della release verificata per l'installazione manuale.
+Update helper must run from its prepared protected workspace. => Il processo ausiliario di aggiornamento deve essere eseguito dalla cartella protetta predisposta.
+Updater operation state changed; preserve the recovery backup. => Lo stato dell'aggiornamento è cambiato; conserva il backup di ripristino.
+Prepared target is outside the helper's installation directory. => La destinazione preparata è esterna alla cartella di installazione del processo ausiliario.
+The authoritative release changed. Check again before installing. => La release ufficiale è cambiata. Verifica di nuovo prima di installare.
+The new application exited before startup readiness. => La nuova applicazione si è chiusa prima di confermare l'avvio.
+Updater operation changed before its readiness deadline. => L'operazione di aggiornamento è cambiata prima del termine previsto per la verifica di avvio.
+The new application did not acknowledge startup readiness in time. => La nuova applicazione non ha confermato l'avvio entro il tempo previsto.
+Recovery state belongs to another operation. => Lo stato di ripristino appartiene a un'altra operazione.
+Quick cleanup or individual tools. Protected files are skipped. => Pulizia rapida o strumenti singoli. I file protetti vengono ignorati.
+Windows uses the appropriate optimization method for each drive. => Windows usa il metodo di ottimizzazione adatto a ogni unità.
+Disk · Let Windows use the optimization appropriate for the drive. => Disco · Windows usa il metodo di ottimizzazione adatto all'unità.
+Windows selects the appropriate optimization method. This may take several minutes. => Windows sceglie il metodo di ottimizzazione adatto. Potrebbero servire diversi minuti.
+Create a restore point · confirmation required => Crea un punto di ripristino · conferma richiesta
+Temporary files · Reasons and original details => File temporanei · Motivi e dettagli originali
+Partial / failed => Parziale / non riuscito
+SKIPPED => IGNORATO
+ERROR => ERRORE
+No available updates => Nessun aggiornamento disponibile
+Check unavailable => Verifica non disponibile
+Check incomplete => Verifica incompleta
+Check Failed => Verifica non riuscita
+Check Timed Out => Verifica scaduta
+Parse Error => Errore nella lettura dei risultati
+This operation can take several minutes. => L'operazione può richiedere diversi minuti.
+Restart required · see command output. => Riavvio necessario · Consulta l'output dei comandi.
+Windows Disk Cleanup could not be opened. => Impossibile aprire Pulizia disco di Windows.
+Windows drive optimization could not be opened. => Impossibile aprire Ottimizzazione unità di Windows.
+Continue in Windows => Continua in Windows
+Changes are managed in Windows. => Le modifiche vengono gestite in Windows.
+Windows Disk Cleanup not opened => Pulizia disco di Windows non aperta
+Windows Disk Cleanup opened => Pulizia disco di Windows aperta
+choose and confirm categories in Windows => scegli e conferma le categorie in Windows
+command completion unknown => esito del comando non verificabile
+sequence stopped => sequenza interrotta
+closing or cancellation requested => chiusura o annullamento richiesto
+Starting => Avvio
+Quick cleanup failed => Pulizia rapida non riuscita
+Cancellation requested; the current command will finish. => Annullamento richiesto: il comando in corso terminerà prima dell'arresto.
+Stopped before cleanup: a new restore point could not be verified. Enable System Protection in Windows and retry. => Pulizia non avviata: impossibile verificare un nuovo punto di ripristino. Attiva Protezione sistema in Windows e riprova.
+Command completion unknown · sequence stopped; restart Windows before retrying. => Esito del comando non verificabile · Sequenza interrotta. Riavvia Windows prima di riprovare.
+Drive command completion unknown · sequence stopped; restart Windows before retrying. => Esito dell'ottimizzazione non verificabile · Sequenza interrotta. Riavvia Windows prima di riprovare.
+Windows Disk Cleanup launch failed => Apertura di Pulizia disco di Windows non riuscita
+automatic steps attempted => passaggi automatici tentati
+attempted => tentati
+Installation failed; old app retained. => Installazione non riuscita; è stata mantenuta la versione precedente.
+Verifying the release in the trusted helper. => Verifica della release nel processo protetto.
+Retry the install or download the release manually from GitHub. => Riprova l'installazione oppure scarica la release manualmente da GitHub.
+Could not open the report => Impossibile aprire il report
+Battery report saved to => Report batteria salvato in
+Optimization failed => Ottimizzazione non riuscita
+No new restore point could be verified. Windows may have throttled creation or protection is unavailable. => Impossibile verificare un nuovo punto di ripristino. Windows potrebbe averne limitato la creazione oppure Protezione sistema non è disponibile.
+Restore point created and verified => Punto di ripristino creato e verificato
+In use (Windows sharing/lock violation) => In uso (blocco o condivisione Windows)
+Access denied by Windows => Accesso negato da Windows
+No longer present => Elemento non più presente
+Reparse points refused => Collegamenti di reindirizzamento esclusi
+Hard links refused => Hard link esclusi
+Case-sensitive directories refused => Cartelle con distinzione maiuscole/minuscole escluse
+Object identity could not be verified => Identità dell'elemento non verificabile
+Outside authorized paths => Fuori dalle cartelle autorizzate
+Unsupported path format => Percorso non supportato
+Ambiguous path refused => Percorso ambiguo escluso
+Windows handle protection unavailable => Protezione dei file Windows non disponibile
+Expected directory unavailable => Cartella prevista non disponibile
+Nonregular objects refused => Elementi non regolari esclusi
+Temporary location could not be verified => Percorso temporaneo non verificabile
+Other filesystem errors => Altri errori del file system
+Other recorded errors => Altri errori registrati
+Progress reporting error => Errore durante l'aggiornamento dell'avanzamento
+Other recorded reasons => Altri motivi registrati
+""".strip()
+
+ITALIAN = dict(line.split(" => ", 1) for line in _PAIRS.splitlines())
+
+WARNINGS = {
+    "Permanent deletion: browser caches, temporary files and Recycle Bin items; restore points cannot recover them.\nNetwork reset can interrupt connections or require restart. Save work; cancellation stops between steps.":
+        "Eliminazione definitiva di cache dei browser, file temporanei e Cestino: i punti di ripristino non recuperano questi dati.\nIl ripristino della rete può interrompere le connessioni o richiedere un riavvio. Salva il lavoro; l'annullamento avviene tra i passaggi.",
+    "A new restore point must be verified first. Browser caches, temporary files and Recycle Bin contents will then be deleted permanently. A restore point cannot bring them back.\nResetting the network can interrupt your connection or require a restart. Save your work. If you cancel, Panacea finishes the current step and stops before the next one.":
+        "Prima di procedere Panacea deve verificare un nuovo punto di ripristino. Poi eliminerà definitivamente cache dei browser, file temporanei e contenuto del Cestino: il punto di ripristino non può recuperarli.\nIl ripristino della rete può interrompere la connessione o richiedere un riavvio. Salva il lavoro. Se premi Annulla, Panacea termina il passaggio in corso e non avvia i successivi.",
+    "Permanent deletion: browser caches, temp files and all Recycle Bin items. Restore points cannot recover deleted files.\nNetwork reset may disconnect you or require a restart. Save work. Cancel stops between commands.":
+        "Eliminazione definitiva di cache browser, file temporanei e tutto il Cestino. I punti di ripristino non recuperano i file eliminati.\nIl ripristino rete può disconnetterti o richiedere un riavvio. Salva il lavoro. L'annullamento avviene tra i comandi.",
+    "Safety · Verify a new Windows restore point. Deleted files are NOT recoverable.":
+        "Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati NON sono recuperabili.",
+    "Cleanup · Remove temporary web browser cache data.":
+        "Pulizia · Rimuove i dati di cache temporanei dei browser.",
+    "Cleanup · Remove eligible temporary files; protected items are skipped.":
+        "Pulizia · Rimuove i file temporanei idonei; gli elementi protetti vengono ignorati.",
+    "Cleanup · Permanently delete all items in the Recycle Bin.":
+        "Pulizia · Elimina definitivamente tutti gli elementi del Cestino.",
+    "Network · Refresh locally cached domain-name lookups.":
+        "Rete · Aggiorna le risoluzioni DNS memorizzate.",
+    "Network · Reset Winsock; a restart may be needed.":
+        "Rete · Reimposta Winsock; potrebbe servire un riavvio.",
+    "Disk · Let Windows choose TRIM or defragmentation.":
+        "Disco · Lascia scegliere a Windows tra TRIM e deframmentazione.",
+    "Disk · Scan the file system for errors (online CHKDSK).":
+        "Disco · Cerca errori nel file system (CHKDSK online).",
+    "Repair · Check recorded corruption in the Windows component image.":
+        "Riparazione · Controlla i danni registrati nell'immagine Windows.",
+    "Repair · Scan and repair protected Windows files (SFC).":
+        "Riparazione · Analizza e ripara i file Windows protetti (SFC).",
+    "Permanently delete eligible files in validated temporary folders?\n\nNo analysis is required. Files are checked as they are deleted; locked and protected items are skipped. Results may differ from an earlier analysis.\n\nDeletion cannot be undone through the Recycle Bin.":
+        "Eliminare definitivamente i file idonei nelle cartelle temporanee verificate?\n\nNon serve alcuna analisi preliminare. I file sono verificati durante l'eliminazione; quelli bloccati o protetti sono ignorati. I risultati possono differire da un'analisi precedente.\n\nNon è possibile annullare l'eliminazione tramite il Cestino.",
+    "Permanently delete every item in the Recycle Bin?\nThese items cannot be recovered through the Recycle Bin.":
+        "Eliminare definitivamente tutti gli elementi del Cestino?\nNon saranno recuperabili tramite il Cestino.",
+    "Run the following cleanup operations in sequence?\n\n1. Permanently delete eligible files in validated temporary folders.\n2. Permanently empty the ENTIRE Recycle Bin.\n3. Remove superseded Windows components using DISM.\n4. OPEN Windows Disk Cleanup for your manual selection and confirmation.\n\nDeletion is irreversible, including through Windows restore points. Some files may be skipped; DISM may take time or require a restart. Save your work first.\n\nContinue?":
+        "Eseguire queste operazioni in sequenza?\n\n1. Eliminare definitivamente i file idonei nelle cartelle temporanee verificate.\n2. Svuotare definitivamente TUTTO il Cestino.\n3. Rimuovere i componenti Windows sostituiti tramite DISM.\n4. APRIRE Pulizia disco Windows per selezione e conferma manuale.\n\nL'eliminazione è irreversibile anche tramite punti di ripristino. Alcuni file potrebbero essere ignorati; DISM può richiedere tempo o un riavvio. Salva prima il lavoro.\n\nContinuare?",
+    "Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.":
+        "Creare e verificare un nuovo punto di ripristino Windows?\nLa protezione del sistema deve essere già attiva. Può richiedere un minuto.",
+    "Run all 10 maintenance steps?\n\nAfter verifying a new restore point, Panacea permanently deletes browser caches, temporary files and ALL Recycle Bin items, then resets network settings and scans the system.\n\nDeletion cannot be undone through the Recycle Bin. Network connections may be interrupted; a restart may be needed. Save your work first.":
+        "Eseguire tutti i 10 passaggi di manutenzione?\n\nDopo aver verificato un nuovo punto di ripristino, Panacea elimina definitivamente cache dei browser, file temporanei e TUTTO il Cestino; poi reimposta la rete e analizza il sistema.\n\nL'eliminazione non si può annullare dal Cestino. La rete può disconnettersi ed essere necessario riavviare. Salva prima il lavoro.",
+}
+
+PATTERNS = [
+    (r"^Panacea ([\w.]+) is up to date$", r"Panacea \1 è aggiornato"),
+    (r"^Panacea ([\w.]+) available$", r"Panacea \1 disponibile"),
+    (r"^You are using Panacea ([\w.+-]+)\. Update to version ([\w.+-]+) is available\.$",
+     r"Stai usando Panacea \1. È disponibile l'aggiornamento alla versione \2."),
+    (r"^Uptime: (.+)$", r"Attività: \1"),
+    (r"^Power: (.+)$", r"Alimentazione: \1"),
+    (r"^Battery: (.+)$", r"Batteria: \1"),
+    (r"^(.+) GB used / (.+) GB$", r"\1 GB usati / \2 GB"),
+    (r"^(.+) GB free / (.+) GB$", r"\1 GB liberi / \2 GB"),
+    (r"^(.+)% used$", r"\1% utilizzato"),
+    (r"^(.+) original settings saved$", r"\1 impostazioni originali salvate"),
+    (r"^(\d+) / (\d+) steps$", r"\1 / \2 passaggi"),
+    (r"^(.+) steps finished$", r"\1 passaggi terminati"),
+    (r"^(.+) finished$", r"\1 completati"),
+    (r"^(.+) files deleted$", r"\1 file eliminati"),
+    (r"^(.+) files$", r"\1 file"),
+    (r"^(.+) skipped$", r"\1 ignorati"),
+    (r"^(.+) errors$", r"\1 errori"),
+    (r"^(.+) candidates$", r"\1 candidati"),
+    (r"^about (.+) recoverable$", r"circa \1 recuperabili"),
+    (r"^(.+) freed$", r"\1 liberati"),
+    (r"^(.+) automatic steps attempted$", r"\1 passaggi automatici tentati"),
+    (r"^(.+) automatic steps completed$", r"\1 passaggi automatici completati"),
+    (r"^Run Windows optimization on ([A-Za-z]:)\?$", r"Ottimizzare l'unità \1 con Windows?"),
+    (r"^Download and verify Panacea ([\w.+-]+)\?$", r"Scaricare e verificare Panacea \1?"),
+    (r"^Run (.+)\?$", lambda match: f"Eseguire {translate(match.group(1), 'it')}?"),
+    (r"^Run Windows optimization on (.+)\?$", r"Eseguire l'ottimizzazione Windows su \1?"),
+    (r"^Downloading · (.+)%$", r"Download · \1%"),
+    (r"^(.+) available for restoration$", r"\1 disponibili per il ripristino"),
+    (r"^Update check failed: (.+)$", lambda match: f"Controllo aggiornamenti non riuscito: {translate(match.group(1), 'it')}"),
+    (r"^Update failed: (.+)$", lambda match: f"Aggiornamento non riuscito: {translate(match.group(1), 'it')}"),
+    (r"^Drive query failed: (.+)$", r"Ricerca unità non riuscita: \1"),
+    (r"^Drive information unavailable: (.+)$", r"Informazioni unità non disponibili: \1"),
+    (r"^Metrics unavailable: (.+)$", r"Metriche non disponibili: \1"),
+    (r"^(.+) unavailable: (.+)$", lambda match: f"{translate(match.group(1), 'it')} non disponibile: {translate(match.group(2), 'it')}"),
+    (r"^Opened (.+)$", lambda match: f"Aperto {translate(match.group(1), 'it')}"),
+    (r"^Failed · (.+)$", r"Errore · \1"),
+    (r"^Running · (.+)$", r"In esecuzione · \1"),
+    (r"^Stopped · (.+)$", r"Interrotto · \1"),
+    (r"^Completed · (.+)$", r"Completato · \1"),
+    (r"^(.+) failed$", lambda match: f"{translate(match.group(1), 'it')} non riuscito"),
+    (r"^(.+) completed; errors repaired \(exit code 1\)\.$", lambda match:
+     f"{translate(match.group(1), 'it')} completato: errori riparati (codice 1)."),
+    (r"^(.+) completed; restart required to finish applying changes\.$", lambda match:
+     f"{translate(match.group(1), 'it')} completato: riavvio necessario per applicare le modifiche."),
+    (r"^(.+) failed with exit code (\d+)\.$", lambda match:
+     f"{translate(match.group(1), 'it')} non riuscito (codice {match.group(2)})."),
+    (r"^Recycle bin operation returned code (\d+)\.$", r"Svuotamento del Cestino terminato con codice \1."),
+    (r"^Battery report saved to (.+)$", r"Report della batteria salvato in \1"),
+    (r"^Could not open the report: (.+)$", r"Impossibile aprire il report: \1"),
+    (r"^GitHub update request failed \(HTTP (\d+)\)\.$",
+     r"Richiesta di aggiornamento GitHub non riuscita (HTTP \1)."),
+    (r"^Release must contain exactly one (.+) asset\.$",
+     r"La release deve contenere esattamente un file \1."),
+    (r"^Maintenance guard records cannot be verified: (.+)$",
+     r"Impossibile verificare i record di sicurezza della manutenzione: \1"),
+    (r"^Quick cleanup: (.+)$", lambda match: f"Pulizia rapida: {translate(match.group(1), 'it')}"),
+    (r"^Quick cleanup failed: (.+)$", r"Pulizia rapida non riuscita: \1"),
+    (r"^(\d+)/(\d+) attempted$", r"\1/\2 tentati"),
+    (r"^(\d+) recommended, (\d+) optional$", lambda match:
+     f"{match.group(1)} consigliati, {match.group(2)} "
+     f"{'facoltativo' if match.group(2) == '1' else 'facoltativi'}"),
+    (r"^(\d+) recommended updates$", r"\1 aggiornamenti consigliati"),
+    (r"^(\d+) optional updates$", r"\1 aggiornamenti facoltativi"),
+    (r"^Result: (.+)$", lambda match: f"Risultato: {translate(match.group(1), 'it')}"),
+    (r"^Optimization of ([A-Za-z]:) completed\.$", r"Ottimizzazione dell'unità \1 completata."),
+    (r"^Optimization of ([A-Za-z]:) failed with exit code (\d+)\.$", r"Ottimizzazione dell'unità \1 non riuscita (codice \2)."),
+    (r"^Restore point created and verified \(sequence (\d+)\)\.$", r"Punto di ripristino creato e verificato (sequenza \1)."),
+    (r"^(.+) files removed$", r"\1 file rimossi"),
+    (r"^(.+) MB logical bytes freed$", r"\1 MB logici liberati"),
+    (r"^Found (\d+) eligible files\.\.\.$", r"Trovati \1 file idonei…"),
+    (r"^Deleted (\d+) files\.\.\.$", r"Eliminati \1 file…"),
+    (r"^([+−]) (.+)$", lambda match: f"{match.group(1)} {translate(match.group(2), 'it')}"),
+    (r"^([^:]+): (.+)$", lambda match:
+     f"{translate(match.group(1), 'it')}: {translate(match.group(2), 'it')}"
+     if translate(match.group(1), 'it') != match.group(1) else match.group(0)),
+]
+
+def _normalize(language):
+    value = str(language or "").casefold().strip().replace("-", "_")
+    return "it" if value in ("it", "italian", "it_it") or value.startswith("it_") else "en"
+
+
+def read_installed_language(executable):
+    """Only inspect the exact sidecar path, never enumerate arbitrary directories."""
+    if not executable:
+        return None
+    path = Path(executable).with_name(LOCALE_FILE)
+    try:
+        parser = configparser.ConfigParser(interpolation=None)
+        with path.open("r", encoding="utf-8") as stream:
+            parser.read_file(stream)
+        value = parser.get("Panacea", "Language", fallback="").casefold()
+        return _normalize(value) if value in ("english", "italian") else None
+    except (OSError, ValueError, configparser.Error):
+        return None
+
+
+def resolve_language(*, executable=None, system_language=None, override=None):
+    """Installed choice wins. Explicit override supports development and QA."""
+    if executable is None and getattr(sys, "frozen", False):
+        executable = sys.executable
+    installed = read_installed_language(executable)
+    if installed:
+        return installed
+    if override is None:
+        override = os.getenv("PANACEA_LANGUAGE")
+    if override:
+        return _normalize(override)
+    if system_language is None:
+        try:
+            import ctypes
+            system_language = "it" if ctypes.windll.kernel32.GetUserDefaultUILanguage() == 0x0410 else None
+        except (AttributeError, OSError):
+            pass
+    if system_language is None:
+        system_language = locale.getlocale()[0] or "en"
+    return _normalize(system_language)
+
+
+def translate(text, language="en"):
+    if not isinstance(text, str) or _normalize(language) != "it" or not text:
+        return text
+    if text in ITALIAN:
+        return ITALIAN[text]
+    if text in WARNINGS:
+        return WARNINGS[text]
+    if "\n" in text:
+        return "\n".join(translate(line, "it") for line in text.split("\n"))
+    if " · " in text:
+        return " · ".join(translate(part, "it") for part in text.split(" · "))
+    for pattern, replacement in PATTERNS:
+        match = re.fullmatch(pattern, text)
+        if match:
+            return replacement(match) if callable(replacement) else match.expand(replacement)
+    return text

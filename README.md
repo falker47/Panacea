@@ -5,7 +5,7 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The current stable version is **2.0.1**. See the [2.0.1 release notes](docs/releases/2.0.1.md) for the five-section interface, Quick cleanup, and Guided Maintenance updates. Official [GitHub Releases](https://github.com/falker47/Panacea/releases/latest) remain authoritative; CI artifacts and draft releases do not imply stable publication.
+The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.0.2 release notes](docs/releases/2.0.2.md) for the new interface, localization and performance improvements, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
 
 See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
 The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.
@@ -106,10 +106,13 @@ The installer does not touch existing portable V1 executables. Older v1.47
 users should close the app and install V2 manually, not use the unverified
 legacy in-app Install banner.
 
-The V2 updater can offer checksum-verified, user-confirmed in-place updates
-for this protected installation. Desktop/Downloads copies deliberately cannot
-perform elevated in-place replacement; portable copies stay supported with
-manual updates and keep the existing ZEROfilez stable `Panacea.exe` link.
+The corrected V2 updater can offer checksum-verified, user-confirmed in-place
+updates for protected installations. Users of installed v2.0.0/v2.0.1 should
+upgrade to v2.0.2 with Setup because the older binaries may reject canonical
+GitHub release URLs on their case-sensitive repository checks.
+Desktop/Downloads copies deliberately cannot perform elevated in-place
+replacement; portable copies stay supported with manual updates and keep the
+existing ZEROfilez stable `Panacea.exe` link.
 
 Installation does not mean automatic silent background update. The runtime
 asks for approval and must satisfy protected-file and directory checks.

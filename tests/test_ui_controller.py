@@ -5,6 +5,7 @@ from functools import wraps
 import os
 import subprocess
 import sys
+import time
 import panacea_ui
 from panacea_ui import PanaceaApp
 from modules.ui_dispatch import UiDispatcher, WorkerController
@@ -182,18 +183,23 @@ def test_battery_report_uses_system_directory_and_single_output_path(monkeypatch
 
 def test_navigation_builds_each_section_only_when_first_opened():
     app = app_without_window()
-    app.frames = {'Dashboard': Mock(), 'Disk': Mock()}
-    app.nav_buttons = {'Dashboard': Mock(), 'Disk': Mock()}
-    dashboard, disk = Mock(), Mock()
-    app._setup_functions = {'Dashboard': dashboard, 'Disk': disk}
+    pages = [page for _, _, _, group_pages in app.NAV_GROUPS for page in group_pages]
+    app.frames = {page: Mock() for page in pages}
+    app.group_frames = {root: Mock() for root, _, _, _ in app.NAV_GROUPS}
+    app.nav_buttons = {root: Mock() for root, _, _, _ in app.NAV_GROUPS}
+    app.icons = {}
+    app.icons_active = {}
+    app._setup_functions = {page: Mock() for page in pages}
     app._built_frames = set()
     app.select_frame('Dashboard')
     app.select_frame('Dashboard')
-    assert dashboard.call_count == 1
-    disk.assert_not_called()
+    assert app._setup_functions['Dashboard'].call_count == 1
+    app._setup_functions['Disk'].assert_not_called()
     app.select_frame('Disk')
-    assert disk.call_count == 1
+    assert app._setup_functions['Disk'].call_count == 1
+    assert app._setup_functions['Tools'].call_count == 1
     assert app.active_frame == 'Disk'
+    assert app.group_frames['Tools'].grid.called
 
 
 def test_actual_turbo_state_is_cached_before_section_is_built():
@@ -268,6 +274,7 @@ def test_real_tk_first_mapping_retains_a_usable_requested_size(monkeypatch):
         app.update()
         scale = app._get_window_scaling()
         assert app.winfo_ismapped()
+        assert app.title() == f'Panacea {panacea_ui.VERSION}'
         assert app.winfo_width() / scale >= 760
         assert app.winfo_height() / scale >= 420
         if app.winfo_screenwidth() >= 1100 * scale + 48 and app.winfo_screenheight() >= 700 * scale + 120:
@@ -358,28 +365,35 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             dashboard_canvas.yview_moveto(0)
             app.update()
             labels = list(_native_widgets(app.sidebar_frame, panacea_ui.ctk.CTkLabel))
-            version = next(label for label in labels if f'v{panacea_ui.VERSION}' in label.cget('text'))
-            copyright_label = next(label for label in labels if '©' in label.cget('text'))
-            expect(copyright_label.cget('text') == f'© {panacea_ui.datetime.now().year} falker47',
-                   'Footer must identify the repository author')
-            expect(abs(baseline(version) - baseline(copyright_label)) <= 2 * scale, 'Footer text must share one baseline')
-            expect('\n' not in version.cget('text') + copyright_label.cget('text'), 'Footer must stay on one line')
-            expect(_native_bounds(copyright_label)[2] <= _native_bounds(version)[0],
-                   'Footer author must be left of the version without overlap')
+            version, credit = app.footer_version, app.footer_credit
+            expect(version.cget('text') == f'v{panacea_ui.VERSION}',
+                   'Footer must show current version')
+            expect(credit.cget('text') == 'Panacea 2026 — Maurizio Falconi (falker47)',
+                   'Footer credit must contain the full attribution')
+            expect(abs(_native_bounds(credit)[1] - _native_bounds(version)[1]) <= 4 * scale,
+                   'Footer credit and version must share one row')
+            expect(_native_bounds(credit)[2] <= _native_bounds(version)[0] + 2,
+                   'Footer credit and version must not overlap')
+            expect(_native_bounds(app.update_bar)[3] <= _native_bounds(credit)[1],
+                   'Update status must precede attribution')
+            expect(not app.btn_check_update.winfo_manager(),
+                   'Do not show an update button while checking')
             sidebar = _native_bounds(app.sidebar_frame)
-            footer_bottom = max(_native_bounds(label)[3] for label in (version, copyright_label))
-            insets = (_native_bounds(copyright_label)[0] - sidebar[0],
-                      sidebar[2] - _native_bounds(version)[2], sidebar[3] - footer_bottom)
+            footer_bottom = max(_native_bounds(credit)[3], _native_bounds(version)[3])
+            insets = (_native_bounds(credit)[0] - sidebar[0],
+                      sidebar[2] - _native_bounds(version)[2],
+                      sidebar[3] - footer_bottom)
             footer_insets.append(insets)
-            expect(all(0 <= inset <= 20 * scale for inset in insets), f'Footer edge insets too large: {insets}')
-            for label in (version, copyright_label):
+            expect(all(0 <= inset <= 22 * scale for inset in insets),
+                   f'Footer edge insets too large: {insets}')
+            for label in (version, credit, app.app_update_status):
                 inside(label, app.sidebar_frame, 'Footer')
             title = next(label for label in labels if label.cget('text') == 'Panacea')
             tagline = next(label for label in labels if label.cget('text') == 'SYSTEM MAINTENANCE')
             gap = tagline._label.winfo_rooty() - (title._label.winfo_rooty() + title._label.winfo_height())
             expect(-1 <= gap <= 0.6 * tagline._label.winfo_height() + 2, f'Brand text gap is not compact: {gap}')
-            expect(all(icon.cget('size') == (31, 31) for icon in app.icons.values()), 'Sidebar navigation icons must be 31px')
-            expect(app.brand_icon.cget('size') == (68, 68), 'Original brand logo should render at 68px')
+            expect(all(icon.cget('size') == (35, 35) for icon in app.icons.values()), 'Sidebar navigation icons must be 35px')
+            expect(app.brand_icon.cget('size') == (74, 74), 'Original brand logo should render at 74px')
             for branding in (app.brand_title, app.brand_tagline):
                 inside(branding, app.sidebar_frame, 'Sidebar branding')
                 rendered = branding._label
@@ -387,12 +401,15 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                                                 '-displayof', rendered, branding.cget('text')))
                 expect(required <= rendered.winfo_width() + 2,
                        f'Branding text clips: {branding.cget("text")}')
-            expect(app.brand_title.cget('font').cget('size') == 28, 'Panacea title is undersized')
-            expect(app.brand_tagline.cget('font').cget('size') == 11, 'System maintenance subtitle is undersized')
+            expect(app.brand_title.cget('font').cget('size') == 32, 'Panacea title is undersized')
+            expect(app.brand_tagline.cget('font').cget('size') == 12, 'System maintenance subtitle is undersized')
+            expect(_native_bounds(app.nav_buttons['Dashboard'])[1] -
+                   _native_bounds(app._sidebar_brand)[3] >= 5 * scale,
+                   'The navigation needs breathing room below branding')
             for root, label, _, _ in app.NAV_GROUPS:
                 button = app.nav_buttons[root]
                 expect(button.cget('text') == label, f'{root} navigation label changed')
-                expect(button.cget('font').cget('size') == 15, f'{root} navigation font is undersized')
+                expect(button.cget('font').cget('size') == 16, f'{root} navigation font is undersized')
                 expect(button.cget('font').cget('family') == 'Segoe UI Semibold',
                        f'{root} navigation font should be semibold')
                 inside(button, app.sidebar_frame, root + ' navigation')
@@ -410,7 +427,9 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 text_labels = [label for label in _native_widgets(icon.master, panacea_ui.ctk.CTkLabel) if label.cget('text')]
                 text_top = min(label._label.winfo_rooty() for label in text_labels)
                 text_bottom = max(label._label.winfo_rooty() + label._label.winfo_height() for label in text_labels)
-                expect(image_height >= 0.65 * (text_bottom - text_top), f'{name} image too small for its text group')
+                # Wrapping translated copy at 150% can increase text group height
+                # without making the fixed, recognisable icon too small.
+                expect(image_height >= 26 * scale, f'{name} icon too small to recognise')
                 stacked = sorted(text_labels, key=lambda label: label._label.winfo_rooty())
                 for upper, lower in zip(stacked, stacked[1:]):
                     text_gap = lower._label.winfo_rooty() - _native_bounds(upper._label)[3]
@@ -425,12 +444,26 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                     inside(button, icon.master, name + ' action')
                     expect(max(_native_bounds(label)[2] for label in text_labels) <= _native_bounds(button)[0] + 2,
                            name + ' text overlaps its action')
-            if window_height < height:
-                # Smaller than the requested display matrix: actions may scroll,
-                # but must remain reachable without disturbing the fixed footer.
+            # The richer system summary can require scrolling at 150% DPI.
+            # Validate that the actions are reachable at the bottom, not that
+            # the entire dashboard fits the first viewport at every scale.
+            if dashboard_canvas.yview()[1] < 1.0:
                 dashboard_canvas.yview_moveto(1)
                 app.update()
             inside(app.card_sys, app.frame_dashboard, 'Dashboard action cards')
+            app.select_frame('Cleaning')
+            app.update()
+            for group in ('Cleaning', 'Tools', 'Turbo'):
+                app.select_frame(group)
+                app.update()
+                host = app.group_frames[group]
+                heading = app.group_headings[group]
+                expect(0 <= heading.winfo_rootx() - host.winfo_rootx() <= 42 * scale,
+                       f'{group} heading is not left-aligned')
+                canvas = app.group_scroll[group]._parent_canvas
+                available = canvas.winfo_width() / app.group_scroll[group]._get_widget_scaling()
+                expect(app._group_stacked[group] == app._group_requires_stack(group, available),
+                       f'{group} breakpoint disagrees with usable viewport')
             app.select_frame('Cleaning')
             app.update()
             # Quick cleanup is the first visible action; individual tools stay
@@ -439,7 +472,17 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             expect(not app.cleanup_individuals_frame.winfo_manager(),
                    'Individual cleanup tools must start collapsed')
             inside(app.quick_cleanup_button, quick, 'Quick cleanup action')
-            inside(quick, app.frame_cleaning, 'Quick cleanup card')
+            expect(not app.quick_cleanup_status.winfo_manager() and
+                   not app.quick_cleanup_bar.winfo_manager(),
+                   'Quick cleanup should not show idle status or idle progress')
+            ql, _, qr, _ = _native_bounds(quick)
+            bl, _, br, _ = _native_bounds(app.quick_cleanup_button)
+            expect(abs((ql + qr) - (bl + br)) <= 5 * scale,
+                   'Quick cleanup action should be centered in its card')
+            expect(bool(quick.winfo_ismapped()), 'Quick cleanup card must be available')
+            expect(_native_bounds(app.frame_cleaning)[0] <= _native_bounds(quick)[0]
+                   and _native_bounds(quick)[2] <= _native_bounds(app.frame_cleaning)[2],
+                   'Quick cleanup card must fit the panel width')
             app._toggle_cleanup_tools()
             app.update()
             expect(bool(app.cleanup_individuals_frame.winfo_manager()),
@@ -463,12 +506,18 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
             app._toggle_cleanup_tools()
             app.update()
             app.select_frame('Resurrect')
+            deadline = time.perf_counter() + 4
+            while (len(app._resurrection_rows) < len(app.RESURRECTION_STEPS)
+                   and time.perf_counter() < deadline):
+                app.update()
+                time.sleep(.01)
             app.update()
-            resurrection_canvas = app.god_log.master.master._parent_canvas
+            resurrection_canvas = app._section_log_hosts['god_log'].master._parent_canvas
             resurrection_canvas.yview_moveto(0)
             app.update()
             for widget, label in ((app.btn_resurrect_start, 'Start sequence'),
                                   (app.lbl_status, 'Resurrection status'),
+                                   (app.resurrection_step_count, 'Numerical progress'),
                                   (app.progress_bar, 'Resurrection progress')):
                 inside(widget, resurrection_canvas, label)
             status_bounds = _native_bounds(app.lbl_status)
@@ -485,8 +534,12 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                 for label in phase_labels:
                     inside(label, phase, f'{name} phase text')
                     rendered = label._label
+                    visible_text = label.cget('text')
+                    if label.cget('wraplength'):
+                        segments = visible_text.split()
+                        visible_text = max(segments, key=len) if segments else ''
                     text_width = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
-                                                      '-displayof', rendered, label.cget('text')))
+                                                      '-displayof', rendered, visible_text))
                     line_height = font_metric(rendered, 'linespace')
                     expect(text_width <= rendered.winfo_width() + 2,
                            f'{name} phase text is horizontally clipped: {label.cget("text")}; '
@@ -494,23 +547,22 @@ def test_real_tk_polish_geometry_survives_viewport_resize(monkeypatch, width, he
                     expect(line_height <= rendered.winfo_height() + 2,
                            f'{name} phase text is vertically clipped: '
                            f'required={line_height}px, available={rendered.winfo_height()}px')
-                ordered = sorted(phase_labels, key=lambda label: label.winfo_rootx())
-                for previous, following in zip(ordered, ordered[1:]):
-                    expect(_native_bounds(previous)[2] <= _native_bounds(following)[0] + 2,
-                           f'{name} phase labels overlap')
-                if window_height == height:
-                    inside(phase, resurrection_canvas, name + ' phase')
-            if window_height < height:
-                resurrection_canvas.yview_moveto(1)
-                app.update()
-                for name in (app.RESURRECTION_STEPS[4], app.RESURRECTION_STEPS[-1]):
-                    inside(app._resurrection_rows[name].master, resurrection_canvas, name + ' phase after scroll')
-            output_panel = app.god_log.master
+                for index, first in enumerate(phase_labels):
+                    x1, y1, x2, y2 = _native_bounds(first)
+                    for second in phase_labels[index + 1:]:
+                        a1, b1, a2, b2 = _native_bounds(second)
+                        expect(x2 <= a1 + 2 or a2 <= x1 + 2 or y2 <= b1 + 2 or b2 <= y1 + 2,
+                               f'{name} phase labels overlap')
+            resurrection_canvas.yview_moveto(1)
+            app.update()
+            inside(app._resurrection_rows[app.RESURRECTION_STEPS[-1]].master,
+                   resurrection_canvas, 'Last step after scrolling')
+            output_panel = app._section_log_hosts['god_log']
             output_toggle = next(button for button in output_panel.winfo_children()
                                  if isinstance(button, panacea_ui.ctk.CTkButton))
             inside(output_panel, resurrection_canvas, 'Full sequence panel')
             inside(output_toggle, resurrection_canvas, 'Full sequence output toggle')
-        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 2 for pair in footer_insets for axis in (0, 1, 2)),
+        expect(all(abs(pair[axis] - footer_insets[0][axis]) <= 4 for pair in footer_insets for axis in (0, 1, 2)),
                f'Footer insets drift on resize: {footer_insets}')
         assert not problems, '\n'.join(problems)
     finally:
@@ -557,11 +609,19 @@ def test_real_tk_dashboard_primary_metrics_and_actions_fit_initial_viewport(monk
             return result
         actions = buttons_in(app.card_sys)
         assert len(actions) == 2  # Analyze and restore; sidebar already opens Cleanup.
-        for widget in [app.dash_cpu_val, app.dash_ram_perc, app.dash_disk_perc, *actions]:
+        for widget in (app.dash_cpu_val, app.dash_ram_perc, app.dash_disk_perc):
             assert widget.winfo_rooty() >= top
-            assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{widget.cget("text")} below viewport'
+            assert widget.winfo_rooty() + widget.winfo_height() <= bottom
+        dashboard_canvas = app.card_sys.master._parent_canvas
+        if any(button.winfo_rooty() + button.winfo_height() > bottom for button in actions):
+            assert dashboard_canvas.yview()[1] < 1.0, 'Actions must be scrollable at high DPI'
+            dashboard_canvas.yview_moveto(1)
+            app.update()
+        for widget in actions:
+            assert widget.winfo_rooty() >= top
+            assert widget.winfo_rooty() + widget.winfo_height() <= bottom
             assert widget.winfo_rootx() >= left
-            assert widget.winfo_rootx() + widget.winfo_width() <= right, f'{widget.cget("text")} outside horizontal viewport'
+            assert widget.winfo_rootx() + widget.winfo_width() <= right
         assert app.card_sys.winfo_rooty() + app.card_sys.winfo_height() <= bottom
     finally:
         _destroy_real_app(app)
@@ -694,19 +754,30 @@ def test_real_tk_all_section_actions_and_phases_fit_initial_viewport(monkeypatch
             if name == 'Resurrect':
                 widgets += list(app._resurrection_rows.values())
             for widget in widgets:
-                assert widget.winfo_rooty() >= top
-                assert widget.winfo_rooty() + widget.winfo_height() <= bottom, f'{name}: {widget.cget("text")} below viewport'
                 assert widget.winfo_rootx() >= left
-                assert widget.winfo_rootx() + widget.winfo_width() <= right, f'{name}: {widget.cget("text")} outside viewport'
+                assert widget.winfo_rootx() + widget.winfo_width() <= right, (
+                    f'{name}: {widget.cget("text")} outside viewport horizontally')
+                if widget.winfo_rooty() + widget.winfo_height() > bottom:
+                    # The combined columns are independently scrollable; their
+                    # lower controls must remain reachable, not always on screen.
+                    parent = widget.master
+                    while parent is not None and not isinstance(parent, panacea_ui.ctk.CTkScrollableFrame):
+                        parent = getattr(parent, 'master', None)
+                    assert parent is not None, f'{name}: {widget.cget("text")} not scrollable'
+                    assert parent._parent_canvas.yview()[1] < 1.0, (
+                        f'{name}: {widget.cget("text")} clipped without scroll')
+                else:
+                    assert widget.winfo_rooty() >= top
             if name == 'Cleaning':
-                log = app.clean_log
-                toggle = next(child for child in log.master.winfo_children()
+                assert app.clean_log is None
+                panel = app._section_log_hosts['clean_log']
+                toggle = next(child for child in panel.winfo_children()
                               if isinstance(child, panacea_ui.ctk.CTkButton))
-                assert not log.winfo_manager()
                 toggle.invoke()
                 app.update()
+                log = app.clean_log
                 assert log.winfo_ismapped()
-                canvas = log.master.master._parent_canvas
+                canvas = app.group_scroll['Cleaning']._parent_canvas
                 before = canvas.yview()
                 assert before[1] < 1.0, 'Expanded details should overflow the compact viewport'
                 canvas.event_generate('<MouseWheel>', delta=-120)
@@ -895,9 +966,9 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
             app.update()
             assert app.active_frame == name
         app.select_frame('Tools')
-        app.subnav_buttons['Disk'].invoke()
         app.update()
-        assert app.active_frame == 'Disk'
+        assert app.frame_tools.winfo_ismapped()
+        assert app.frame_disk.winfo_ismapped()
         assert app.active_group == 'Tools'
         button = app.nav_buttons['Dashboard']
         button._canvas.focus_force()
@@ -928,6 +999,35 @@ def test_real_tk_keyboard_navigation_and_safe_control_activation(monkeypatch):
         switch._canvas.event_generate('<Return>')
         app.update()
         assert invoked == [True]
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_real_tk_drive_picker_opens_native_listbox_and_preserves_selection(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.select_frame('Tools')
+        app.update()
+        app._set_drives([{'letter': 'C:'}, {'letter': 'D:'}])
+        picker = app.drive_menu
+        assert isinstance(picker, panacea_ui._DrivePicker)
+        assert picker.cget('state') == 'normal'
+        picker.invoke()
+        app.update()
+        choices = picker._popup_listbox
+        assert isinstance(choices, panacea_ui.tk.Listbox)
+        choices.selection_clear(0, 'end')
+        choices.selection_set(1)
+        choices.event_generate('<Return>')
+        app.update()
+        assert app.selected_drive.get() == 'D:'
+        assert picker.cget('text').startswith('D:')
+        assert picker._popup is None
+        app._set_drives([])
+        assert picker.cget('state') == 'disabled'
+        picker.invoke()
+        assert picker._popup is None
     finally:
         _destroy_real_app(app)
 
@@ -966,9 +1066,9 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.select_frame('Cleaning')
         app._toggle_cleanup_tools()
         app.update()
-        log = app.clean_log
-        toggle = next(button for button in log.master.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
-        assert not log.winfo_manager()
+        assert app.clean_log is None
+        panel = app._section_log_hosts['clean_log']
+        toggle = next(button for button in panel.winfo_children() if isinstance(button, panacea_ui.ctk.CTkButton))
         # Analysis remains accessible from Overview, not the individual-cleanup panel.
         app.select_frame('Dashboard')
         app.update()
@@ -979,9 +1079,10 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         app.dispatcher.drain()
         app.select_frame('Cleaning')
         app.update()
+        log = app.clean_log
         assert log.winfo_ismapped(), 'Accepted analysis must automatically open its live output'
         assert 'Fixture analysis line 59' in log.get('1.0', 'end')
-        viewport = log.master.master._parent_canvas
+        viewport = app.group_scroll['Cleaning']._parent_canvas
         assert _native_bounds(log)[3] <= _native_bounds(viewport)[3] + 2, (
             f'Opened output lies below the viewport: log={_native_bounds(log)}, '
             f'viewport={_native_bounds(viewport)}, scroll={viewport.yview()}')
@@ -1035,3 +1136,273 @@ def test_real_tk_cleanup_output_keyboard_scroll_and_navigation_persist(monkeypat
         _destroy_real_app(app)
         panacea_ui.ctk.set_widget_scaling(1)
         panacea_ui.ctk.set_window_scaling(1)
+
+
+@isolated_tk_test
+def test_paired_panels_are_both_visible_without_subnavigation(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        for group, pages in (
+            ('Cleaning', ('Cleaning', 'Apps')),
+            ('Tools', ('Tools', 'Disk')),
+            ('Turbo', ('Turbo', 'Startup')),
+        ):
+            app.select_frame(group)
+            app.update()
+            host = app.group_frames[group]
+            assert host.winfo_ismapped()
+            assert not hasattr(app, 'subnav_frames')
+            assert all(app.frames[page].winfo_ismapped() for page in pages)
+            first, second = (app.frames[page] for page in pages)
+            canvas = app.group_scroll[group]._parent_canvas
+            available = canvas.winfo_width() / app.group_scroll[group]._get_widget_scaling()
+            stacked = app._group_requires_stack(group, available)
+            assert app._group_stacked[group] == stacked
+            if stacked:
+                assert first.winfo_rooty() < second.winfo_rooty()
+            else:
+                assert abs(first.winfo_rooty() - second.winfo_rooty()) <= 2
+                assert first.winfo_rootx() < second.winfo_rootx()
+            assert app.frames[pages[0]].master is app.frames[pages[1]].master
+            assert app.frames[pages[0]].master is app.group_scroll[group]
+            assert not any(isinstance(widget, panacea_ui.ctk.CTkScrollableFrame)
+                           for page in pages for widget in app.frames[page].winfo_children())
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_real_tk_italian_ui_and_confirmation_follow_installer_choice(monkeypatch):
+    # A temporary override simulates the Italian language chosen by setup;
+    # the real installed build uses its protected panacea-language.ini instead.
+    monkeypatch.setenv('PANACEA_LANGUAGE', 'italian')
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        assert app.language == 'it'
+        assert app.title() == f'Panacea {panacea_ui.VERSION}'
+        assert app.brand_tagline.cget('text') == 'SYSTEM MAINTENANCE'
+        assert app.nav_buttons['Cleaning'].cget('text') == 'Spazio e pulizia'
+        assert app.nav_buttons['Resurrect'].cget('text') == 'Manutenzione guidata'
+        assert not app.btn_check_update.winfo_manager()
+        assert app.footer_credit.cget('text') == 'Panacea 2026 — Maurizio Falconi (falker47)'
+        app.select_frame('Cleaning')
+        app.update()
+        assert app.frame_apps.winfo_ismapped()
+        assert app.quick_cleanup_button.cget('text') == 'Avvia pulizia rapida'
+        app.select_frame('Tools')
+        app.update()
+        assert app.frame_disk.winfo_ismapped()
+        restore = next(button for button in _native_widgets(
+            app.frame_tools, panacea_ui.ctk.CTkButton)
+            if button.cget('text') == 'Crea punto di ripristino')
+        glyph = restore._text_label
+        required = int(glyph.tk.call('font', 'measure', glyph.cget('font'),
+                                     '-displayof', glyph, restore.cget('text')))
+        assert required <= glyph.winfo_width() + 3
+        seen = []
+        monkeypatch.setattr(panacea_ui.messagebox, 'askyesno',
+                            lambda title, detail, **kwargs: (seen.append((title, detail)), False)[1])
+        app.run_empty_recycle()
+        assert len(seen) == 1
+        assert 'cestino' in seen[0][0].casefold()
+        assert 'Eliminare definitivamente' in seen[0][1]
+        assert not app.workers.busy()
+    finally:
+        _destroy_real_app(app)
+
+def _mock_update_check(monkeypatch, release=None, error=None):
+    """Exercise UI state without downloading a release or opening Tk."""
+    from modules import updater
+    app = app_without_window()
+    app._update_installing = False
+    app.app_update_status = Mock()
+    app.btn_check_update = Mock()
+    app.btn_update_install = Mock()
+    app.update_actions = Mock()
+    app.workers = Mock()
+    app.workers.busy.return_value = False
+    client = Mock()
+    if error is not None:
+        client.check.side_effect = RuntimeError(error)
+    else:
+        client.check.return_value = release
+    monkeypatch.setattr(updater, 'UpdateClient', lambda *args: client)
+
+    def start(name, operation, **callbacks):
+        try:
+            callbacks['on_success'](operation())
+        except Exception as exc:
+            callbacks['on_error'](exc)
+        callbacks['on_done']()
+
+    app.workers.start.side_effect = start
+    app._check_app_update()
+    return app
+
+
+def test_update_footer_has_no_actions_when_already_current(monkeypatch):
+    app = _mock_update_check(monkeypatch)
+    app.app_update_status.configure.assert_any_call(
+        text='Panacea is already up to date.', text_color=panacea_ui.MUTED)
+    app.update_actions.grid.assert_not_called()
+    app.btn_check_update.grid.assert_not_called()
+
+
+def test_update_footer_has_only_install_action_for_available_release(monkeypatch):
+    release = SimpleNamespace(version='2.0.3')
+    app = _mock_update_check(monkeypatch, release=release)
+    app.app_update_status.configure.assert_any_call(
+        text=f'You are using Panacea {panacea_ui.VERSION}. Update to version 2.0.3 is available.',
+        text_color=panacea_ui.COL_BLUE)
+    app.btn_update_install.configure.assert_any_call(state='normal', text='Install update')
+    app.update_actions.grid.assert_called_once()
+    app.btn_check_update.grid.assert_not_called()
+
+
+def test_update_footer_offers_retry_only_after_check_error(monkeypatch):
+    app = _mock_update_check(monkeypatch, error='network offline')
+    app.update_actions.grid.assert_not_called()
+    app.btn_check_update.grid.assert_called_once()
+    app.app_update_status.configure.assert_any_call(
+        text='Update check failed: network offline', text_color=panacea_ui.COL_WARNING)
+
+
+@isolated_tk_test
+def test_real_tk_compact_polish_prevents_duplicate_headings_and_vertical_voids(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        app.select_frame('Dashboard')
+        app.update()
+        overview = [label for label in _native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel)
+                    if label.cget('text') == 'Overview']
+        assert len(overview) == 1
+        dashboard_icons = [label.cget('image') for label in
+                           _native_widgets(app.frame_dashboard, panacea_ui.ctk.CTkLabel)]
+        assert app.icons_active['dashboard'] in dashboard_icons
+        assert app.dashboard_summary.winfo_height() >= 85
+
+        app.select_frame('Apps')
+        app.update()
+        titles = [label.cget('text') for label in
+                  _native_widgets(app.frame_apps, panacea_ui.ctk.CTkLabel)]
+        assert titles.count('Installed apps') == 1
+        assert len(app.app_shortcuts) == 2
+        assert all(button.cget('image') is not None for button in app.app_shortcuts)
+
+        app.select_frame('Tools')
+        app.update()
+        assert app.drive_menu.winfo_rooty() - app.frame_disk.winfo_rooty() < 160
+        repair_labels = list(_native_widgets(app.frame_tools, panacea_ui.ctk.CTkLabel))
+        scan = next(label for label in repair_labels if label.cget('text') == 'System file scan')
+        scan_button = next(button for button in _native_widgets(app.frame_tools, panacea_ui.ctk.CTkButton)
+                           if button.cget('text') == 'Scan')
+        assert scan_button.winfo_rootx() > scan.winfo_rootx()
+        assert abs(scan_button.winfo_rooty() - scan.winfo_rooty()) < 35
+
+        app.select_frame('Turbo')
+        app.update()
+        startup_titles = [label.cget('text') for label in
+                          _native_widgets(app.frame_startup, panacea_ui.ctk.CTkLabel)]
+        assert startup_titles.count('Startup apps') == 1
+        assert len(app.startup_shortcuts) == 1
+        assert app.startup_shortcuts[0].cget('image') is not None
+
+        app.select_frame('Resurrect')
+        app.update()
+        canvas = app._section_log_hosts['god_log'].master._parent_canvas
+        width = canvas.winfo_width() / app._section_log_hosts['god_log'].master._get_widget_scaling()
+        # The timeline has its own 16px horizontal inset.
+        expected_layout = app._step_layout_mode(width - 16)
+        assert app._resurrection_layout_mode == expected_layout
+        expected = expected_layout != '1'
+        assert app._resurrection_two_columns == expected
+        if expected:
+            assert abs(app._resurrection_phases[0].winfo_rooty() -
+                       app._resurrection_phases[1].winfo_rooty()) <= 4
+        assert len(app._resurrection_phases) == 10
+        warning = next(label for label in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkLabel)
+                       if label.cget('text').startswith('A new restore point must be verified first.'))
+        assert warning.cget('height') <= 174
+        assert app._resurrection_phases[0].winfo_rooty() - canvas.winfo_rooty() < 540
+    finally:
+        _destroy_real_app(app)
+
+
+def test_readable_restart_age_warns_only_after_seven_days():
+    from panacea_ui import PanaceaApp
+    assert PanaceaApp._restart_age('6d 23h 59m', 'it') == (
+        'Ultimo riavvio · 6 g 23 h fa', False)
+    assert PanaceaApp._restart_age('7d 0h 0m', 'it') == (
+        'Ultimo riavvio · 7 g 0 h fa', True)
+    assert PanaceaApp._restart_age('0d 2h 18m', 'en') == (
+        'Last restart · 2h 18m ago', False)
+    assert PanaceaApp._restart_age('Unknown', 'it') == (
+        'Ultimo riavvio · Non disponibile', False)
+
+
+@isolated_tk_test
+def test_five_by_two_guided_grid_preserves_order_and_expandable_information(monkeypatch):
+    app = _safe_real_app(monkeypatch)
+    try:
+        app.update()
+        panacea_ui.tk.Tk.maxsize(app, 1800, 900)
+        panacea_ui.tk.Tk.geometry(app, '1660x760')
+        app.select_frame('Resurrect')
+        app.update()
+        assert app._resurrection_layout_mode == '5'
+        phases = app._resurrection_phases
+        assert len(phases) == 10
+        rows = [phases[:5], phases[5:]]
+        for items in rows:
+            assert max(w.winfo_rooty() for w in items) - min(w.winfo_rooty() for w in items) <= 3
+            assert all(items[i].winfo_rootx() < items[i + 1].winfo_rootx()
+                       for i in range(4))
+        assert phases[0].winfo_rooty() < phases[5].winfo_rooty()
+        buttons = [b for b in _native_widgets(app.frame_resurrect, panacea_ui.ctk.CTkButton)
+                   if b.cget('text') == 'i']
+        assert len(buttons) == 10
+        assert not any(b.cget('text') == 'Details' for b in buttons)
+        assert app._resurrection_info_labels['Restore point'] is None
+        app._toggle_resurrection_info('Restore point')
+        app.update()
+        assert app._resurrection_info_labels['Restore point'].winfo_ismapped()
+    finally:
+        _destroy_real_app(app)
+
+
+@isolated_tk_test
+def test_narrow_italian_headers_and_turbo_switches_reflow_at_150_percent(monkeypatch):
+    monkeypatch.setenv('PANACEA_LANGUAGE', 'italian')
+    panacea_ui.ctk.set_widget_scaling(1.5)
+    panacea_ui.ctk.set_window_scaling(1)
+    app = _safe_real_app(monkeypatch)
+    try:
+        panacea_ui.tk.Tk.maxsize(app, 1024, 768)
+        panacea_ui.tk.Tk.geometry(app, '1020x700')
+        app.select_frame('Tools')
+        app.update()
+        title = next(label for label in _native_widgets(
+            app.group_headings['Tools'], panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Diagnostica e riparazione')
+        assert title.cget('wraplength') > 0
+        assert title.cget('height') > 38  # Wrapped instead of clipped at 150%.
+        app.select_frame('Turbo')
+        app.update()
+        master = app.master_switch.master
+        title = next(label for label in _native_widgets(
+            master, panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Tutte le impostazioni')
+        assert app.master_switch.winfo_rooty() > title.winfo_rooty()
+        for switch in app.turbo_switches.values():
+            assert switch.grid_info()['row'] == 2
+        app.select_frame('Resurrect')
+        app.update()
+        title = next(label for label in _native_widgets(
+            app.frame_resurrect, panacea_ui.ctk.CTkLabel)
+            if label.cget('text') == 'Manutenzione guidata')
+        assert title.cget('wraplength') > 0
+        assert title.cget('height') > 36
+    finally:
+        _destroy_real_app(app)

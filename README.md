@@ -106,10 +106,13 @@ The installer does not touch existing portable V1 executables. Older v1.47
 users should close the app and install V2 manually, not use the unverified
 legacy in-app Install banner.
 
-The V2 updater can offer checksum-verified, user-confirmed in-place updates
-for this protected installation. Desktop/Downloads copies deliberately cannot
-perform elevated in-place replacement; portable copies stay supported with
-manual updates and keep the existing ZEROfilez stable `Panacea.exe` link.
+The corrected V2 updater can offer checksum-verified, user-confirmed in-place
+updates for protected installations. Users of installed v2.0.0/v2.0.1 should
+upgrade to v2.0.2 with Setup because the older binaries may reject canonical
+GitHub release URLs on their case-sensitive repository checks.
+Desktop/Downloads copies deliberately cannot perform elevated in-place
+replacement; portable copies stay supported with manual updates and keep the
+existing ZEROfilez stable `Panacea.exe` link.
 
 Installation does not mean automatic silent background update. The runtime
 asks for approval and must satisfy protected-file and directory checks.

@@ -268,3 +268,40 @@ def test_installed_v2_offers_published_v202(installed):
     assert offered.version == "2.0.2"
     assert offered.exe_url.endswith("/v2.0.2/Panacea.exe")
     assert updater.UpdateClient(REPO, "2.0.2", opener=fake_opener(candidate)).check() is None
+
+
+def test_real_repo_alias_accepts_canonical_github_release_and_verified_download(tmp_path):
+    # Published GitHub URLs retain "Panacea" even when the local configuration
+    # uses "panacea". Only the repository spelling may differ in case.
+    from version import GITHUB_REPO
+
+    assert GITHUB_REPO == "falker47/Panacea"
+    canonical = "falker47/Panacea"
+    release_manifest = json.loads(json.dumps(manifest()).replace(REPO, canonical))
+    client = updater.UpdateClient("falker47/panacea", "1.47",
+                                  opener=fake_opener(release_manifest))
+    release = client.check()
+    assert release.version == "1.49.0"
+    assert release.release_url.startswith("https://github.com/" + canonical)
+    assert client.download(release, tmp_path).read_bytes() == pe_bytes()
+
+
+@pytest.mark.parametrize("asset_repo", ["falker47/Panacea-fork", "foreign/Panacea"])
+def test_repo_case_fix_still_rejects_foreign_asset_owner(asset_repo):
+    release_manifest = json.loads(json.dumps(manifest()).replace(REPO, "falker47/Panacea"))
+    release_manifest["assets"][0]["browser_download_url"] = (
+        release_manifest["assets"][0]["browser_download_url"].replace(
+            "/falker47/Panacea/", "/" + asset_repo + "/"))
+    with pytest.raises(updater.UpdateManifestError):
+        updater.UpdateClient("falker47/panacea", "1.47",
+                             opener=fake_opener(release_manifest)).check()
+
+
+def test_repo_case_fix_does_not_weaken_exact_asset_name():
+    release_manifest = json.loads(json.dumps(manifest()).replace(REPO, "falker47/Panacea"))
+    release_manifest["assets"][0]["browser_download_url"] = (
+        release_manifest["assets"][0]["browser_download_url"].replace(
+            "/Panacea.exe", "/panacea.exe"))
+    with pytest.raises(updater.UpdateManifestError):
+        updater.UpdateClient("falker47/panacea", "1.47",
+                             opener=fake_opener(release_manifest)).check()

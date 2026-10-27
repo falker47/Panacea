@@ -201,6 +201,19 @@ class UpdateClient:
         self.api_url = f"https://api.github.com/repos/{repo}/releases/latest"
         self._open = opener or urllib.request.build_opener(_SafeRedirect(self)).open
 
+    def _repository_path_suffix(self, path: str, route: str) -> str | None:
+        """Compare only the GitHub owner/repo case-insensitively.
+
+        GitHub release metadata uses the repository's canonical capitalization;
+        the action/asset routes, tag and filenames still require an exact match.
+        """
+        parts = path.split("/", 3)
+        if (len(parts) != 4 or parts[0]
+                or f"{parts[1]}/{parts[2]}".casefold() != self.repo.casefold()
+                or not parts[3].startswith(route)):
+            return None
+        return parts[3][len(route):]
+
     def _validate_transport_url(self, url: str, *, asset=False):
         # GitHub's CDN query carries a signed expiry and is required for downloads.
         if not isinstance(url, str) or any(ord(char) <= 32 or ord(char) == 127 for char in url):
@@ -220,7 +233,8 @@ class UpdateClient:
         elif parsed.hostname == "api.github.com":
             if url != self.api_url:
                 raise UpdateManifestError("Release metadata URL is outside this repository.")
-        elif not parsed.path.startswith(f"/{self.repo}/releases/download/") or parsed.query:
+        elif (self._repository_path_suffix(parsed.path, "releases/download/") is None
+              or parsed.query):
             raise UpdateManifestError("Asset redirect is outside this repository.")
 
     def _request(self, url: str, *, asset=False):
@@ -250,17 +264,17 @@ class UpdateClient:
                 or not is_newer(release.version, self.current_version)):
             raise UpdateManifestError("Release is not a newer stable executable of valid size.")
         page = _secure_url(release.release_url)
-        prefix = f"/{self.repo}/releases/tag/"
-        if page.hostname != "github.com" or not page.path.startswith(prefix):
+        actual_tag = self._repository_path_suffix(page.path, "releases/tag/")
+        if page.hostname != "github.com" or actual_tag is None:
             raise UpdateManifestError("Release page is outside the configured repository.")
-        actual_tag = page.path[len(prefix):]
         if not actual_tag or "/" in actual_tag or _version(actual_tag) != _version(release.version):
             raise UpdateManifestError("Release page does not match its version.")
         if tag is not None and actual_tag != tag:
             raise UpdateManifestError("Release tag and page disagree.")
         for url, filename in ((release.exe_url, "Panacea.exe"), (release.sha256_url, "Panacea.exe.sha256")):
             asset = _secure_url(url)
-            if asset.hostname != "github.com" or asset.path != f"/{self.repo}/releases/download/{actual_tag}/{filename}":
+            suffix = self._repository_path_suffix(asset.path, "releases/download/")
+            if asset.hostname != "github.com" or suffix != f"{actual_tag}/{filename}":
                 raise UpdateManifestError("Asset URL must identify the exact repository release asset.")
 
     def check(self) -> Release | None:

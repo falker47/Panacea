@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from modules.localization import resolve_language  # noqa: E402
 from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
 from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
 from qt_app.catalog import cards  # noqa: E402
@@ -250,6 +251,7 @@ def main(argv=None):
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)
     engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("applicationLanguage", resolve_language())
     engine.rootContext().setContextProperty("liveMetrics", metrics)
     engine.rootContext().setContextProperty("readService", reader)
     engine.rootContext().setContextProperty("maintenanceService", maintenance)

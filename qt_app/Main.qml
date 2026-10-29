@@ -10,7 +10,7 @@ Window {
     minimumHeight: 570
     visible: true
     title: "Panacea Qt · Candidato QA"
-    property string language: Qt.locale().name.toLowerCase().indexOf("it") === 0 ? "it" : "en"
+    property string language: applicationLanguage
     property string selectedDrive: ""
     function label(it, en) { return language === "it" ? it : en }
     Component.onCompleted: maintenanceService.setLanguage(language)

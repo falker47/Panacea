@@ -120,3 +120,82 @@ jobs:
             build/qt-app/PanaceaQtCandidate-Windows.zip
             build/qt-app/PanaceaQtCandidate-Windows.zip.sha256
           if-no-files-found: error
+
+  windows-qa-installer:
+    name: Separate QA installer and uninstall (disposable Windows)
+    needs: windows-ui-and-contracts
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      QT_QUICK_BACKEND: software
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Panacea-Qt-Migration-Candidate
+          path: build/qt-download
+
+      - name: Verify QA candidate archive before building installer
+        shell: pwsh
+        run: |
+          $zip = "build/qt-download/PanaceaQtCandidate-Windows.zip"
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = (Get-Content -LiteralPath "$zip.sha256" -Raw).Trim()
+          if ($manifest -cne "$actual  PanaceaQtCandidate-Windows.zip") { throw "QA archive SHA-256 mismatch" }
+          Expand-Archive -LiteralPath $zip -DestinationPath "build/qt-extracted" -Force
+          if (-not (Test-Path "build/qt-extracted/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Verified QA bundle has no EXE" }
+
+      - name: Build isolated Inno Setup QA installer (never stable)
+        shell: pwsh
+        run: |
+          $programFiles32 = [Environment]::GetFolderPath("ProgramFilesX86")
+          $iscc = Join-Path $programFiles32 "Inno Setup 6/ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler is unavailable" }
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe missing" }
+          $app = (Resolve-Path "build/qt-extracted/PanaceaQtCandidate").Path
+          $output = (New-Item -ItemType Directory -Force "build/qt-installer").FullName
+          & $iscc /Qp "/DQtCandidateDir=$app" "/DQtOutputDir=$output" "qt_app/packaging/PanaceaQtQA.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Qt QA installer build failed" }
+          $setup = "build/qt-installer/PanaceaQtQASetup.exe"
+          if (-not (Test-Path $setup) -or (Get-Item $setup).Length -lt 1000000) { throw "QA installer is absent or too small" }
+          $sha = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  PanaceaQtQASetup.exe" | Set-Content -LiteralPath "$setup.sha256" -Encoding ascii
+          Write-Output "QA_INSTALLER_SHA256=$sha"
+
+      - name: Install, smoke and uninstall QA app side-by-side
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path "build/qt-installer/PanaceaQtQASetup.exe").Path
+          $target = Join-Path $env:RUNNER_TEMP ("PanaceaQtQA-" + [guid]::NewGuid().ToString("N"))
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$target"
+          if ($LASTEXITCODE -ne 0) { throw "Qt QA installer failed" }
+          $exe = Join-Path $target "PanaceaQtCandidate.exe"
+          if (-not (Test-Path -LiteralPath $exe)) { throw "Qt QA installed EXE missing" }
+          & $exe --smoke-test --capture "build/qt-installer/installed.png"
+          if ($LASTEXITCODE -ne 0) { throw "Installed Qt QA startup failed" }
+          if ((Get-Item "build/qt-installer/installed.png").Length -lt 1024) { throw "Installed Qt screenshot missing" }
+          $uninstall = Join-Path $target "unins000.exe"
+          if (-not (Test-Path -LiteralPath $uninstall)) { throw "Isolated QA uninstaller missing" }
+          & $uninstall /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          if ($LASTEXITCODE -ne 0) { throw "QA uninstaller failed" }
+          if (Test-Path -LiteralPath $exe) { throw "QA uninstaller left executable behind" }
+
+      - name: Save QA installer smoke screenshot, even on failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-QA-Installer-Evidence
+          path: build/qt-installer/installed.png
+          if-no-files-found: warn
+
+      - name: Deliver side-by-side QA installer only after all checks pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-QA-Installer
+          path: |
+            build/qt-installer/PanaceaQtQASetup.exe
+            build/qt-installer/PanaceaQtQASetup.exe.sha256
+          if-no-files-found: error

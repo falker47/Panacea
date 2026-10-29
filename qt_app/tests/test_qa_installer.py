@@ -16,9 +16,9 @@ class QaInstallerContracts(unittest.TestCase):
         self.assertIn("UsePreviousAppDir=no", candidate)
         self.assertIn("CloseApplications=no", candidate)
         self.assertIn("PrivilegesRequired=admin", candidate)
-        self.assertIn(r"Source: ""{#QtCandidateDir}\*""", candidate)
+        self.assertIn(r'Source: "{#QtCandidateDir}\*"', candidate)
         self.assertIn("recursesubdirs createallsubdirs", candidate)
-        self.assertNotIn("DestName: ""Panacea.exe""", candidate)
+        self.assertNotIn('DestName: "Panacea.exe"', candidate)
         self.assertIn("PanaceaQtCandidate.exe", candidate)
 
     def test_qa_installer_not_in_stable_build_pipeline(self):

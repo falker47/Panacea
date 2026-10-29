@@ -11,6 +11,9 @@ class UiContractTests(unittest.TestCase):
         qml = (ROOT / "Main.qml").read_text(encoding="utf-8")
         self.assertIn("maintenanceService.actionCards[pageLoader.pageIndex]", qml)
         self.assertIn("readService.driveLetters", qml)
+        for metric in ('"cpu"', '"ram"', '"disk"'):
+            self.assertIn("metric: " + metric, qml)
+        self.assertIn("activeFocusOnTab: true", qml)
         self.assertIn("onClosing: function(event)", qml)
         self.assertIn("maintenanceService.prepare(", qml)
         self.assertIn("maintenanceService.confirm()", qml)

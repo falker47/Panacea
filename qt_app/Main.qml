@@ -29,9 +29,9 @@ Window {
     ]
     readonly property var pages: [
         { heading: shell.label("Sistema","System"), description: shell.label("Dashboard e controlli di sistema in sola lettura.","Dashboard and read-only system checks."), cards: [
-            { title: shell.label("Processore","CPU"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
-            { title: shell.label("RAM","RAM"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
-            { title: shell.label("Disco","Disk"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Processore","CPU"), subtitle: shell.label("Utilizzo CPU","CPU utilization"), metric: "cpu", badge: "LIVE", note: shell.label("Campionamento non distruttivo.","Read-only sampling.") },
+            { title: shell.label("RAM","RAM"), subtitle: shell.label("Memoria utilizzata","Memory utilization"), metric: "ram", badge: "LIVE", note: shell.label("Campionamento non distruttivo.","Read-only sampling.") },
+            { title: shell.label("Disco","Disk"), subtitle: shell.label("Spazio utilizzato","Disk utilization"), metric: "disk", badge: "LIVE", note: shell.label("Campionamento non distruttivo.","Read-only sampling.") },
             { title: shell.label("Dati hardware","Hardware"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
         ] },
         { heading: shell.label("Pulizia e applicazioni","Cleanup & apps"), description: shell.label("Pulizia permanente solo dopo conferma esplicita.","Permanent cleanup only after confirmation."), cards: [
@@ -290,12 +290,12 @@ Window {
                                             border.color: "#2e415c"
                                             readonly property var operations: ["hardware", "temp_preview", "drives", "turbo_status", "guard_status"]
                                             readonly property var captions: [
-                                                "Leggi informazioni hardware",
-                                                "Analizza file temporanei (nessuna eliminazione)",
-                                                "Elenca unità locali",
-                                                "Leggi lo stato Turbo",
-                                                "Verifica blocchi manutenzione"
-                                            ]
+                                                 shell.label("Leggi informazioni hardware","Read hardware information"),
+                                                 shell.label("Analizza file temporanei (nessuna eliminazione)","Preview temporary files (no deletion)"),
+                                                 shell.label("Elenca unità locali","List local drives"),
+                                                 shell.label("Leggi lo stato Turbo","Read Turbo status"),
+                                                 shell.label("Verifica blocchi manutenzione","Check maintenance guard")
+                                             ]
                                             Rectangle {
                                                 id: readButton
                                                 x: 15
@@ -390,6 +390,15 @@ Window {
                                                             height: 34
                                                             radius: 6
                                                             color: maintenanceService.busy ? "#334158" : "#314b69"
+                                                            activeFocusOnTab: true
+                                                            Accessible.role: Accessible.Button
+                                                            Accessible.name: modelData.title
+                                                            function activate() {
+                                                                if (!maintenanceService.busy && !readService.busy)
+                                                                    maintenanceService.prepare(modelData.action, (modelData.action === "drive_optimize" || modelData.action === "chkdsk") ? shell.selectedDrive : "")
+                                                            }
+                                                            Keys.onReturnPressed: activate()
+                                                            Keys.onSpacePressed: activate()
                                                             Text {
                                                                 anchors.centerIn: parent
                                                                 text: modelData.title
@@ -400,7 +409,7 @@ Window {
                                                                 anchors.fill: parent
                                                                 enabled: !maintenanceService.busy && !readService.busy
                                                                 cursorShape: Qt.PointingHandCursor
-                                                                onClicked: maintenanceService.prepare(modelData.action, (modelData.action === "drive_optimize" || modelData.action === "chkdsk") ? shell.selectedDrive : "")
+                                                                onClicked: parent.activate()
                                                             }
                                                         }
                                                     }
@@ -417,7 +426,7 @@ Window {
                                                     width: 160
                                                     height: visible ? 32 : 0
                                                     color: "#6b4b39"
-                                                    Text { anchors.centerIn: parent; text: "Richiedi annullamento"; color: "white"; font.pixelSize: 11 }
+                                                    Text { anchors.centerIn: parent; text: shell.label("Richiedi annullamento","Request cancellation"); color: "white"; font.pixelSize: 11 }
                                                     MouseArea { anchors.fill: parent; onClicked: maintenanceService.cancel() }
                                                 }
                                             }

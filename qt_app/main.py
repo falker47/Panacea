@@ -209,10 +209,26 @@ class MaintenanceBridge(QObject):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Panacea Qt UI migration QA")
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--smoke-backend-imports", action="store_true",
+                        help="Verify bundled maintenance modules without launching Windows actions")
     parser.add_argument("--capture", type=Path, help="Save a QA screenshot with --smoke-test")
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
+    if args.smoke_backend_imports:
+        # Import only; never instantiate a manager or start a Windows process.
+        from importlib import import_module
+        for module, cls in (
+            ("modules.commands", "CommandRunner"),
+            ("modules.cleanup", "CleanupManager"),
+            ("modules.disk", "DiskOptimizer"),
+            ("modules.restore", "RestoreManager"),
+            ("modules.performance", "PerformanceManager"),
+            ("modules.maintenance_guard", "MaintenanceGuard"),
+        ):
+            if not callable(getattr(import_module(module), cls, None)):
+                raise RuntimeError(f"Missing packaged backend: {module}")
+        return 0
     if os.name == 'nt' and not args.smoke_test:
         from modules.utils import is_admin
         if not is_admin():

@@ -77,6 +77,12 @@ jobs:
           }
           if (-not (Test-Path -LiteralPath "$root/Qt6Quick.dll")) { throw "Required QtQuick DLL missing" }
 
+      - name: Verify packaged maintenance imports (no Windows operations)
+        shell: pwsh
+        run: |
+          python -c "import subprocess; subprocess.run(['dist/PanaceaQtCandidate/PanaceaQtCandidate.exe', '--smoke-backend-imports'], check=True, timeout=40)"
+          if ($LASTEXITCODE -ne 0) { throw "Qt package is missing a maintenance backend" }
+
       - name: Packaged Qt UI smoke and screenshot
         shell: pwsh
         run: |

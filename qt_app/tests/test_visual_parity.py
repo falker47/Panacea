@@ -43,7 +43,8 @@ class QtVisualParityContracts(unittest.TestCase):
                       "#e4c579", "#2e415c"):
             self.assertIn(color, shell + page)
         self.assertIn("panacea_icon.png", shell)
-        self.assertIn("lucide/png", shell)
+        self.assertIn("image://panacea-nav/", shell)
+        self.assertIn("NavigationIconProvider", (ROOT / "icon_provider.py").read_text(encoding="utf-8"))
         self.assertIn("Layout.preferredWidth: 302", shell)
         self.assertIn('ParityPage {', shell)
         self.assertIn("PMiniGraph {", page)

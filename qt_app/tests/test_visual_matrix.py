@@ -13,7 +13,9 @@ class VisualMatrixContracts(unittest.TestCase):
         for name in ("--smoke-width", "--smoke-height",
                      "--smoke-language", "--smoke-tab"):
             self.assertIn(name, main)
-        self.assertIn("findChild(QObject,", main)
+        self.assertIn('window.property("loadedMask")', main)
+        self.assertIn("onLoaded:", shell)
+        self.assertIn("loadedMask", shell)
         self.assertIn('objectName: "parityPage_" + groupIndex', page)
         self.assertIn("window.grabWindow()", main)
         self.assertIn("screen.grabWindow(", main)

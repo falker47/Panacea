@@ -11,6 +11,7 @@ import sys
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
+from qt_app.icon_provider import NavigationIconProvider
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -356,6 +357,7 @@ def main(argv=None):
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("panacea-nav", NavigationIconProvider())
     engine.rootContext().setContextProperty("applicationLanguage", resolve_language())
     engine.rootContext().setContextProperty("qaSmokeMode", bool(args.smoke_test))
     engine.rootContext().setContextProperty("liveMetrics", metrics)
@@ -394,7 +396,7 @@ def main(argv=None):
                 try:
                     # A successful root shell load does not prove the selected
                     # lazy subview compiled; require its actual QML object.
-                    if window.findChild(QObject, f"parityPage_{args.smoke_tab}") is None:
+                    if not (int(window.property("loadedMask") or 0) & (1 << args.smoke_tab)):
                         raise RuntimeError("Selected Qt V2 page was not created")
                     image = window.grabWindow()
                     if image.isNull():

@@ -14,6 +14,7 @@ Window {
 
     property string language: applicationLanguage
     property int currentTab: 0
+    property int loadedMask: 0
     property var visited: [true, false, false, false, false]
     function label(it, en) { return language === "it" ? it : en }
     Component.onCompleted: maintenanceService.setLanguage(language)
@@ -119,7 +120,7 @@ Window {
                             anchors.rightMargin: 8
                             spacing: 12
                             Image {
-                                source: Qt.resolvedUrl("../assets/icons/lucide/png/" + modelData.icon)
+                                source: "image://panacea-nav/" + modelData.icon + "/" + (shell.currentTab === index ? "active" : "idle")
                                 fillMode: Image.PreserveAspectFit
                                 sourceSize.width: 48
                                 sourceSize.height: 48
@@ -272,6 +273,9 @@ Window {
                             property int groupIndex: index
                             active: shell.visited[index]
                             visible: shell.currentTab === index
+                            onLoaded: {
+                                if (item) shell.loadedMask = shell.loadedMask | (1 << groupIndex)
+                            }
                             sourceComponent: Component {
                                 ParityPage {
                                     width: parent.width

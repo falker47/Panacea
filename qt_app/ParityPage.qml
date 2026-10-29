@@ -8,7 +8,6 @@ Item {
     id: view
     objectName: "parityPage_" + groupIndex
     property int groupIndex: 0
-    property int subIndex: 0
     property string language: "it"
     property string selectedDrive: ""
     property bool showIndividualCleaning: true
@@ -29,6 +28,9 @@ Item {
     function showRead(action) {
         if (!occupied)
             readService.request(action)
+    }
+    function pairedPanelWidth(total, minimum) {
+        return total >= 2 * minimum + 20 ? (total - 12) / 2 : total
     }
     function formatBytes(bytes) {
         if (typeof bytes !== "number" || bytes < 0) return "—"
@@ -84,6 +86,61 @@ Item {
             enabled: button.interactive
             cursorShape: Qt.PointingHandCursor
             onClicked: button.activate()
+        }
+    }
+
+    component PGroupHeader: Item {
+        id: groupHeader
+        property string caption: ""
+        property string iconName: "dashboard"
+        width: parent.width
+        implicitHeight: Math.max(38, heading.implicitHeight)
+        height: implicitHeight
+        Image {
+            id: headingIcon
+            width: 38
+            height: 38
+            source: "image://panacea-nav/" + groupHeader.iconName + "/active"
+            sourceSize.width: 96
+            sourceSize.height: 96
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            Accessible.role: Accessible.Graphic
+            Accessible.name: groupHeader.caption
+        }
+        Text {
+            id: heading
+            anchors.left: headingIcon.right
+            anchors.right: parent.right
+            anchors.leftMargin: 9
+            anchors.verticalCenter: parent.verticalCenter
+            text: groupHeader.caption
+            color: "#f1f3f8"
+            font.family: "Segoe UI"
+            font.pixelSize: 23
+            font.bold: true
+            wrapMode: Text.WordWrap
+        }
+    }
+
+    // The original V2 paired subviews are bordered, independent panels.
+    component PPanel: Rectangle {
+        id: panelSurface
+        default property alias panelContent: panelBody.data
+        property alias spacing: panelBody.spacing
+        width: parent.width
+        implicitHeight: panelBody.implicitHeight + 28
+        height: implicitHeight
+        radius: 12
+        color: "#1b2b44"
+        border.width: 1
+        border.color: "#2e415c"
+        Column {
+            id: panelBody
+            x: 14
+            y: 14
+            width: Math.max(0, panelSurface.width - 28)
+            spacing: 8
         }
     }
 
@@ -286,7 +343,7 @@ Item {
         Column {
             width: parent.width
             spacing: 13
-            Text { text: view.t("Panoramica", "Overview"); color: "#f1f3f8"; font.pixelSize: 23; font.bold: true }
+            PGroupHeader { caption: view.t("Panoramica", "Overview"); iconName: "dashboard" }
             Flow {
                 id: summaryFlow
                 width: parent.width
@@ -411,28 +468,14 @@ Item {
         Column {
             width: parent.width
             spacing: 12
-            Text { text: view.t("Spazio e pulizia", "Space & Cleanup"); color: "#f1f3f8"; font.pixelSize: 23; font.bold: true }
+            PGroupHeader { caption: view.t("Spazio e pulizia", "Space & Cleanup"); iconName: "clean" }
             Rectangle { width: parent.width; height: 1; color: "#2e415c" }
-            Row {
-                spacing: 8
-                PButton {
-                    caption: view.t("Pulizia", "Cleaning")
-                    primary: view.subIndex === 0
-                    onPressed: view.subIndex = 0
-                }
-                PButton {
-                    caption: view.t("Applicazioni", "Apps")
-                    primary: view.subIndex === 1
-                    onPressed: view.subIndex = 1
-                }
-            }
             Flow {
                 id: pair
                 width: parent.width
                 spacing: 12
-                Column {
-                    visible: view.subIndex === 0
-                    width: pair.width
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 300)
                     spacing: 8
                     Text { text: view.t("Pulizia", "Cleanup"); color: "#f1f3f8"; font.bold: true; font.pixelSize: 19 }
                     Text {
@@ -474,9 +517,8 @@ Item {
                         }
                     }
                 }
-                Column {
-                    visible: view.subIndex === 1
-                    width: pair.width
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 300)
                     spacing: 8
                     Text { text: view.t("Applicazioni installate","Installed apps"); font.pixelSize: 19; font.bold: true; color: "#f1f3f8" }
                     Text {
@@ -496,27 +538,13 @@ Item {
         Column {
             width: parent.width
             spacing: 12
-            Text { text: view.t("Diagnostica e riparazione", "Diagnostics & Repair"); color: "#f1f3f8"; font.pixelSize: 23; font.bold: true }
+            PGroupHeader { caption: view.t("Diagnostica e riparazione", "Diagnostics & Repair"); iconName: "tools" }
             Rectangle { width: parent.width; height: 1; color: "#2e415c" }
-            Row {
-                spacing: 8
-                PButton {
-                    caption: view.t("Strumenti", "Tools")
-                    primary: view.subIndex === 0
-                    onPressed: view.subIndex = 0
-                }
-                PButton {
-                    caption: view.t("Disco", "Disk")
-                    primary: view.subIndex === 1
-                    onPressed: view.subIndex = 1
-                }
-            }
             Flow {
                 id: pair
                 width: parent.width; spacing: 12
-                Column {
-                    visible: view.subIndex === 0
-                    width: pair.width
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 305)
                     spacing: 7
                     Text { text: view.t("Strumenti di riparazione","Repair tools"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
                     Text { text: view.t("INTEGRITÀ WINDOWS","WINDOWS INTEGRITY"); color:"#e4c579"; font.pixelSize:10; font.bold:true }
@@ -529,9 +557,8 @@ Item {
                     PRow { heading:view.t("Punto di ripristino","Restore point"); hint:view.t("Crea e verifica","Create and verify"); action:"restore_point"; buttonText:view.t("Crea","Create"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     PRow { heading:view.t("Rapporto batteria","Battery report"); hint:view.t("Esporta rapporto HTML","Save an HTML report"); action:"battery_report"; buttonText:view.t("Crea","Create"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                 }
-                Column {
-                    visible: view.subIndex === 1
-                    width: pair.width
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 305)
                     spacing: 8
                     Text { text: view.t("Ottimizzazione dischi","Drive optimization"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
                     Text {
@@ -622,28 +649,14 @@ Item {
         id: turboAndStartupSection
         Column {
             width: parent.width; spacing: 12
-            Text { text: view.t("Prestazioni e avvio","Performance & Startup"); color:"#f1f3f8"; font.pixelSize:23; font.bold:true }
+            PGroupHeader { caption: view.t("Prestazioni e avvio", "Performance & Startup"); iconName: "turbo" }
             Rectangle { width:parent.width; height:1; color:"#2e415c" }
-            Row {
-                spacing: 8
-                PButton {
-                    caption: view.t("Turbo", "Turbo")
-                    primary: view.subIndex === 0
-                    onPressed: view.subIndex = 0
-                }
-                PButton {
-                    caption: view.t("Avvio", "Startup")
-                    primary: view.subIndex === 1
-                    onPressed: view.subIndex = 1
-                }
-            }
             Flow {
                 id: pair
                 width: parent.width; spacing:12
-                Column {
-                    visible: view.subIndex === 0
-                    width: pair.width
-                    spacing:8
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 320)
+                    spacing: 8
                     Text { text:view.t("Impostazioni Turbo","Performance settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
                     Rectangle {
                         width:parent.width; height:151; color:"#142138"; border.color:"#2e415c"; radius:8
@@ -709,10 +722,9 @@ Item {
                         width:parent.width; color:"#9eafc8"; font.pixelSize:11; wrapMode:Text.WordWrap
                     }
                 }
-                Column {
-                    visible: view.subIndex === 1
-                    width: pair.width
-                    spacing:9
+                PPanel {
+                    width: view.pairedPanelWidth(pair.width, 320)
+                    spacing: 9
                     Text { text:view.t("Applicazioni all'avvio","Startup apps"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
                     Text {
                         text:view.t("Disabilita applicazioni non necessarie all'accesso a Windows.",
@@ -729,7 +741,7 @@ Item {
         id: resurrectionSection
         Column {
             width:parent.width; spacing:12
-            Text { text:view.t("Manutenzione guidata","Guided Maintenance"); color:"#f1f3f8"; font.pixelSize:23; font.bold:true }
+            PGroupHeader { caption: view.t("Manutenzione guidata", "Guided Maintenance"); iconName: "resurrect" }
             Text { text:view.t("10 fasi · Punto di ripristino verificato obbligatorio", "10 steps · Verified restore point required"); color:"#9eafc8"; font.pixelSize:12 }
             Rectangle {
                 width:parent.width; height:146; radius:8; color:"#142138"; border.color:"#2e415c"

@@ -34,11 +34,11 @@ Window {
     }
 
     readonly property var tabs: [
-        { name: "Dashboard", detail: shell.label("Panoramica", "Overview"), icon: "layout-dashboard.png" },
-        { name: "Cleaning", detail: shell.label("Spazio e pulizia", "Space & Cleanup"), icon: "brush-cleaning.png" },
-        { name: "Tools", detail: shell.label("Diagnostica e riparazione", "Diagnostics & Repair"), icon: "wrench.png" },
-        { name: "Turbo", detail: shell.label("Prestazioni e avvio", "Performance & Startup"), icon: "zap.png" },
-        { name: "Resurrect", detail: shell.label("Manutenzione guidata", "Guided Maintenance"), icon: "shield-plus.png" }
+        { name: "Dashboard", detail: shell.label("Panoramica", "Overview"), icon: "dashboard" },
+        { name: "Cleaning", detail: shell.label("Spazio e pulizia", "Space & Cleanup"), icon: "clean" },
+        { name: "Tools", detail: shell.label("Diagnostica e riparazione", "Diagnostics & Repair"), icon: "tools" },
+        { name: "Turbo", detail: shell.label("Prestazioni e avvio", "Performance & Startup"), icon: "turbo" },
+        { name: "Resurrect", detail: shell.label("Manutenzione guidata", "Guided Maintenance"), icon: "resurrect" }
     ]
 
     Shortcut { sequence: "Ctrl+1"; onActivated: shell.currentTab = 0 }
@@ -103,7 +103,7 @@ Window {
                         id: navEntry
                         Layout.fillWidth: true
                         Layout.preferredHeight: shell.height < 620 ? 43 : 52
-                        Layout.topMargin: shell.height < 620 ? 1 : 4
+                        Layout.topMargin: shell.height < 620 ? 2 : 6
                         radius: 6
                         color: shell.currentTab === index ? "#263a56" : "transparent"
                         border.width: 1
@@ -122,18 +122,18 @@ Window {
                             Image {
                                 source: "image://panacea-nav/" + modelData.icon + "/" + (shell.currentTab === index ? "active" : "idle")
                                 fillMode: Image.PreserveAspectFit
-                                sourceSize.width: 48
-                                sourceSize.height: 48
-                                Layout.preferredWidth: 29
-                                Layout.preferredHeight: 29
+                                sourceSize.width: 96
+                                sourceSize.height: 96
+                                Layout.preferredWidth: 35
+                                Layout.preferredHeight: 35
                                 opacity: shell.currentTab === index ? 1 : 0.73
                             }
                             Text {
                                 text: modelData.detail
                                 color: shell.currentTab === index ? "#f1f3f8" : "#9eafc8"
                                 font.family: "Segoe UI"
-                                font.pixelSize: 15
-                                font.bold: shell.currentTab === index
+                                font.pixelSize: 16
+                                font.weight: Font.DemiBold
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }

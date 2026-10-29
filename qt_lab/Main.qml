@@ -280,7 +280,7 @@ Window {
                                         id: pageContent
                                         width: pageScroll.width
                                         spacing: 16
-                                        topPadding: 24
+                                        y: 24
 
                                         Column {
                                             width: parent.width - 48

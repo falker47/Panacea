@@ -67,6 +67,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Qt Lab package build failed" }
           if (-not (Test-Path "dist/PanaceaQtLab/PanaceaQtLab.exe")) { throw "Qt Lab executable missing" }
 
+      - name: Prune unused Qt WebEngine/WebView runtime from this lab
+        shell: pwsh
+        run: |
+          # Qt Quick Lab imports only QtQuick, QtQuick.Window and QtQuick.Layouts.
+          # The QML hook also bundles WebEngine despite zero WebEngine imports.
+          $qt = "dist/PanaceaQtLab/_internal/PySide6"
+          if (-not (Test-Path -LiteralPath "$qt/Qt6WebEngineCore.dll")) { throw "WebEngine layout changed: revisit the prune rule" }
+          foreach ($dll in @(
+            "Qt6WebEngineCore.dll",
+            "Qt6WebEngineQuick.dll",
+            "Qt6WebEngineQuickDelegatesQml.dll",
+            "Qt6WebView.dll",
+            "Qt6WebViewQuick.dll"
+          )) {
+            $path = Join-Path $qt $dll
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+          }
+          foreach ($unused in @("QtWebEngine", "QtWebView")) {
+            $path = Join-Path "$qt/qml" $unused
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force -Recurse }
+          }
+          if (Test-Path -LiteralPath "$qt/Qt6WebEngineCore.dll") { throw "WebEngine DLL was not removed" }
+          if (-not (Test-Path -LiteralPath "$qt/Qt6Quick.dll")) { throw "Required Qt Quick DLL is missing" }
+
       - name: Packaged GUI smoke and screenshot
         shell: pwsh
         run: |

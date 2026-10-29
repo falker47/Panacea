@@ -57,7 +57,7 @@ jobs:
       - name: Qt Quick source smoke and screenshot
         shell: pwsh
         run: |
-          python qt_lab/main.py --smoke-test --report build/qt-lab/qt-source.json --capture build/qt-lab/qt-source.png
+          python -c "import subprocess,sys; subprocess.run([sys.executable, 'qt_lab/main.py', '--smoke-test', '--report', 'build/qt-lab/qt-source.json', '--capture', 'build/qt-lab/qt-source.png'], check=True, timeout=60)"
           if ($LASTEXITCODE -ne 0) { throw "Qt Quick source smoke failed" }
 
       - name: Build isolated non-installed Windows package
@@ -70,7 +70,7 @@ jobs:
       - name: Packaged GUI smoke and screenshot
         shell: pwsh
         run: |
-          & "dist/PanaceaQtLab/PanaceaQtLab.exe" --smoke-test --report "build/qt-lab/qt-packaged.json" --capture "build/qt-lab/qt-packaged.png"
+          python -c "import subprocess; subprocess.run(['dist/PanaceaQtLab/PanaceaQtLab.exe', '--smoke-test', '--report', 'build/qt-lab/qt-packaged.json', '--capture', 'build/qt-lab/qt-packaged.png'], check=True, timeout=60)"
           if ($LASTEXITCODE -ne 0) { throw "Qt Lab package smoke failed" }
 
       - name: Package the portable QA folder with checksum

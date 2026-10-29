@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class UiContractTests(unittest.TestCase):
-    def test_qa_shell_is_explicitly_not_an_updater_or_maintenance_ui(self):
+    def test_qa_shell_requires_confirmation_and_remains_not_an_updater(self):
         qml = (ROOT / "Main.qml").read_text(encoding="utf-8")
-        self.assertIn("COMANDI DI SISTEMA DISABILITATI", qml)
+        self.assertIn("MANUTENZIONE CONFERMATA", qml)\n        self.assertIn("maintenanceService.prepare(", qml)\n        self.assertIn("maintenanceService.confirm()", qml)
         self.assertIn("readService.request", qml)
         self.assertIn("readService.busy", qml)
         self.assertNotIn("maintenanceBridge.execute", qml)

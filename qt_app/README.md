@@ -1,42 +1,31 @@
-# Panacea Qt — migrazione in corso (NON una release)
+# Panacea Qt — candidato QA, non una release
 
-Branch di sviluppo separato dal prototipo read-only e da \`main\`. La nuova UI PySide6/Qt Quick conserva il linguaggio visivo approvato e importa il **backend Python esistente** tramite un contratto esplicito. La release stabile CustomTkinter resta immutata.
+Interfaccia PySide6/Qt Quick basata sugli stessi backend Python della V2.
+Il branch e la PR #7 restano separati da main.
 
-## Perimetro dell'attuale milestone
+## Operazioni collegate
 
-**Collegati alla UI Qt:** CPU/RAM/disco live (già verificati nel lab), letture hardware, analisi temporanei *senza cancellazione*, inventario dischi, lettura Turbo e stato del blocco manutenzione. I nuovi comandi passano attraverso il modulo \`qt_app.services.ReadService\` e il dispatcher già utilizzato da Panacea, con worker separati.
+- Dashboard: CPU, RAM e disco live; dati hardware.
+- Cleanup & Apps: analisi temporanei in sola lettura; pulizia reale di temporanei e cache browser, Cestino, quick cleanup e DISM; collegamenti alle utilità Windows e gestione app.
+- Tools & Disk: SFC, DISM, DNS, Winsock, CHKDSK, defrag con unità validata; punto di ripristino, rapporto batteria, Windows Update.
+- Turbo & Startup: preset e controlli individuali con salvataggio/ripristino dello stato originale; app all'avvio gestite dalle impostazioni Windows.
+- Resurrection: dieci fasi, punto di ripristino obbligatorio, progress e cancellazione fra fasi.
 
-**Non ancora migrati, quindi non attivabili:** pulizia effettiva, Cestino, DISM/SFC/CHKDSK, ottimizzazione dischi, restore points, Turbo scritture/ripristino, quick cleanup, Resurrection, installazione/update, UAC/installer. Le schede QML in queste aree sono dimostrative e marcate come tali. Non dichiarare parità funzionale.
+Le letture restano separate dalle mutazioni. Il controller manutenzione espone soltanto una allowlist, nonce di conferma monouso, verifica amministratore, blocco di concorrenza, MaintenanceGuard e segnalazione dei processi a completamento incerto. Non considera terminato un processo Windows soltanto perché l'interfaccia ha ricevuto una richiesta di cancellazione.
 
-## Contratti prima di attivare operazioni Windows
+La UI presenta conferme esplicite per le operazioni irreversibili, risultati e log durante la navigazione, cinque destinazioni principali e testi IT/EN.
 
-1. **Nessuna stringa comando arbitraria da QML:** utilizzare una mappa di operazioni consentite e validare lettere di unità, percorsi e argomenti nel backend.
-2. **Una sola operazione di manutenzione per volta:** preservare lo stato busy fra worker, completamento sul thread principale, cancel fra passi e output persistente dopo navigazione.
-3. **Conferma informata esplicita per ogni azione irreversibile**, privilegi verificati; read-only e pulsanti di modifica non devono condividere lo stesso contratto.
-4. **Preservare \`MaintenanceGuard\`**, salvataggio di completamento sconosciuto e divieto di ulteriori operazioni anche dopo riavvio dell'app; il semplice timeout non prova che il processo sia terminato.
-5. **Preservare i backend originali e i test di sicurezza**, senza refactoring non necessari e senza indebolire gate per ottenere il verde.
-6. **Updater/installazione:** richiedono integrazione Qt dedicata; non riutilizzare il vecchio helper per un nuovo nome EXE senza test di versione, provenance, ACL, rollback, UAC e readiness.
-7. **Non fare merge né pubblicazione** finché parità completa, smoke del binario, verifica visiva, QA Windows su ambiente usa-e-getta e test manuale non superano i gate.
+## Gate aperti
 
-## Comandi locali (Windows)
+- Updater e installer Qt NON integrati: i meccanismi stabili presuppongono la propria identità binaria, verifica SHA-256, provenienza, ACL, rollback e readiness.
+- Le funzioni sono cablate ma i test con fake e gli smoke della finestra non dimostrano un comportamento reale sicuro in Windows.
+- Manca QA isolata di elevazione UAC, servizi, pulizia, ripristino, cancellazione, timeout, visual/accessibilità e misure di prestazioni a parità funzionale.
+- Mai eseguire prove distruttive sul PC dell'utente per validare la build QA; mai fare merge né release finché non sono soddisfatti i gate.
 
-Dalla radice del repository:
+## QA Windows
 
-\`\`\`powershell
-python -m pip install -r requirements-dev.txt -r qt_lab/requirements.txt
-python -m unittest discover -s qt_app/tests -p "test_*.py" -v
-python qt_app/main.py
-python qt_app/main.py --smoke-test --capture build/qt-app/source.png
-\`\`\`
+Dalla radice, usare l'ambiente del repository.
+Installare requirements-dev.txt e qt_lab/requirements.txt, quindi eseguire la discovery unittest qt_app/tests.
+Avviare qt_app/main.py con --smoke-test e --capture per uno screenshot senza manutenzione.
 
-Il workflow \`Panacea Qt Migration QA\` produce un candidato portabile isolato e uno screenshot solo dopo test su Windows; il pacchetto si chiama \`PanaceaQtCandidate.exe\`, distinto dal prodotto stabile.
-
-## Sequenza restante
-
-1. Adattare schermate e letture in modalità live con UX e accessibilità confrontabili alla V2.
-2. Abilitare progressivamente singole operazioni, sempre con guardrail e test fixture.
-3. Riprodurre e verificare Quick Cleanup, Resurrection e Turbo con casi cancellazione, fallimento e completamento incerto.
-4. Reintegrare aggiornamento/installer per il nuovo EXE con test di sicurezza Windows e rollback.
-5. Misurare start-up, navigazione, RAM e dimensione del pacchetto finale a parità funzionale; solo allora valutare merge e release.
-
-**Non confondere questo checkpoint con migrazione conclusa.**
+GitHub Actions pubblica soltanto un artefatto candidato standalone, uno SHA-256 del pacchetto e screenshot. Non è un aggiornamento automatico della V2 stabile.

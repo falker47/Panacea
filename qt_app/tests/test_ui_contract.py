@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 class UiContractTests(unittest.TestCase):
     def test_qa_shell_requires_confirmation_and_remains_not_an_updater(self):
         qml = (ROOT / "Main.qml").read_text(encoding="utf-8")
-        self.assertIn("MANUTENZIONE CONFERMATA", qml)
+        self.assertIn("maintenanceService.actionCards[pageLoader.pageIndex]", qml)
+        self.assertIn("readService.driveLetters", qml)
+        self.assertIn("onClosing: function(event)", qml)
         self.assertIn("maintenanceService.prepare(", qml)
         self.assertIn("maintenanceService.confirm()", qml)
         self.assertIn("readService.request", qml)
@@ -20,7 +22,8 @@ class UiContractTests(unittest.TestCase):
         app = (ROOT / "main.py").read_text(encoding="utf-8")
         self.assertIn("Panacea Qt UI migration QA", app)
         self.assertNotIn("run_update_helper(", app)
-        self.assertNotIn("ShellExecuteW(", app)
+        self.assertIn("ShellExecuteW(", app)
+        self.assertIn("not args.smoke_test", app)
 
     def test_smoke_capture_uses_supported_qscreen_api(self):
         app = (ROOT / "main.py").read_text(encoding="utf-8")

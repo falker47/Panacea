@@ -59,7 +59,7 @@ jobs:
       - name: Package independent candidate, not stable release
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" qt_app/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
           if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
 
@@ -92,6 +92,7 @@ jobs:
           $zipBytes = (Get-Item "build/qt-app/PanaceaQtCandidate-Windows.zip").Length
           $sha = (Get-FileHash "build/qt-app/PanaceaQtCandidate-Windows.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  PanaceaQtCandidate-Windows.zip" | Set-Content -LiteralPath "build/qt-app/PanaceaQtCandidate-Windows.zip.sha256" -Encoding utf8
+          Write-Output "CANDIDATE_ZIP_SHA256=$sha"
           @{ uncompressed_bytes = [long]$totalBytes; zipped_bytes = [long]$zipBytes; maintenance_enabled = $true } |
             ConvertTo-Json | Set-Content "build/qt-app/size.json" -Encoding utf8
 

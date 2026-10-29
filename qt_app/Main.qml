@@ -9,94 +9,55 @@ Window {
     minimumWidth: 850
     minimumHeight: 570
     visible: true
-    title: "Panacea Qt · Migrazione in verifica"
+    title: "Panacea Qt · Candidato QA"
+    property string language: Qt.locale().name.toLowerCase().indexOf("it") === 0 ? "it" : "en"
+    property string selectedDrive: ""
+    function label(it, en) { return language === "it" ? it : en }
+    Component.onCompleted: maintenanceService.setLanguage(language)
+    onLanguageChanged: maintenanceService.setLanguage(language)
+    onClosing: function(event) { if (maintenanceService.busy) { event.accepted = false; maintenanceService.cancel() } }
     color: "#0b1525"
 
     property int currentTab: 0
     property var visited: [true, false, false, false, false]
     readonly property var tabs: [
-        { name: "Dashboard", detail: "Panoramica", glyph: "◫" },
-        { name: "Cleaning", detail: "Pulizia", glyph: "◇" },
-        { name: "Tools", detail: "Diagnostica", glyph: "⌘" },
-        { name: "Turbo", detail: "Prestazioni", glyph: "⚡" },
-        { name: "Resurrect", detail: "Ripristino", glyph: "↻" }
+        { name: "Dashboard", detail: shell.label("Panoramica","Overview"), glyph: "◫" },
+        { name: "Cleaning", detail: shell.label("Pulizia e app","Cleanup & apps"), glyph: "◇" },
+        { name: "Tools", detail: shell.label("Strumenti e disco","Tools & disk"), glyph: "⌘" },
+        { name: "Turbo", detail: shell.label("Turbo e avvio","Turbo & startup"), glyph: "⚡" },
+        { name: "Resurrect", detail: shell.label("Ripristino","Resurrection"), glyph: "↻" }
     ]
     readonly property var pages: [
-        {
-            heading: "Stato del sistema",
-            description: "Metriche reali in lettura, stesso backend di Panacea. Nessuna operazione di manutenzione.",
-            cards: [
-                { title: "Processore", subtitle: "Utilizzo CPU corrente", metric: "cpu", badge: "LIVE", note: "Campionamento Windows in thread separato." },
-                { title: "Memoria", subtitle: "RAM utilizzata", metric: "ram", badge: "LIVE", note: "Dato dal modulo originale di monitoraggio." },
-                { title: "Disco", subtitle: "Spazio utilizzato sul volume di sistema", metric: "disk", badge: "LIVE", note: "La lettura non modifica il disco." },
-                { title: "Protezione", subtitle: "Modalità esperimento", value: "Sola lettura", badge: "LAB", note: "Aggiornamenti disabilitati; manutenzione con conferma e controllo privilegi." },
-                { title: "Pulizia", subtitle: "Navigazione verso strumenti di pulizia", value: "Anteprima UI", badge: "LAB", note: "Nessuna cancellazione di file." },
-                { title: "Diagnostica", subtitle: "Strumenti nativi di Windows", value: "Anteprima UI", badge: "LAB", note: "Nessun processo di riparazione avviabile." }
-            ]
-        },
-        {
-            heading: "Pulizia e spazio",
-            description: "Disposizione grafica di prova. I controlli sono intenzionalmente inattivi.",
-            cards: [
-                { title: "File temporanei", subtitle: "Cartelle temporanee di Windows", value: "Non eseguito", badge: "INATTIVO", note: "Analisi e pulizia non sono collegate." },
-                { title: "Cache browser", subtitle: "Chrome, Edge e Firefox", value: "Non eseguito", badge: "INATTIVO", note: "Nessun file viene letto o eliminato." },
-                { title: "Cestino", subtitle: "Rimozione elementi eliminati", value: "Non eseguito", badge: "INATTIVO", note: "Il contenuto del Cestino non viene toccato." },
-                { title: "Pulizia rapida", subtitle: "Operazioni di manutenzione", value: "Anteprima", badge: "LAB", note: "Il prototipo valuta solo navigazione e densità dei componenti." },
-                { title: "Archiviazione", subtitle: "Strumenti nativi di Windows", value: "Non collegato", badge: "INATTIVO", note: "Nessun comando esterno." },
-                { title: "Log attività", subtitle: "Dettagli delle operazioni", value: "Nessuna attività", badge: "LAB", note: "Pannello destinato a una successiva migrazione." }
-            ]
-        },
-        {
-            heading: "Diagnostica e riparazione",
-            description: "Vista densa per confrontare tempi di creazione, scorrimento e ridimensionamento.",
-            cards: [
-                { title: "Controllo file di sistema", subtitle: "sfc /scannow", value: "Non disponibile", badge: "INATTIVO", note: "Il backend di manutenzione non è collegato." },
-                { title: "Integrità Windows", subtitle: "DISM CheckHealth", value: "Non disponibile", badge: "INATTIVO", note: "Nessun processo elevato." },
-                { title: "Ripristino immagine", subtitle: "DISM RestoreHealth", value: "Non disponibile", badge: "INATTIVO", note: "Nessun comando avviabile." },
-                { title: "DNS", subtitle: "Svuotamento cache di rete", value: "Non disponibile", badge: "INATTIVO", note: "La configurazione di rete resta invariata." },
-                { title: "Winsock", subtitle: "Ripristino rete", value: "Non disponibile", badge: "INATTIVO", note: "Non vengono modificati adattatori o socket." },
-                { title: "Unità", subtitle: "Ottimizzazione disco", value: "Non disponibile", badge: "INATTIVO", note: "Non viene avviato defrag." },
-                { title: "Punto di ripristino", subtitle: "Protezione del sistema", value: "Non disponibile", badge: "INATTIVO", note: "Nessun punto viene creato." },
-                { title: "Rapporto batteria", subtitle: "Diagnostica alimentazione", value: "Non disponibile", badge: "INATTIVO", note: "Nessun documento viene generato." }
-            ]
-        },
-        {
-            heading: "Prestazioni e avvio",
-            description: "Controlli grafici di valutazione, senza modifiche a servizi o registro.",
-            cards: [
-                { title: "Piano di alimentazione", subtitle: "Profilo energetico", value: "Non collegato", badge: "INATTIVO", note: "Nessuna modifica al piano attivo." },
-                { title: "Effetti visivi", subtitle: "Preferenze di Windows", value: "Non collegato", badge: "INATTIVO", note: "Nessuna scrittura nel registro." },
-                { title: "SysMain", subtitle: "Servizio Windows", value: "Non collegato", badge: "INATTIVO", note: "Servizio invariato." },
-                { title: "Windows Search", subtitle: "Servizio di indicizzazione", value: "Non collegato", badge: "INATTIVO", note: "Servizio invariato." },
-                { title: "Spooler", subtitle: "Servizio di stampa", value: "Non collegato", badge: "INATTIVO", note: "Servizio invariato." },
-                { title: "Ripristina originali", subtitle: "Impostazioni salvate", value: "Non collegato", badge: "INATTIVO", note: "Il prototipo non salva né modifica configurazioni." }
-            ]
-        },
-        {
-            heading: "Ripristino guidato",
-            description: "Dieci fasi rappresentative per misurare una schermata complessa, senza eseguire operazioni.",
-            cards: [
-                { title: "01 · Punto di ripristino", subtitle: "Checkpoint obbligatorio", value: "Non avviato", badge: "SIMULATO", note: "Nessun punto reale creato." },
-                { title: "02 · Cache browser", subtitle: "Pulizia dati temporanei", value: "Non avviato", badge: "SIMULATO", note: "Solo composizione visuale." },
-                { title: "03 · File temporanei", subtitle: "Pulizia cartelle", value: "Non avviato", badge: "SIMULATO", note: "Nessuna rimozione." },
-                { title: "04 · Cestino", subtitle: "Rimozione elementi", value: "Non avviato", badge: "SIMULATO", note: "Nessuna rimozione." },
-                { title: "05 · DNS", subtitle: "Reset cache", value: "Non avviato", badge: "SIMULATO", note: "Nessuna modifica." },
-                { title: "06 · Winsock", subtitle: "Ripristino rete", value: "Non avviato", badge: "SIMULATO", note: "Nessuna modifica." },
-                { title: "07 · Unità", subtitle: "Ottimizzazione guidata", value: "Non avviato", badge: "SIMULATO", note: "Nessuna modifica." },
-                { title: "08 · Disco", subtitle: "Verifica unità", value: "Non avviato", badge: "SIMULATO", note: "Nessun comando." },
-                { title: "09 · Immagine Windows", subtitle: "Controllo DISM", value: "Non avviato", badge: "SIMULATO", note: "Nessun comando." },
-                { title: "10 · File di sistema", subtitle: "Verifica SFC", value: "Non avviato", badge: "SIMULATO", note: "Nessun comando." }
-            ]
-        }
-    ]
-
-
-    readonly property var maintenanceActions: [
-        [],
-        [{title:"Pulisci temporanei",action:"temp_clean"},{title:"Cache browser",action:"browser_clean"},{title:"Svuota cestino",action:"recycle_empty"},{title:"Pulizia rapida",action:"quick_cleanup"},{title:"Pulizia Windows",action:"open_cleanmgr"}],
-        [{title:"SFC",action:"sfc"},{title:"DISM verifica",action:"dism_check"},{title:"DISM ripara",action:"dism_restore"},{title:"Flush DNS",action:"dns_flush"},{title:"Reset Winsock",action:"winsock_reset"},{title:"Punto ripristino",action:"restore_point"},{title:"Rapporto batteria",action:"battery_report"},{title:"Gestione app",action:"appwiz"},{title:"Windows Update",action:"windows_update"},{title:"Ottimizza dischi",action:"open_defrag"}],
-        [{title:"Turbo ON",action:"turbo_on"},{title:"Turbo OFF",action:"turbo_off"},{title:"Piano ON",action:"power_on"},{title:"Piano OFF",action:"power_off"},{title:"Effetti ON",action:"visual_on"},{title:"Effetti OFF",action:"visual_off"},{title:"SysMain ON",action:"sysmain_on"},{title:"SysMain OFF",action:"sysmain_off"},{title:"Search ON",action:"wsearch_on"},{title:"Search OFF",action:"wsearch_off"},{title:"Spooler ON",action:"spooler_on"},{title:"Spooler OFF",action:"spooler_off"},{title:"App avvio",action:"startup_settings"}],
-        [{title:"Avvia Resurrection",action:"resurrection"}]
+        { heading: shell.label("Sistema","System"), description: shell.label("Dashboard e controlli di sistema in sola lettura.","Dashboard and read-only system checks."), cards: [
+            { title: shell.label("Processore","CPU"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("RAM","RAM"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Disco","Disk"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Dati hardware","Hardware"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
+        ] },
+        { heading: shell.label("Pulizia e applicazioni","Cleanup & apps"), description: shell.label("Pulizia permanente solo dopo conferma esplicita.","Permanent cleanup only after confirmation."), cards: [
+            { title: shell.label("Temporanei","Temporary files"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Cache browser","Browser cache"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Cestino","Recycle Bin"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Applicazioni","Apps"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
+        ] },
+        { heading: shell.label("Diagnostica e dischi","Tools & disks"), description: shell.label("Comandi SFC/DISM, riparazione rete e operazioni disco.","SFC/DISM, network repair and disk utilities."), cards: [
+            { title: shell.label("SFC / DISM","SFC / DISM"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Dischi","Drives"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Ripristino","Restore points"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Windows Update","Windows Update"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
+        ] },
+        { heading: shell.label("Turbo e avvio","Turbo & startup"), description: shell.label("Controlli di alimentazione e servizi con snapshot originale.","Power and service controls with saved originals."), cards: [
+            { title: shell.label("Energia","Power"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Grafica","Visual effects"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Servizi","Services"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Avvio","Startup"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
+        ] },
+        { heading: shell.label("Resurrection","Resurrection"), description: shell.label("Dieci passaggi con punto di ripristino obbligatorio.","Ten steps with a mandatory restore point."), cards: [
+            { title: shell.label("Protezione","Protection"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Pulizia","Cleanup"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Diagnostica","Diagnostics"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") },
+            { title: shell.label("Risultato","Results"), subtitle: shell.label("Funzionalità collegata al backend esistente","Uses the existing backend"), value: shell.label("QA","QA"), badge: "QA", note: shell.label("Le operazioni richiedono conferma; consulta il log per i risultati.","Actions require confirmation; check the log for results.") }
+        ] }
     ]
 
     onCurrentTabChanged: {
@@ -135,7 +96,7 @@ Window {
                         font.letterSpacing: 1.3
                     }
                     Text {
-                        text: "QT QUICK · MIGRAZIONE"
+                        text: "QT QUICK · CANDIDATO QA"
                         color: "#9eafc8"
                         font.family: "Segoe UI"
                         font.pixelSize: 11
@@ -193,7 +154,7 @@ Window {
                         anchors.margins: 12
                         spacing: 6
                         Text {
-                            text: "MIGRAZIONE IN TEST"
+                            text: shell.label("MIGRAZIONE IN TEST","MIGRATION UNDER TEST")
                             color: "#e4c579"
                             font.family: "Segoe UI"
                             font.bold: true
@@ -210,7 +171,7 @@ Window {
                     }
                 }
                 Text {
-                    text: "falker47  ·  Prototype"
+                    text: "falker47  ·  Qt Candidate"
                     color: "#7488a5"
                     font.family: "Segoe UI"
                     font.pixelSize: 10
@@ -245,6 +206,13 @@ Window {
                             font.bold: true
                         }
                         Item { Layout.fillWidth: true }
+                        Rectangle {
+                            width: 65; height: 27; radius: 6; color: "#263a56"
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "Switch language"
+                            Text { anchors.centerIn: parent; text: shell.language.toUpperCase(); color: "#e4c579"; font.pixelSize: 12 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: shell.language = shell.language === "it" ? "en" : "it" }
+                        }
                         Rectangle {
                             width: 130
                             height: 26
@@ -361,7 +329,7 @@ Window {
                                                 font.family: "Segoe UI"
                                                 font.pixelSize: 11
                                                 wrapMode: Text.WordWrap
-                                                maximumLineCount: 3
+                                                maximumLineCount: 4
                                                 elide: Text.ElideRight
                                             }
                                         }
@@ -370,7 +338,33 @@ Window {
                                         Rectangle {
                                             width: parent.width - 48
                                             x: 24
-                                            height: actionColumn.implicitHeight + 28
+                                            height: visible ? 58 : 0
+                                            visible: pageLoader.pageIndex === 2
+                                            color: "#1b2b44"
+                                            radius: 9
+                                            Row {
+                                                x: 14; y: 15; spacing: 9
+                                                Text { text: shell.label("Unità:", "Drive:"); color: "#a1b3c9"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                                Repeater {
+                                                    model: readService.driveLetters
+                                                    Rectangle {
+                                                        width: 46; height: 28; radius: 5
+                                                        color: shell.selectedDrive === modelData ? "#765f33" : "#263a56"
+                                                        Accessible.role: Accessible.Button
+                                                        Accessible.name: modelData
+                                                        Text { anchors.centerIn: parent; text: modelData; color: "#f1f3f8"; font.pixelSize: 12 }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: shell.selectedDrive = modelData }
+                                                    }
+                                                }
+                                                Text { text: shell.selectedDrive || shell.label("Leggi le unità sopra", "Read drives above"); color: "#e4c579"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            width: parent.width - 48
+                                            x: 24
+                                            height: visible ? actionColumn.implicitHeight + 28 : 0
+                                            visible: maintenanceService.actionCards[pageLoader.pageIndex].length > 0
                                             radius: 10
                                             color: "#1b2b44"
                                             border.color: "#2e415c"
@@ -381,7 +375,7 @@ Window {
                                                 width: parent.width - 28
                                                 spacing: 8
                                                 Text {
-                                                    text: "Manutenzione (richiede conferma e privilegi Windows)"
+                                                    text: shell.label("Manutenzione solo con conferma. Non è una release.","Maintenance requires confirmation. Not a release.")
                                                     color: "#e4c579"
                                                     font.bold: true
                                                     font.pixelSize: 13
@@ -390,7 +384,7 @@ Window {
                                                     width: parent.width
                                                     spacing: 8
                                                     Repeater {
-                                                        model: shell.maintenanceActions[pageLoader.pageIndex]
+                                                        model: maintenanceService.actionCards[pageLoader.pageIndex]
                                                         Rectangle {
                                                             width: 166
                                                             height: 34
@@ -404,8 +398,9 @@ Window {
                                                             }
                                                             MouseArea {
                                                                 anchors.fill: parent
-                                                                enabled: !maintenanceService.busy
-                                                                onClicked: maintenanceService.prepare(modelData.action, modelData.drive || "")
+                                                                enabled: !maintenanceService.busy && !readService.busy
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: maintenanceService.prepare(modelData.action, (modelData.action === "drive_optimize" || modelData.action === "chkdsk") ? shell.selectedDrive : "")
                                                             }
                                                         }
                                                     }
@@ -541,6 +536,7 @@ Window {
         anchors.fill: parent
         visible: maintenanceService.awaitingConfirmation
         color: "#cc07101d"
+        MouseArea { anchors.fill: parent }
         z: 100
         Rectangle {
             anchors.centerIn: parent

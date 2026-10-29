@@ -1,6 +1,10 @@
 """Qt application migration: isolated read-only service integration."""
 from __future__ import annotations
 import argparse
+import ctypes
+import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 
@@ -14,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
 from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
+from qt_app.catalog import cards  # noqa: E402
 from qt_lab.main import MetricsBridge  # noqa: E402
 
 
@@ -28,6 +33,8 @@ class ReadBridge(QObject):
         self._last = "Seleziona una verifica in sola lettura."
         self._busy = False
         self._closed = False
+        self._maintenance = None
+        self._drives = []
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
@@ -41,15 +48,22 @@ class ReadBridge(QObject):
     def busy(self):
         return self._busy
 
+    @Property('QVariantList', notify=changed)
+    def driveLetters(self):
+        return self._drives
+
     @Slot(str)
     def request(self, action):
-        if self._closed or action not in READ_ACTIONS or self._busy:
+        if (self._closed or action not in READ_ACTIONS or self._busy
+                or (self._maintenance is not None and self._maintenance.busy)):
             return
         self._busy = True
         self._last = "Verifica in corso, nessuna operazione di manutenzione."
         self.changed.emit()
         def successful(value):
-            self._last = str(value)
+            self._last = json.dumps(value, ensure_ascii=False, indent=2)
+            if action == 'drives':
+                self._drives = [row['letter'] for row in value.get('drives', []) if row.get('available') is True]
             self.changed.emit()
         def failed(exc):
             self._last = "Dati non disponibili: " + str(exc)
@@ -87,10 +101,22 @@ class MaintenanceBridge(QObject):
         self._output = "Nessuna manutenzione eseguita."
         self._busy = False
         self._closed = False
+        self._reader = None
+        self._language = 'it'
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
         self._timer.start()
+
+    @Property('QVariantList', notify=changed)
+    def actionCards(self):
+        return [[item for item in page if item['action']] for page in cards(self._language)]
+
+    @Slot(str)
+    def setLanguage(self, language):
+        if language in ('it', 'en'):
+            self._language = language
+            self.changed.emit()
 
     @Property(str, notify=changed)
     def details(self):
@@ -110,7 +136,7 @@ class MaintenanceBridge(QObject):
 
     @Slot(str, str)
     def prepare(self, action, drive):
-        if self._closed or self._busy:
+        if self._closed or self._busy or (self._reader is not None and self._reader.busy):
             return
         self.reject()
         try:
@@ -130,7 +156,8 @@ class MaintenanceBridge(QObject):
 
     @Slot()
     def confirm(self):
-        if self._closed or self._busy or not self._pending:
+        if (self._closed or self._busy or not self._pending
+                or (self._reader is not None and self._reader.busy)):
             return
         nonce = self._pending
         self._pending = ""
@@ -186,10 +213,23 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
+    if os.name == 'nt' and not args.smoke_test:
+        from modules.utils import is_admin
+        if not is_admin():
+            parameters = subprocess.list2cmdline(sys.argv[1:] if argv is None else argv)
+            if getattr(sys, 'frozen', False):
+                os.environ['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+            code = ctypes.windll.shell32.ShellExecuteW(None, 'runas', sys.executable, parameters, None, 1)
+            if code <= 32:
+                print(f'Administrator elevation declined or failed ({code})', file=sys.stderr)
+                return 1
+            return 0
     app = QGuiApplication([sys.argv[0]])
     metrics = MetricsBridge()
     reader = ReadBridge()
     maintenance = MaintenanceBridge()
+    reader._maintenance = maintenance
+    maintenance._reader = reader
     app.aboutToQuit.connect(metrics.stop)
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)

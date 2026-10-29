@@ -24,7 +24,10 @@ class UiContractTests(unittest.TestCase):
     def test_packaging_entrypoint_stays_distinct_from_stable_main(self):
         app = (ROOT / "main.py").read_text(encoding="utf-8")
         self.assertIn("Panacea Qt UI migration QA", app)
-        self.assertNotIn("run_update_helper(", app)
+        # The frozen production identity supports the verified legacy helper,
+        # but a QA candidate cannot acknowledge or install a production update.
+        self.assertIn("run_update_helper(", app)
+        self.assertIn('Path(sys.executable).name != "Panacea.exe"', app)
         self.assertIn("ShellExecuteW(", app)
         self.assertIn("not args.smoke_test", app)
 

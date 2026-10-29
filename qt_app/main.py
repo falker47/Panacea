@@ -22,6 +22,7 @@ from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
 from qt_app.catalog import cards  # noqa: E402
 from qt_app.confirmation_copy import confirmation_text  # noqa: E402
 from qt_app.elevation import elevation_arguments  # noqa: E402
+from qt_app.update_bridge import UpdateBridge  # noqa: E402
 from qt_lab.main import MetricsBridge  # noqa: E402
 
 
@@ -37,6 +38,7 @@ class ReadBridge(QObject):
         self._busy = False
         self._closed = False
         self._maintenance = None
+        self._updater = None
         self._drives = []
         self._timer = QTimer(self)
         self._timer.setInterval(30)
@@ -58,7 +60,8 @@ class ReadBridge(QObject):
     @Slot(str)
     def request(self, action):
         if (self._closed or action not in READ_ACTIONS or self._busy
-                or (self._maintenance is not None and self._maintenance.busy)):
+                or (self._maintenance is not None and self._maintenance.busy)
+                or (self._updater is not None and self._updater.busy)):
             return
         self._busy = True
         self._last = "Verifica in corso, nessuna operazione di manutenzione."
@@ -105,6 +108,7 @@ class MaintenanceBridge(QObject):
         self._busy = False
         self._closed = False
         self._reader = None
+        self._updater = None
         self._language = 'it'
         self._timer = QTimer(self)
         self._timer.setInterval(30)
@@ -139,7 +143,8 @@ class MaintenanceBridge(QObject):
 
     @Slot(str, str)
     def prepare(self, action, drive):
-        if self._closed or self._busy or (self._reader is not None and self._reader.busy):
+        if (self._closed or self._busy or (self._reader is not None and self._reader.busy)
+                or (self._updater is not None and self._updater.busy)):
             return
         self.reject()
         try:
@@ -161,7 +166,8 @@ class MaintenanceBridge(QObject):
     @Slot()
     def confirm(self):
         if (self._closed or self._busy or not self._pending
-                or (self._reader is not None and self._reader.busy)):
+                or (self._reader is not None and self._reader.busy)
+                or (self._updater is not None and self._updater.busy)):
             return
         nonce = self._pending
         self._pending = ""
@@ -264,8 +270,12 @@ def main(argv=None):
     metrics = MetricsBridge()
     reader = ReadBridge()
     maintenance = MaintenanceBridge()
+    updater = UpdateBridge(reader, maintenance, on_ready=app.quit)
     reader._maintenance = maintenance
+    reader._updater = updater
     maintenance._reader = reader
+    maintenance._updater = updater
+    app.aboutToQuit.connect(updater.stop)
     app.aboutToQuit.connect(metrics.stop)
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)
@@ -274,11 +284,13 @@ def main(argv=None):
     engine.rootContext().setContextProperty("liveMetrics", metrics)
     engine.rootContext().setContextProperty("readService", reader)
     engine.rootContext().setContextProperty("maintenanceService", maintenance)
+    engine.rootContext().setContextProperty("updateService", updater)
     source = ((Path(getattr(sys, "_MEIPASS")) / "qt_app" / "Main.qml")
               if getattr(sys, "frozen", False)
               else Path(__file__).with_name("Main.qml"))
     engine.load(QUrl.fromLocalFile(str(source)))
     if not engine.rootObjects():
+        updater.stop()
         reader.stop()
         maintenance.stop()
         metrics.stop()

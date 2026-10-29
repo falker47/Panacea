@@ -50,6 +50,7 @@ class MetricsBridge(QObject):
     def __init__(self):
         super().__init__()
         self._values = {"cpu": "—", "ram": "—", "disk": "—"}
+        self._history = {"cpu": [], "ram": [], "disk": []}
         self._monitor = None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="panacea-qt-lab")
         self._busy = False
@@ -70,6 +71,18 @@ class MetricsBridge(QObject):
     @Property(str, notify=changed)
     def disk(self):
         return self._values["disk"]
+
+    @Property('QVariantList', notify=changed)
+    def cpuHistory(self):
+        return self._history["cpu"]
+
+    @Property('QVariantList', notify=changed)
+    def ramHistory(self):
+        return self._history["ram"]
+
+    @Property('QVariantList', notify=changed)
+    def diskHistory(self):
+        return self._history["disk"]
 
     @Slot()
     def start(self):
@@ -105,8 +118,20 @@ class MetricsBridge(QObject):
         if self._closed:
             return
         self._busy = False
-        if values != self._values:
-            self._values = values
+        updated = values != self._values
+        self._values = values
+        for key in ("cpu", "ram", "disk"):
+            displayed = values.get(key)
+            if not isinstance(displayed, str) or not displayed.endswith("%"):
+                continue
+            try:
+                number = float(displayed[:-1])
+            except ValueError:
+                continue
+            if 0 <= number <= 100:
+                self._history[key] = (self._history[key] + [number])[-40:]
+                updated = True
+        if updated:
             self.changed.emit()
 
     def stop(self):

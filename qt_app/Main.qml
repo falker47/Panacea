@@ -15,7 +15,13 @@ Window {
     function label(it, en) { return language === "it" ? it : en }
     Component.onCompleted: maintenanceService.setLanguage(language)
     onLanguageChanged: maintenanceService.setLanguage(language)
-    onClosing: function(event) { if (maintenanceService.busy) { event.accepted = false; maintenanceService.cancel() } }
+    onClosing: function(event) {
+        if (maintenanceService.busy || updateService.installing) {
+            event.accepted = false
+            if (maintenanceService.busy)
+                maintenanceService.cancel()
+        }
+    }
     color: "#0b1525"
 
     property int currentTab: 0
@@ -505,6 +511,82 @@ Window {
                                             }
                                         }
 
+                                        Rectangle {
+                                            visible: pageLoader.pageIndex === 0
+                                            width: parent.width - 48
+                                            x: 24
+                                            height: visible ? 142 : 0
+                                            color: "#1b2b44"
+                                            border.color: "#2e415c"
+                                            radius: 10
+                                            Column {
+                                                anchors.fill: parent
+                                                anchors.margins: 14
+                                                spacing: 8
+                                                Text {
+                                                    text: shell.label("Aggiornamenti verificati","Verified updates")
+                                                    color: "#f1f3f8"; font.bold: true; font.pixelSize: 15
+                                                }
+                                                Text {
+                                                    text: updateService.status
+                                                    width: parent.width
+                                                    color: "#9eafc8"; font.pixelSize: 12
+                                                    elide: Text.ElideRight
+                                                }
+                                                Row {
+                                                    spacing: 12
+                                                    Rectangle {
+                                                        width: 162; height: 34; radius: 6
+                                                        color: (updateService.busy || maintenanceService.busy) ? "#334158" : "#765f33"
+                                                        activeFocusOnTab: true
+                                                        Accessible.role: Accessible.Button
+                                                        Accessible.name: shell.label("Controlla aggiornamenti","Check updates")
+                                                        function activate() {
+                                                            if (!updateService.busy && !maintenanceService.busy)
+                                                                updateService.check()
+                                                        }
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: shell.label("Controlla aggiornamenti","Check updates")
+                                                            color: "white"; font.pixelSize: 11
+                                                        }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
+                                                        Keys.onReturnPressed: activate()
+                                                        Keys.onSpacePressed: activate()
+                                                    }
+                                                    Rectangle {
+                                                        visible: updateService.available && updateService.eligible
+                                                        width: visible ? 156 : 0; height: 34; radius: 6
+                                                        color: "#95753d"
+                                                        activeFocusOnTab: visible
+                                                        Accessible.role: Accessible.Button
+                                                        Accessible.name: shell.label("Installa aggiornamento","Install update")
+                                                        function activate() { if (!updateService.busy) updateService.prepareInstall() }
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: shell.label("Installa verificato","Install verified")
+                                                            color: "white"; font.pixelSize: 11
+                                                        }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
+                                                        Keys.onReturnPressed: activate()
+                                                        Keys.onSpacePressed: activate()
+                                                    }
+                                                    Rectangle {
+                                                        visible: updateService.downloading
+                                                        width: visible ? 148 : 0; height: 34; radius: 6; color: "#46556b"
+                                                        Accessible.role: Accessible.Button
+                                                        Accessible.name: shell.label("Annulla download","Cancel download")
+                                                        Text { anchors.centerIn: parent; text: shell.label("Annulla download","Cancel download"); color: "white"; font.pixelSize: 11 }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: updateService.cancelDownload() }
+                                                    }
+                                                    Text {
+                                                        text: updateService.eligible ? (updateService.progress + "%") : shell.label("Solo controlli nel candidato QA","QA cannot replace stable")
+                                                        color: "#e4c579"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         Text {
                                             x: 24
                                             width: parent.width - 48
@@ -531,7 +613,7 @@ Window {
                         anchors.left: parent.left
                         anchors.leftMargin: 23
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "PANACEA QT QA  ·  MANUTENZIONE CONFERMATA  ·  UPDATER DISABILITATO"
+                        text: shell.label("PANACEA QT QA · INSTALLAZIONE UPDATER DISABILITATA","PANACEA QT QA · IN-PLACE UPDATER DISABLED")
                         color: "#91a5be"
                         font.family: "Segoe UI"
                         font.pixelSize: 10

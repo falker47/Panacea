@@ -214,3 +214,57 @@ jobs:
             build/qt-installer/PanaceaQtQASetup.exe
             build/qt-installer/PanaceaQtQASetup.exe.sha256
           if-no-files-found: error
+
+  windows-onefile-update-compatibility:
+    name: Prove production executable identity without publishing
+    needs: windows-ui-and-contracts
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+      QT_QUICK_BACKEND: software
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            qt_lab/requirements.txt
+
+      - name: Install Qt and packaging dependencies
+        run: python -m pip install -r requirements-dev.txt -r qt_lab/requirements.txt
+
+      - name: Build disposable Qt one-file Panacea.exe for updater identity tests
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Panacea --add-data "qt_app/Main.qml;qt_app" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
+          if ($LASTEXITCODE -ne 0) { throw "Qt one-file production-identity prototype could not be built" }
+          if (-not (Test-Path -LiteralPath "dist/Panacea.exe")) { throw "Qt one-file executable is missing" }
+
+      - name: Verify frozen helper imports and full Qt startup in isolated runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "build/qt-onefile" | Out-Null
+          python -c "import subprocess; subprocess.run(['dist/Panacea.exe', '--smoke-backend-imports'], check=True, timeout=90)"
+          if ($LASTEXITCODE -ne 0) { throw "One-file backend imports failed" }
+          python -c "import subprocess; subprocess.run(['dist/Panacea.exe', '--smoke-test', '--capture', 'build/qt-onefile/panacea.png'], check=True, timeout=90)"
+          if ($LASTEXITCODE -ne 0) { throw "One-file source UI smoke failed" }
+          if ((Get-Item "build/qt-onefile/panacea.png").Length -lt 1024) { throw "Qt one-file GUI did not render" }
+          $size = (Get-Item "dist/Panacea.exe").Length
+          $digest = (Get-FileHash "dist/Panacea.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Output "ONEFILE_QT_BYTES=$size"
+          Write-Output "ONEFILE_QT_SHA256=$digest"
+          @{ bytes = [long]$size; sha256 = $digest; release_candidate = $false; installer_compatible = $false } |
+            ConvertTo-Json | Set-Content "build/qt-onefile/identity.json" -Encoding utf8
+
+      - name: Retain one-file experiment evidence only, never deliver a release exe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-OneFile-Compatibility-Evidence
+          path: |
+            build/qt-onefile/panacea.png
+            build/qt-onefile/identity.json
+          if-no-files-found: warn

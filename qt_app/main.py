@@ -20,6 +20,7 @@ from modules.localization import resolve_language  # noqa: E402
 from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
 from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
 from qt_app.catalog import cards  # noqa: E402
+from qt_app.confirmation_copy import confirmation_text  # noqa: E402
 from qt_lab.main import MetricsBridge  # noqa: E402
 
 
@@ -143,7 +144,8 @@ class MaintenanceBridge(QObject):
         try:
             data = self._service.prepare(action, drive)
             self._pending = data["nonce"]
-            self._details = data["title"] + "\n" + data["details"]
+            title, warning = confirmation_text(action, data, self._language)
+            self._details = title + "\n" + warning
         except (ValueError, RuntimeError) as exc:
             self._output = "Azione rifiutata: " + str(exc)
         self.changed.emit()

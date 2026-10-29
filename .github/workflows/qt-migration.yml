@@ -51,6 +51,7 @@ jobs:
           New-Item -ItemType Directory -Force build/qt-app | Out-Null
           python -c "import subprocess,sys; subprocess.run([sys.executable, 'qt_app/main.py', '--smoke-test', '--capture', 'build/qt-app/source.png'], check=True, timeout=45)"
           if ($LASTEXITCODE -ne 0) { throw "Qt migration source smoke failed" }
+          if (-not (Test-Path -LiteralPath "build/qt-app/source.png") -or (Get-Item "build/qt-app/source.png").Length -lt 1024) { throw "Qt source screenshot was not captured" }
 
       - name: Package independent candidate, not stable release
         shell: pwsh
@@ -78,6 +79,7 @@ jobs:
         run: |
           python -c "import subprocess; subprocess.run(['dist/PanaceaQtCandidate/PanaceaQtCandidate.exe', '--smoke-test', '--capture', 'build/qt-app/packaged.png'], check=True, timeout=45)"
           if ($LASTEXITCODE -ne 0) { throw "Packaged Qt migration shell failed" }
+          if (-not (Test-Path -LiteralPath "build/qt-app/packaged.png") -or (Get-Item "build/qt-app/packaged.png").Length -lt 1024) { throw "Packaged Qt screenshot was not captured" }
 
       - name: Measure binary size and package QA artifact
         shell: pwsh

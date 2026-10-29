@@ -99,8 +99,16 @@ def main(argv=None):
         if args.capture:
             def capture():
                 args.capture.parent.mkdir(parents=True, exist_ok=True)
-                img = engine.rootObjects()[0].grabWindow()
-                if img.isNull() or not img.save(str(args.capture)):
+                try:
+                    window = engine.rootObjects()[0]
+                    screen = window.screen()
+                    if screen is None:
+                        raise RuntimeError("Qt window has no screen")
+                    img = screen.grabWindow(int(window.winId()))
+                    if img.isNull() or not img.save(str(args.capture)):
+                        raise RuntimeError("Qt screenshot is empty or cannot be saved")
+                except Exception as exc:
+                    print(f"Qt UI screenshot failure: {exc}", file=sys.stderr, flush=True)
                     app.exit(3)
             QTimer.singleShot(550, capture)
         QTimer.singleShot(1200, app.quit)

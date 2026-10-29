@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
-import time
 
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication

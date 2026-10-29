@@ -116,7 +116,7 @@ class MaintenanceBridge(QObject):
         try:
             data = self._service.prepare(action, drive)
             self._pending = data["nonce"]
-            self._details = data["title"] + "\\n" + data["details"]
+            self._details = data["title"] + "\n" + data["details"]
         except (ValueError, RuntimeError) as exc:
             self._output = "Azione rifiutata: " + str(exc)
         self.changed.emit()
@@ -164,7 +164,7 @@ class MaintenanceBridge(QObject):
             done()
 
     def _append(self, message):
-        self._output = (self._output + "\\n" + message)[-16000:]
+        self._output = (self._output + "\n" + message)[-16000:]
         self.changed.emit()
 
     @Slot()

@@ -147,6 +147,8 @@ def main(argv=None):
         bridge.stop()
         return 2
     window = root_objects[0]
+    if args.smoke_test:
+        print('qt-lab: qml loaded', flush=True)
     engine_loaded_ms = round((time.perf_counter() - begun) * 1000, 2)
 
     if not args.smoke_test:
@@ -160,12 +162,14 @@ def main(argv=None):
                  (4, "warm"), (0, "warm")]
 
     def finalize():
+        print('qt-lab: finalize', flush=True)
         if not window.isVisible() or window.width() < 800 or window.height() < 550:
             _write_report(args.report, {"error": "Qt Quick window is not usable", "navigation": samples})
             app.exit(1)
             return
         if args.capture:
             args.capture.parent.mkdir(parents=True, exist_ok=True)
+            print('qt-lab: capturing window', flush=True)
             screenshot = window.grabWindow()
             if screenshot.isNull() or not screenshot.save(str(args.capture)):
                 _write_report(args.report, {"error": "Qt Quick screenshot unavailable", "navigation": samples})
@@ -194,6 +198,7 @@ def main(argv=None):
             QTimer.singleShot(350, finalize)
             return
         tab, phase = itinerary[position]
+        print(f'qt-lab: navigate {tab} ({phase})', flush=True)
         before = time.perf_counter()
         success = window.setProperty("currentTab", tab)
         if not success:

@@ -29,7 +29,7 @@ Window {
                 { title: "Processore", subtitle: "Utilizzo CPU corrente", metric: "cpu", badge: "LIVE", note: "Campionamento Windows in thread separato." },
                 { title: "Memoria", subtitle: "RAM utilizzata", metric: "ram", badge: "LIVE", note: "Dato dal modulo originale di monitoraggio." },
                 { title: "Disco", subtitle: "Spazio utilizzato sul volume di sistema", metric: "disk", badge: "LIVE", note: "La lettura non modifica il disco." },
-                { title: "Protezione", subtitle: "Modalità esperimento", value: "Sola lettura", badge: "LAB", note: "Aggiornamenti, elevazione e comandi disabilitati." },
+                { title: "Protezione", subtitle: "Modalità esperimento", value: "Sola lettura", badge: "LAB", note: "Aggiornamenti disabilitati; manutenzione con conferma e controllo privilegi." },
                 { title: "Pulizia", subtitle: "Navigazione verso strumenti di pulizia", value: "Anteprima UI", badge: "LAB", note: "Nessuna cancellazione di file." },
                 { title: "Diagnostica", subtitle: "Strumenti nativi di Windows", value: "Anteprima UI", badge: "LAB", note: "Nessun processo di riparazione avviabile." }
             ]
@@ -200,7 +200,7 @@ Window {
                             font.pixelSize: 11
                         }
                         Text {
-                            text: "Nessuna elevazione o manutenzione."
+                            text: "Azioni disponibili solo con conferma; amministratore richiesto."
                             color: "#9eafc8"
                             font.family: "Segoe UI"
                             font.pixelSize: 11
@@ -504,7 +504,7 @@ Window {
                                         Text {
                                             x: 24
                                             width: parent.width - 48
-                                            text: "Prototipo di confronto · Nessun comando di manutenzione disponibile."
+                                            text: "Candidato QA: conferma obbligatoria. Non sostituisce la versione stabile."
                                             color: "#72869f"
                                             font.family: "Segoe UI"
                                             font.pixelSize: 11
@@ -527,7 +527,7 @@ Window {
                         anchors.left: parent.left
                         anchors.leftMargin: 23
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "PANACEA QT QA  ·  VERIFICHE IN SOLA LETTURA  ·  COMANDI DI SISTEMA DISABILITATI"
+                        text: "PANACEA QT QA  ·  MANUTENZIONE CONFERMATA  ·  UPDATER DISABILITATO"
                         color: "#91a5be"
                         font.family: "Segoe UI"
                         font.pixelSize: 10

@@ -17,6 +17,10 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("onClosing: function(event)", qml)
         self.assertIn("maintenanceService.prepare(", qml)
         self.assertIn("maintenanceService.confirm()", qml)
+        self.assertIn("updateService.check()", qml)
+        self.assertIn("updateService.prepareInstall()", qml)
+        self.assertIn("updateService.confirmInstall()", qml)
+        self.assertIn("updateService.cancelDownload()", qml)
         self.assertIn("readService.request", qml)
         self.assertIn("readService.busy", qml)
         self.assertNotIn("maintenanceBridge.execute", qml)
@@ -30,6 +34,7 @@ class UiContractTests(unittest.TestCase):
         self.assertIn('Path(sys.executable).name != "Panacea.exe"', app)
         self.assertIn("ShellExecuteW(", app)
         self.assertIn("not args.smoke_test", app)
+        self.assertIn('setContextProperty("updateService"', app)
 
     def test_smoke_capture_uses_supported_qscreen_api(self):
         app = (ROOT / "main.py").read_text(encoding="utf-8")

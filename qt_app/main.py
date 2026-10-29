@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QFontDatabase
 from PySide6.QtQml import QQmlApplicationEngine
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -344,6 +344,24 @@ def main(argv=None):
                 return 1
             return 0
     app = QGuiApplication([sys.argv[0]])
+    if args.smoke_test and os.name == "nt" and os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        # The offscreen QPA has no Windows font catalog. Without registering
+        # platform-owned fonts, screenshots can display tofu despite a fully
+        # legible native Windows window. QA loads the system fonts in-memory;
+        # no font files are embedded or distributed with Panacea.
+        fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+        registered = []
+        for filename in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf"):
+            installed = fonts / filename
+            if installed.is_file():
+                family_id = QFontDatabase.addApplicationFont(str(installed))
+                if family_id >= 0:
+                    registered.extend(QFontDatabase.applicationFontFamilies(family_id))
+        if not registered:
+            print("Qt offscreen QA: Windows Segoe UI fonts unavailable", file=sys.stderr)
+            return 4
+        print("Qt offscreen QA fonts:", ", ".join(sorted(set(registered))), flush=True)
+
     metrics = MetricsBridge()
     reader = ReadBridge()
     maintenance = MaintenanceBridge()

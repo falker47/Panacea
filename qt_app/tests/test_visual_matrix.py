@@ -22,6 +22,8 @@ class VisualMatrixContracts(unittest.TestCase):
         self.assertIn('setContextProperty("qaSmokeMode"', main)
         self.assertIn("!qaSmokeMode", shell)
         self.assertIn("not args.smoke_test", main)
+        self.assertIn("QFontDatabase.addApplicationFont", main)
+        self.assertIn('os.environ.get("QT_QPA_PLATFORM") == "offscreen"', main)
 
     def test_ci_captures_all_v2_viewport_scale_language_combinations(self):
         workflow = (ROOT.parent / ".github" / "workflows" / "qt-migration.yml").read_text(encoding="utf-8")

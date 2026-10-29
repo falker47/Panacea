@@ -212,13 +212,27 @@ class MaintenanceBridge(QObject):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Panacea Qt UI migration QA")
-    parser.add_argument("--smoke-test", action="store_true")
-    parser.add_argument("--smoke-backend-imports", action="store_true",
-                        help="Verify bundled maintenance modules without launching Windows actions")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--smoke-test", action="store_true")
+    modes.add_argument("--smoke-backend-imports", action="store_true",
+                       help="Verify bundled maintenance modules without launching Windows actions")
+    modes.add_argument("--panacea-update-helper", metavar="WORKSPACE",
+                       help="Protected updater helper; never called by a user action")
+    modes.add_argument("--panacea-update-ready", metavar="TOKEN",
+                       help="Acknowledge verified startup after protected replacement")
     parser.add_argument("--capture", type=Path, help="Save a QA screenshot with --smoke-test")
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
+    if args.panacea_update_helper:
+        from modules.update_install import run_update_helper
+        return run_update_helper(args.panacea_update_helper)
+    if args.panacea_update_ready and (
+        not getattr(sys, "frozen", False) or Path(sys.executable).name != "Panacea.exe"
+    ):
+        # Never acknowledge replacement of a QA executable or a Python interpreter.
+        print("Updater readiness requires a protected, packaged Panacea.exe", file=sys.stderr)
+        return 4
     if args.smoke_backend_imports:
         # Import only; never instantiate a manager or start a Windows process.
         from importlib import import_module
@@ -287,6 +301,18 @@ def main(argv=None):
             QTimer.singleShot(550, capture)
         QTimer.singleShot(1200, app.quit)
     else:
+        if args.panacea_update_ready:
+            def acknowledge_update():
+                from modules.update_install import acknowledge_ready
+                try:
+                    ready = acknowledge_ready(sys.executable, args.panacea_update_ready)
+                except Exception as exc:
+                    print(f"Protected updater acknowledgment failed: {exc}", file=sys.stderr)
+                    ready = False
+                if not ready:
+                    app.exit(4)
+            # Only acknowledge after QML has loaded and the Qt event loop started.
+            QTimer.singleShot(250, acknowledge_update)
         QTimer.singleShot(0, metrics.start)
     return app.exec()
 

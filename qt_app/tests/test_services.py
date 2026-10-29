@@ -110,6 +110,8 @@ class ReadServiceTests(unittest.TestCase):
         self.assertEqual(result["states"]["power"], False)
         self.assertEqual(result["states"]["visual"], False)
         self.assertEqual(result["master"], False)
+        self.assertFalse(result["restore_available"])
+        self.assertIsNone(result["saved_count"])
 
     def test_guard_reports_the_actual_blocking_reason(self):
         result = self.service.collect("guard_status")

@@ -60,6 +60,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $env:QT_QPA_PLATFORM = "offscreen"  # render whole scene, not the hosted desktop crop
           foreach ($size in @(@{ w=1366; h=768 }, @{ w=1920; h=1080 })) {
             foreach ($scale in @("1", "1.25", "1.5")) {
               $env:QT_SCALE_FACTOR = $scale
@@ -82,6 +83,7 @@ jobs:
           }
           python qt_app/visual_review.py --captures build/qt-app --baseline docs/validation/screenshots --out build/qt-app
           if ($LASTEXITCODE -ne 0) { throw "V2 visual comparison report failed" }
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
 
       - name: Package independent candidate, not stable release
         shell: pwsh

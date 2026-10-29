@@ -43,6 +43,10 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
                     resized = newer.resize(older.size, Image.Resampling.BILINEAR)
                     deviation = ImageStat.Stat(ImageChops.difference(older, resized)).mean
                     mean_absolute_error = round(sum(deviation) / 3, 3)
+                    close_to_requested = (
+                        abs(newer.width - width) <= 4
+                        and abs(newer.height - height) <= 4
+                    )
                     records.append({
                         "viewport": [width, height],
                         "scale_percent": scale,
@@ -50,6 +54,7 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
                         "qt_image": str(candidate),
                         "stable_image": str(original),
                         "qt_size": list(newer.size),
+                        "qt_image_matches_requested_resolution": close_to_requested,
                         "stable_size": list(older.size),
                         "qt_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
                         "stable_sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
@@ -90,13 +95,18 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
             "five Qt groups show paired subviews vs V2 captures focused on an individual subview",
             "stable captures use V2 fixture data; Qt safe smoke does not simulate maintenance",
             "color difference is not a functional or accessibility certification",
+            "QT_SCALE_FACTOR simulates Qt scaling; this is not a physical Windows display DPI test",
         ],
         "comparisons": records,
     }
     (target / "visual-parity-matrix.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    return {"screenshots_compared": len(records), "contact_sheet": str(target / "visual-parity-contact-sheet.jpg")}
+    return {
+        "screenshots_compared": len(records),
+        "matching_resolution": sum(r["qt_image_matches_requested_resolution"] for r in records),
+        "contact_sheet": str(target / "visual-parity-contact-sheet.jpg"),
+    }
 
 
 def main() -> int:

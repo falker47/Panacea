@@ -8,9 +8,10 @@ Item {
     id: view
     objectName: "parityPage_" + groupIndex
     property int groupIndex: 0
+    property int subIndex: 0
     property string language: "it"
     property string selectedDrive: ""
-    property bool showIndividualCleaning: false
+    property bool showIndividualCleaning: true
     property bool logExpanded: false
     readonly property bool occupied: maintenanceService.busy || readService.busy || updateService.busy
     readonly property var snapshots: readService.results
@@ -412,12 +413,26 @@ Item {
             spacing: 12
             Text { text: view.t("Spazio e pulizia", "Space & Cleanup"); color: "#f1f3f8"; font.pixelSize: 23; font.bold: true }
             Rectangle { width: parent.width; height: 1; color: "#2e415c" }
+            Row {
+                spacing: 8
+                PButton {
+                    caption: view.t("Pulizia", "Cleaning")
+                    primary: view.subIndex === 0
+                    onPressed: view.subIndex = 0
+                }
+                PButton {
+                    caption: view.t("Applicazioni", "Apps")
+                    primary: view.subIndex === 1
+                    onPressed: view.subIndex = 1
+                }
+            }
             Flow {
                 id: pair
                 width: parent.width
                 spacing: 12
                 Column {
-                    width: pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 0
+                    width: pair.width
                     spacing: 8
                     Text { text: view.t("Pulizia", "Cleanup"); color: "#f1f3f8"; font.bold: true; font.pixelSize: 19 }
                     Text {
@@ -460,7 +475,8 @@ Item {
                     }
                 }
                 Column {
-                    width: pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 1
+                    width: pair.width
                     spacing: 8
                     Text { text: view.t("Applicazioni installate","Installed apps"); font.pixelSize: 19; font.bold: true; color: "#f1f3f8" }
                     Text {
@@ -482,11 +498,25 @@ Item {
             spacing: 12
             Text { text: view.t("Diagnostica e riparazione", "Diagnostics & Repair"); color: "#f1f3f8"; font.pixelSize: 23; font.bold: true }
             Rectangle { width: parent.width; height: 1; color: "#2e415c" }
+            Row {
+                spacing: 8
+                PButton {
+                    caption: view.t("Strumenti", "Tools")
+                    primary: view.subIndex === 0
+                    onPressed: view.subIndex = 0
+                }
+                PButton {
+                    caption: view.t("Disco", "Disk")
+                    primary: view.subIndex === 1
+                    onPressed: view.subIndex = 1
+                }
+            }
             Flow {
                 id: pair
                 width: parent.width; spacing: 12
                 Column {
-                    width: pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 0
+                    width: pair.width
                     spacing: 7
                     Text { text: view.t("Strumenti di riparazione","Repair tools"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
                     Text { text: view.t("INTEGRITÀ WINDOWS","WINDOWS INTEGRITY"); color:"#e4c579"; font.pixelSize:10; font.bold:true }
@@ -500,7 +530,8 @@ Item {
                     PRow { heading:view.t("Rapporto batteria","Battery report"); hint:view.t("Esporta rapporto HTML","Save an HTML report"); action:"battery_report"; buttonText:view.t("Crea","Create"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                 }
                 Column {
-                    width: pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 1
+                    width: pair.width
                     spacing: 8
                     Text { text: view.t("Ottimizzazione dischi","Drive optimization"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
                     Text {
@@ -536,8 +567,49 @@ Item {
                             }
                         }
                     }
-                    PRow { heading:view.t("Ottimizza unità","Optimize drive"); hint:view.t("TRIM / defrag secondo Windows","Windows TRIM / defrag"); action:"drive_optimize"; drive:view.selectedDrive; buttonText:view.t("Ottimizza","Optimize"); interactive:!view.occupied && view.selectedDrive.length > 0; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Integrità volume","Disk health scan"); hint:"CHKDSK /scan /perf"; action:"chkdsk"; drive:view.selectedDrive; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied && view.selectedDrive.length > 0; onInvoke:view.request(action,drive) }
+                    Repeater {
+                        model: view.drives.drives || []
+                        Rectangle {
+                            width: parent.width
+                            height: 86
+                            radius: 7
+                            color: "#142138"
+                            border.color: "#2e415c"
+                            Column {
+                                anchors.fill: parent
+                                anchors.margins: 11
+                                spacing: 7
+                                RowLayout {
+                                    width: parent.width
+                                    Text { text: modelData.letter; color: "#f1f3f8"; font.pixelSize: 13; font.bold: true }
+                                    Text {
+                                        text: modelData.available ?
+                                              view.formatBytes(modelData.free_bytes) + " / " + view.formatBytes(modelData.total_bytes) :
+                                              view.t("Unità non disponibile", "Drive unavailable")
+                                        color: "#9eafc8"
+                                        font.pixelSize: 11
+                                        Layout.fillWidth: true
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+                                PProgress {
+                                    width: parent.width
+                                    fraction: typeof modelData.used_percent === "number" ? modelData.used_percent / 100 : 0
+                                }
+                                Text {
+                                    width: parent.width
+                                    color: modelData.available ? "#9eafc8" : "#e4b66d"
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    text: modelData.available ?
+                                          view.t("Spazio utilizzato: ", "Used space: ") + modelData.used_percent + "%" :
+                                          (modelData.error || view.t("Informazioni non disponibili", "Unavailable"))
+                                }
+                            }
+                        }
+                    }
+                    PRow { heading:view.t("Ottimizza unità","Optimize drive"); hint:view.t("TRIM / defrag secondo Windows","Windows TRIM / defrag"); action:"drive_optimize"; drive:view.selectedDrive; buttonText:view.t("Ottimizza","Optimize"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
+                    PRow { heading:view.t("Integrità volume","Disk health scan"); hint:"CHKDSK /scan /perf"; action:"chkdsk"; drive:view.selectedDrive; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
                     PRow { heading:view.t("Ottimizzazione Windows","Windows drive optimizer"); hint:view.t("Interfaccia nativa Windows","Native Windows utility"); action:"open_defrag"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
@@ -552,11 +624,25 @@ Item {
             width: parent.width; spacing: 12
             Text { text: view.t("Prestazioni e avvio","Performance & Startup"); color:"#f1f3f8"; font.pixelSize:23; font.bold:true }
             Rectangle { width:parent.width; height:1; color:"#2e415c" }
+            Row {
+                spacing: 8
+                PButton {
+                    caption: view.t("Turbo", "Turbo")
+                    primary: view.subIndex === 0
+                    onPressed: view.subIndex = 0
+                }
+                PButton {
+                    caption: view.t("Avvio", "Startup")
+                    primary: view.subIndex === 1
+                    onPressed: view.subIndex = 1
+                }
+            }
             Flow {
                 id: pair
                 width: parent.width; spacing:12
                 Column {
-                    width:pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 0
+                    width: pair.width
                     spacing:8
                     Text { text:view.t("Impostazioni Turbo","Performance settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
                     Rectangle {
@@ -575,12 +661,17 @@ Item {
                                 }
                             }
                             Text {
-                                text:view.t("Gli stati originali sono conservati dal backend per il ripristino.",
-                                            "Original settings are saved by the backend for restoration.")
+                                text: typeof view.turbo.saved_count === "number" ?
+                                      (view.turbo.saved_count > 0 ?
+                                       view.t(view.turbo.saved_count + " impostazioni originali disponibili.",
+                                              view.turbo.saved_count + " saved original settings available.") :
+                                       view.t("Nessun originale da ripristinare.", "No originals available to restore.")) :
+                                      view.t("Verifica lo stato degli originali salvati.",
+                                             "Check the saved-originals state.")
                                 width:parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                             }
                             Row { spacing:8
-                                PButton { caption:view.t("Ripristina salvati","Restore originals"); interactive:!view.occupied; onPressed:view.request("turbo_off") }
+                                PButton { caption:view.t("Ripristina salvati","Restore originals"); interactive:!view.occupied && view.turbo.restore_available === true; onPressed:view.request("turbo_off") }
                                 PButton { caption:view.t("Aggiorna stato","Refresh state"); interactive:!view.occupied; onPressed:view.showRead("turbo_status") }
                             }
                         }
@@ -619,7 +710,8 @@ Item {
                     }
                 }
                 Column {
-                    width:pair.width >= 665 ? (pair.width - 12) / 2 : pair.width
+                    visible: view.subIndex === 1
+                    width: pair.width
                     spacing:9
                     Text { text:view.t("Applicazioni all'avvio","Startup apps"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
                     Text {

@@ -236,12 +236,35 @@ Window {
                         anchors.rightMargin: 23
                         spacing: 10
                         Text {
-                            text: shell.tabs[shell.currentTab].detail
+                            text: "Panacea 2.0.2 · Qt QA"
                             font.family: "Segoe UI Semibold"
                             font.pixelSize: 16
                             font.bold: true
                             color: "#f1f3f8"
                             Layout.fillWidth: true
+                        }
+                        Rectangle {
+                            width: 116; height: 28; radius: 6
+                            color: updateService.busy ? "#334158" : "#1b2b44"
+                            border.color: "#2e415c"
+                            activeFocusOnTab: !updateService.busy
+                            Accessible.role: Accessible.Button
+                            Accessible.name: shell.label("Controlla aggiornamenti", "Check updates")
+                            function activate() { if (!updateService.busy) updateService.check() }
+                            Keys.onReturnPressed: activate()
+                            Keys.onSpacePressed: activate()
+                            Text {
+                                anchors.centerIn: parent
+                                text: shell.label("Aggiornamenti", "Check updates")
+                                font.pixelSize: 11
+                                color: "#f1f3f8"
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !updateService.busy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: parent.activate()
+                            }
                         }
                         Rectangle {
                             width: 51; height: 28; radius: 6; color: "#263a56"

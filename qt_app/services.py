@@ -101,6 +101,10 @@ class ReadService:
         if action == "turbo_status":
             manager = self._manager("performance")
             try:
+                originals = manager.get_saved_settings()
+            except Exception:
+                originals = None
+            try:
                 power = manager.get_power_plan()
                 power = None if power is None else power == "high"
             except Exception:
@@ -114,6 +118,8 @@ class ReadService:
                     "spooler": _read_state(manager.get_spooler_status, invert=True),
                 },
                 "master": _read_state(manager.is_turbo_active),
+                "saved_count": len(originals) if originals is not None else None,
+                "restore_available": bool(originals) if originals is not None else False,
             }
         if action == "guard_status":
             guard = self._manager("guard")

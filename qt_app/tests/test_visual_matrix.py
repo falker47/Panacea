@@ -29,6 +29,7 @@ class VisualMatrixContracts(unittest.TestCase):
         self.assertIn('w=1366; h=768', workflow)
         self.assertIn('w=1920; h=1080', workflow)
         self.assertIn('"1", "1.25", "1.5"', workflow)
+        self.assertIn('QT_QPA_PLATFORM = "offscreen"', workflow)
         self.assertIn("foreach ($tab in @(0,1,2,3,4))", workflow)
         self.assertIn("--smoke-language it", workflow)
         self.assertIn("--smoke-language en", workflow)

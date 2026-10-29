@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from modules.ui_dispatch import UiDispatcher, WorkerController
-from qt_app.services import READ_ACTIONS, ReadService
-from qt_lab.main import MetricsBridge
+from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
+from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
+from qt_lab.main import MetricsBridge  # noqa: E402
 
 
 class ReadBridge(QObject):
@@ -75,7 +75,10 @@ class ReadBridge(QObject):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Panacea Qt UI migration QA")
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--capture", type=Path, help="Save a QA screenshot with --smoke-test")
     args = parser.parse_args(argv)
+    if args.capture and not args.smoke_test:
+        parser.error("--capture requires --smoke-test")
     app = QGuiApplication([sys.argv[0]])
     metrics = MetricsBridge()
     reader = ReadBridge()
@@ -84,12 +87,22 @@ def main(argv=None):
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("liveMetrics", metrics)
     engine.rootContext().setContextProperty("readService", reader)
-    engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name("Main.qml"))))
+    source = ((Path(getattr(sys, "_MEIPASS")) / "qt_app" / "Main.qml")
+              if getattr(sys, "frozen", False)
+              else Path(__file__).with_name("Main.qml"))
+    engine.load(QUrl.fromLocalFile(str(source)))
     if not engine.rootObjects():
         reader.stop()
         metrics.stop()
         return 2
     if args.smoke_test:
+        if args.capture:
+            def capture():
+                args.capture.parent.mkdir(parents=True, exist_ok=True)
+                img = engine.rootObjects()[0].grabWindow()
+                if img.isNull() or not img.save(str(args.capture)):
+                    app.exit(3)
+            QTimer.singleShot(550, capture)
         QTimer.singleShot(1200, app.quit)
     else:
         QTimer.singleShot(0, metrics.start)

@@ -665,4 +665,64 @@ Window {
             }
         }
     }
+
+    Rectangle {
+        anchors.fill: parent
+        visible: updateService.pending
+        color: "#cc07101d"
+        z: 110
+        MouseArea { anchors.fill: parent }
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 48, 540)
+            height: 250
+            radius: 12
+            color: "#1b2b44"
+            border.color: "#e4c579"
+            Column {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 17
+                Text {
+                    text: shell.label("Installa aggiornamento verificato","Install verified update")
+                    color: "#e4c579"; font.bold: true; font.pixelSize: 19
+                }
+                Text {
+                    width: parent.width
+                    text: shell.label("Scaricare, verificare SHA-256 e installare Panacea ", "Download, verify SHA-256 and install Panacea ")
+                          + updateService.availableVersion
+                          + shell.label("? Il programma attuale rimarrà disponibile fino alla conferma del nuovo avvio.",
+                                        "? The current program remains available until new startup is confirmed.")
+                    color: "#f1f3f8"
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 13
+                }
+                Row {
+                    spacing: 14
+                    Rectangle {
+                        width: 145; height: 38; color: "#46556b"; radius: 6
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: shell.label("Annulla aggiornamento","Cancel update")
+                        function activate() { updateService.reject() }
+                        Text { anchors.centerIn: parent; text: shell.label("Annulla","Cancel"); color: "white" }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
+                        Keys.onReturnPressed: activate()
+                        Keys.onSpacePressed: activate()
+                    }
+                    Rectangle {
+                        width: 210; height: 38; color: "#8e5e3f"; radius: 6
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: shell.label("Conferma aggiornamento","Confirm update")
+                        function activate() { updateService.confirmInstall() }
+                        Text { anchors.centerIn: parent; text: shell.label("Conferma installazione","Confirm installation"); color: "white" }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
+                        Keys.onReturnPressed: activate()
+                        Keys.onSpacePressed: activate()
+                    }
+                }
+            }
+        }
+    }
 }

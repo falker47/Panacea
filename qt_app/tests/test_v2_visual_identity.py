@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 from PySide6.QtCore import QSize
-from modules.ui_icons import make_icon
+from modules.ui_icons import make_icon, make_windows_icon
 from qt_app.icon_provider import NavigationIconProvider
 
 
@@ -28,6 +28,31 @@ class V2VisualIdentityTests(unittest.TestCase):
                     color = actual.pixelColor(x, y)
                     self.assertEqual((color.red(), color.green(), color.blue(), color.alpha()),
                                      expected.getpixel((x, y)), (name, x, y))
+
+    def test_dashboard_icons_and_disk_progress_match_v2(self):
+        page = (ROOT / "qt_app" / "ParityPage.qml").read_text(encoding="utf-8")
+        provider = NavigationIconProvider()
+        for key in ("cpu", "memory", "scan", "updates", "drive", "restore"):
+            tint = "#e4c579" if key in ("drive", "restore") else "#76b6e2"
+            expected = make_icon(key, tint, 96)
+            actual = provider.requestImage(key + "/detail", QSize(), QSize(96, 96))
+            self.assertFalse(actual.isNull(), key)
+            for x, y in ((10, 10), (24, 40), (48, 48), (70, 70), (88, 88)):
+                c = actual.pixelColor(x, y)
+                self.assertEqual((c.red(), c.green(), c.blue(), c.alpha()),
+                                 expected.getpixel((x, y)), (key, x, y))
+        win = provider.requestImage("windows/detail", QSize(), QSize(96, 96))
+        self.assertFalse(win.isNull())
+        self.assertEqual((win.pixelColor(15, 15).red(),
+                          win.pixelColor(15, 15).green(),
+                          win.pixelColor(15, 15).blue(),
+                          win.pixelColor(15, 15).alpha()),
+                         make_windows_icon(size=96).getpixel((15, 15)))
+        self.assertIn('modelData.icon + "/detail"', page)
+        self.assertIn('visible: modelData.id === "disk"', page)
+        self.assertIn('source: "image://panacea-nav/scan/detail"', page)
+        self.assertIn('source: "image://panacea-nav/restore/detail"', page)
+        self.assertTrue(provider.requestImage("../secrets/detail", QSize(), QSize()).isNull())
 
     def test_all_original_paired_subviews_are_always_present(self):
         page = (ROOT / "qt_app" / "ParityPage.qml").read_text(encoding="utf-8")

@@ -353,10 +353,26 @@ Item {
                     height: 128; radius: 8; color: "#142138"; border.color: "#2e415c"
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
-                        Text {
-                            text: view.hardware.os || view.t("Caricamento dettagli Windows…", "Loading Windows details…")
+                        Row {
                             width: parent.width
-                            font.pixelSize: 17; font.bold: true; color: "#f1f3f8"; elide: Text.ElideRight
+                            spacing: 9
+                            Image {
+                                source: "image://panacea-nav/windows/detail"
+                                sourceSize.width: 96
+                                sourceSize.height: 96
+                                width: 39; height: 39
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                Accessible.role: Accessible.Graphic
+                                Accessible.name: "Windows"
+                            }
+                            Text {
+                                text: view.hardware.os || view.t("Caricamento dettagli Windows…", "Loading Windows details…")
+                                width: parent.width - 48
+                                font.pixelSize: 17; font.bold: true; color: "#f1f3f8"
+                                elide: Text.ElideRight
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
                         Text {
                             text: view.hardware.cpu_name || view.t("Dati hardware non ancora letti", "Hardware data not yet read")
@@ -374,7 +390,22 @@ Item {
                     height: 128; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
-                        Text { text: "Windows Update"; color: "#f1f3f8"; font.bold: true; font.pixelSize: 16 }
+                        Row {
+                            spacing: 8
+                            Image {
+                                source: "image://panacea-nav/updates/detail"
+                                sourceSize.width: 96
+                                sourceSize.height: 96
+                                width: 46; height: 46
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
+                            Text {
+                                text: "Windows Update"
+                                color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
                         Text {
                             text: view.t("Aggiornamenti gestiti da Windows", "Updates are managed by Windows")
                             color: "#9eafc8"; font.pixelSize: 12
@@ -393,9 +424,9 @@ Item {
                 spacing: 10
                 Repeater {
                     model: [
-                        { id: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
-                        { id: "ram", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.hardware.ram_info || "—" },
-                        { id: "disk", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: "#e4c579", detail: view.hardware.disk_model || "—" }
+                        { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
+                        { id: "ram", icon: "memory", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.hardware.ram_info || "—" },
+                        { id: "disk", icon: "drive", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: "#e4c579", detail: view.hardware.disk_model || "—" }
                     ]
                     Rectangle {
                         width: metricFlow.width >= 660 ? (metricFlow.width - 20) / 3 :
@@ -404,12 +435,36 @@ Item {
                         radius: 8; color: "#142138"; border.color: "#2e415c"
                         Column {
                             anchors.fill: parent; anchors.margins: 13; spacing: 8
-                            Text { text: modelData.title; color: "#f1f3f8"; font.bold: true; font.pixelSize: 13 }
+                            Row {
+                                spacing: 6
+                                Image {
+                                    source: "image://panacea-nav/" + modelData.icon + "/detail"
+                                    sourceSize.width: 96
+                                    sourceSize.height: 96
+                                    width: 22; height: 22
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                }
+                                Text {
+                                    text: modelData.title
+                                    color: "#f1f3f8"; font.bold: true; font.pixelSize: 13
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
                             Text { text: modelData.value; color: "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
                             PMiniGraph {
+                                visible: modelData.id !== "disk"
                                 width: parent.width
+                                height: visible ? 45 : 0
                                 points: modelData.series
                                 lineColor: modelData.accent
+                            }
+                            PProgress {
+                                visible: modelData.id === "disk"
+                                width: parent.width
+                                height: visible ? 12 : 0
+                                fraction: modelData.id === "disk" ?
+                                          Math.max(0, Math.min(1, (parseFloat(modelData.value) || 0) / 100)) : 0
                             }
                             Text {
                                 text: modelData.detail
@@ -429,6 +484,15 @@ Item {
                     height: 102; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 13
+                        Image {
+                            source: "image://panacea-nav/scan/detail"
+                            sourceSize.width: 96
+                            sourceSize.height: 96
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 40
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
                         ColumnLayout {
                             Layout.fillWidth: true
                             Text { text: view.t("File temporanei","Temporary files"); color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
@@ -447,6 +511,15 @@ Item {
                     height: 102; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 13
+                        Image {
+                            source: "image://panacea-nav/restore/detail"
+                            sourceSize.width: 96
+                            sourceSize.height: 96
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 40
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
                         ColumnLayout {
                             Layout.fillWidth: true
                             Text { text: view.t("Punto di ripristino","Restore point"); color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }

@@ -90,6 +90,15 @@ Window {
         }
     ]
 
+
+    readonly property var maintenanceActions: [
+        [],
+        [{title:"Pulisci temporanei",action:"temp_clean"},{title:"Cache browser",action:"browser_clean"},{title:"Svuota cestino",action:"recycle_empty"},{title:"Pulizia rapida",action:"quick_cleanup"},{title:"Pulizia Windows",action:"open_cleanmgr"}],
+        [{title:"SFC",action:"sfc"},{title:"DISM verifica",action:"dism_check"},{title:"DISM ripara",action:"dism_restore"},{title:"Flush DNS",action:"dns_flush"},{title:"Reset Winsock",action:"winsock_reset"},{title:"Punto ripristino",action:"restore_point"},{title:"Rapporto batteria",action:"battery_report"},{title:"Gestione app",action:"appwiz"},{title:"Windows Update",action:"windows_update"},{title:"Ottimizza dischi",action:"open_defrag"}],
+        [{title:"Turbo ON",action:"turbo_on"},{title:"Turbo OFF",action:"turbo_off"},{title:"Piano ON",action:"power_on"},{title:"Piano OFF",action:"power_off"},{title:"Effetti ON",action:"visual_on"},{title:"Effetti OFF",action:"visual_off"},{title:"SysMain ON",action:"sysmain_on"},{title:"SysMain OFF",action:"sysmain_off"},{title:"Search ON",action:"wsearch_on"},{title:"Search OFF",action:"wsearch_off"},{title:"Spooler ON",action:"spooler_on"},{title:"Spooler OFF",action:"spooler_off"},{title:"App avvio",action:"startup_settings"}],
+        [{title:"Avvia Resurrection",action:"resurrection"}]
+    ]
+
     onCurrentTabChanged: {
         if (!visited[currentTab]) {
             var flags = visited.slice()
@@ -357,6 +366,68 @@ Window {
                                             }
                                         }
 
+
+                                        Rectangle {
+                                            width: parent.width - 48
+                                            x: 24
+                                            height: actionColumn.implicitHeight + 28
+                                            radius: 10
+                                            color: "#1b2b44"
+                                            border.color: "#2e415c"
+                                            Column {
+                                                id: actionColumn
+                                                x: 14
+                                                y: 14
+                                                width: parent.width - 28
+                                                spacing: 8
+                                                Text {
+                                                    text: "Manutenzione (richiede conferma e privilegi Windows)"
+                                                    color: "#e4c579"
+                                                    font.bold: true
+                                                    font.pixelSize: 13
+                                                }
+                                                Flow {
+                                                    width: parent.width
+                                                    spacing: 8
+                                                    Repeater {
+                                                        model: shell.maintenanceActions[pageLoader.pageIndex]
+                                                        Rectangle {
+                                                            width: 166
+                                                            height: 34
+                                                            radius: 6
+                                                            color: maintenanceService.busy ? "#334158" : "#314b69"
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: modelData.title
+                                                                font.pixelSize: 11
+                                                                color: "#f1f3f8"
+                                                            }
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                enabled: !maintenanceService.busy
+                                                                onClicked: maintenanceService.prepare(modelData.action, modelData.drive || "")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Text {
+                                                    width: parent.width
+                                                    text: maintenanceService.output
+                                                    color: "#b7c9db"
+                                                    font.pixelSize: 11
+                                                    wrapMode: Text.WrapAnywhere
+                                                }
+                                                Rectangle {
+                                                    visible: maintenanceService.busy
+                                                    width: 160
+                                                    height: visible ? 32 : 0
+                                                    color: "#6b4b39"
+                                                    Text { anchors.centerIn: parent; text: "Richiedi annullamento"; color: "white"; font.pixelSize: 11 }
+                                                    MouseArea { anchors.fill: parent; onClicked: maintenanceService.cancel() }
+                                                }
+                                            }
+                                        }
+
                                         Flow {
                                             id: cardsFlow
                                             width: parent.width - 48
@@ -460,6 +531,48 @@ Window {
                         color: "#91a5be"
                         font.family: "Segoe UI"
                         font.pixelSize: 10
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        visible: maintenanceService.awaitingConfirmation
+        color: "#cc07101d"
+        z: 100
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 48, 540)
+            height: 300
+            radius: 12
+            color: "#1b2b44"
+            border.color: "#e4c579"
+            Column {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 20
+                Text { text: "Conferma operazione Windows"; color: "#e4c579"; font.bold: true; font.pixelSize: 19 }
+                Text {
+                    width: parent.width
+                    height: 170
+                    text: maintenanceService.details
+                    color: "#f1f3f8"
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 13
+                }
+                Row {
+                    spacing: 14
+                    Rectangle {
+                        width: 145; height: 38; color: "#46556b"; radius: 6
+                        Text { anchors.centerIn: parent; text: "Annulla"; color: "white" }
+                        MouseArea { anchors.fill: parent; onClicked: maintenanceService.reject() }
+                    }
+                    Rectangle {
+                        width: 190; height: 38; color: "#8e5e3f"; radius: 6
+                        Text { anchors.centerIn: parent; text: "Confermo l'operazione"; color: "white" }
+                        MouseArea { anchors.fill: parent; onClicked: maintenanceService.confirm() }
                     }
                 }
             }

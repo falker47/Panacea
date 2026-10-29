@@ -40,6 +40,9 @@ class ReadBridge(QObject):
         self._maintenance = None
         self._updater = None
         self._drives = []
+        self._results = {}
+        self._state = "idle"
+        self._last_action = ""
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
@@ -57,6 +60,18 @@ class ReadBridge(QObject):
     def driveLetters(self):
         return self._drives
 
+    @Property('QVariantMap', notify=changed)
+    def results(self):
+        return self._results
+
+    @Property(str, notify=changed)
+    def state(self):
+        return self._state
+
+    @Property(str, notify=changed)
+    def lastAction(self):
+        return self._last_action
+
     @Slot(str)
     def request(self, action):
         if (self._closed or action not in READ_ACTIONS or self._busy
@@ -64,14 +79,19 @@ class ReadBridge(QObject):
                 or (self._updater is not None and self._updater.busy)):
             return
         self._busy = True
+        self._state = "running"
+        self._last_action = action
         self._last = "Verifica in corso, nessuna operazione di manutenzione."
         self.changed.emit()
         def successful(value):
+            self._results = {**self._results, action: value}
+            self._state = "completed"
             self._last = json.dumps(value, ensure_ascii=False, indent=2)
             if action == 'drives':
                 self._drives = [row['letter'] for row in value.get('drives', []) if row.get('available') is True]
             self.changed.emit()
         def failed(exc):
+            self._state = "error"
             self._last = "Dati non disponibili: " + str(exc)
             self.changed.emit()
         def done():
@@ -110,6 +130,12 @@ class MaintenanceBridge(QObject):
         self._reader = None
         self._updater = None
         self._language = 'it'
+        self._prepared_action = ""
+        self._last_action = ""
+        self._result_status = ""
+        self._progress_done = 0
+        self._progress_total = 0
+        self._steps = []
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
@@ -124,6 +150,26 @@ class MaintenanceBridge(QObject):
         if language in ('it', 'en'):
             self._language = language
             self.changed.emit()
+
+    @Property(str, notify=changed)
+    def lastAction(self):
+        return self._last_action
+
+    @Property(str, notify=changed)
+    def resultStatus(self):
+        return self._result_status
+
+    @Property(int, notify=changed)
+    def progressDone(self):
+        return self._progress_done
+
+    @Property(int, notify=changed)
+    def progressTotal(self):
+        return self._progress_total
+
+    @Property('QVariantList', notify=changed)
+    def steps(self):
+        return self._steps
 
     @Property(str, notify=changed)
     def details(self):
@@ -150,6 +196,7 @@ class MaintenanceBridge(QObject):
         try:
             data = self._service.prepare(action, drive)
             self._pending = data["nonce"]
+            self._prepared_action = action
             title, warning = confirmation_text(action, data, self._language)
             self._details = title + "\n" + warning
         except (ValueError, RuntimeError) as exc:
@@ -160,6 +207,7 @@ class MaintenanceBridge(QObject):
     def reject(self):
         self._service.reject()
         self._pending = ""
+        self._prepared_action = ""
         self._details = ""
         self.changed.emit()
 
@@ -170,9 +218,15 @@ class MaintenanceBridge(QObject):
                 or (self._updater is not None and self._updater.busy)):
             return
         nonce = self._pending
+        self._last_action = self._prepared_action
+        self._prepared_action = ""
         self._pending = ""
         self._details = ""
         self._busy = True
+        self._result_status = "running"
+        self._progress_done = 0
+        self._progress_total = 10 if self._last_action == "resurrection" else (3 if self._last_action == "quick_cleanup" else 0)
+        self._steps = []
         self._output = "Manutenzione in corso. Non chiudere il programma."
         self.changed.emit()
 
@@ -180,12 +234,22 @@ class MaintenanceBridge(QObject):
             self._dispatcher.post(lambda: self._append(str(message)))
 
         def progress(done, total, label):
-            log(f"{done}/{total}: {label}")
+            def apply():
+                self._progress_done = done
+                self._progress_total = total
+                self._append(f"{done}/{total}: {label}")
+            self._dispatcher.post(apply)
 
         def success(result):
-            self._append(result.get("status", "unknown") + ": " + result.get("message", ""))
+            self._result_status = result.get("status", "unknown")
+            self._steps = list(result.get("steps") or [])
+            if self._steps:
+                self._progress_done = len(self._steps)
+                self._progress_total = result.get("total", self._progress_total)
+            self._append(self._result_status + ": " + result.get("message", ""))
 
         def failure(exc):
+            self._result_status = "failed"
             self._append("Errore o completamento da verificare: " + str(exc))
 
         def done():
@@ -295,6 +359,9 @@ def main(argv=None):
         maintenance.stop()
         metrics.stop()
         return 2
+    if not args.smoke_test:
+        # The original V2 loads metadata without a manual "read" click.
+        QTimer.singleShot(0, lambda: reader.request("hardware"))
     if args.smoke_test:
         if args.capture:
             def capture():

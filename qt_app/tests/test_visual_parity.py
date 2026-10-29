@@ -52,9 +52,10 @@ class QtVisualParityContracts(unittest.TestCase):
         self.assertIn("PToggle {", page)
         self.assertIn("id: stepGrid", page)
         self.assertIn("showIndividualCleaning", page)
-        self.assertIn("property int subIndex: 0", page)
-        self.assertIn("visible: view.subIndex === 0", page)
-        self.assertIn("visible: view.subIndex === 1", page)
+        # V2 keeps both subviews visible and reflows to two panels at wide sizes.
+        self.assertIn("function pairedPanelWidth(total, minimum)", page)
+        self.assertIn("PPanel {", page)
+        self.assertNotIn("visible: view.subIndex ===", page)
         self.assertIn("restore_available === true", page)
         self.assertIn("driveLetters.indexOf(view.selectedDrive)", page)
         self.assertIn("logExpanded", page)

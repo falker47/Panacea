@@ -170,9 +170,17 @@ def main(argv=None):
         if args.capture:
             args.capture.parent.mkdir(parents=True, exist_ok=True)
             print('qt-lab: capturing window', flush=True)
-            screenshot = window.grabWindow()
-            if screenshot.isNull() or not screenshot.save(str(args.capture)):
-                _write_report(args.report, {"error": "Qt Quick screenshot unavailable", "navigation": samples})
+            try:
+                # QQmlApplicationEngine may wrap a QQuickWindow as QWindow.
+                # QScreen.grabWindow accepts its native WId without downcasting.
+                screen = window.screen()
+                if screen is None:
+                    raise RuntimeError("Qt Lab window is not attached to a screen")
+                screenshot = screen.grabWindow(int(window.winId()))
+                if screenshot.isNull() or not screenshot.save(str(args.capture)):
+                    raise RuntimeError("Qt Quick screenshot unavailable")
+            except Exception as exc:
+                _write_report(args.report, {"error": str(exc), "navigation": samples})
                 app.exit(1)
                 return
         buckets = {

@@ -92,7 +92,7 @@ jobs:
           $zipBytes = (Get-Item "build/qt-app/PanaceaQtCandidate-Windows.zip").Length
           $sha = (Get-FileHash "build/qt-app/PanaceaQtCandidate-Windows.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  PanaceaQtCandidate-Windows.zip" | Set-Content -LiteralPath "build/qt-app/PanaceaQtCandidate-Windows.zip.sha256" -Encoding utf8
-          @{ uncompressed_bytes = [long]$totalBytes; zipped_bytes = [long]$zipBytes; maintenance_enabled = $false } |
+          @{ uncompressed_bytes = [long]$totalBytes; zipped_bytes = [long]$zipBytes; maintenance_enabled = $true } |
             ConvertTo-Json | Set-Content "build/qt-app/size.json" -Encoding utf8
 
       - name: Retain QA logs/screenshots, including failures

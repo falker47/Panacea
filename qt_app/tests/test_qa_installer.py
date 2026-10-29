@@ -21,6 +21,15 @@ class QaInstallerContracts(unittest.TestCase):
         self.assertNotIn('DestName: "Panacea.exe"', candidate)
         self.assertIn("PanaceaQtCandidate.exe", candidate)
 
+    def test_silent_installer_waits_and_has_diagnostic_log(self):
+        workflow = (ROOT / ".github/workflows/qt-migration.yml").read_text(encoding="utf-8")
+        self.assertIn('"/SP-"', workflow)
+        self.assertIn('Start-Process -FilePath $setup', workflow)
+        self.assertIn(' -Wait -PassThru', workflow)
+        self.assertIn("qa-install.log", workflow)
+        self.assertIn("qa-uninstall.log", workflow)
+        self.assertIn("Inno exit code", workflow)
+
     def test_qa_installer_not_in_stable_build_pipeline(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertNotIn("PanaceaQtQA.iss", ci)

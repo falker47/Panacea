@@ -170,17 +170,29 @@ jobs:
         run: |
           $setup = (Resolve-Path "build/qt-installer/PanaceaQtQASetup.exe").Path
           $target = Join-Path $env:RUNNER_TEMP ("PanaceaQtQA-" + [guid]::NewGuid().ToString("N"))
-          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$target"
-          if ($LASTEXITCODE -ne 0) { throw "Qt QA installer failed" }
+          # GUI installers launched with & can detach before PowerShell reads LASTEXITCODE.
+          # Inno still shows the startup prompt under /VERYSILENT unless /SP- is supplied.
+          $installLog = Join-Path (Resolve-Path "build/qt-installer").Path "qa-install.log"
+          $arguments = @("/SP-", "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"$target`"", "/LOG=`"$installLog`"")
+          $process = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path -LiteralPath $installLog) { Get-Content $installLog -Tail 80 }
+            throw "Qt QA installer failed (Inno exit code $($process.ExitCode))"
+          }
           $exe = Join-Path $target "PanaceaQtCandidate.exe"
           if (-not (Test-Path -LiteralPath $exe)) { throw "Qt QA installed EXE missing" }
-          & $exe --smoke-test --capture "build/qt-installer/installed.png"
+          $capture = Join-Path (Resolve-Path "build/qt-installer").Path "installed.png"
+          python -c "import subprocess,sys; subprocess.run([sys.argv[1], '--smoke-test', '--capture', sys.argv[2]], check=True, timeout=60)" $exe $capture
           if ($LASTEXITCODE -ne 0) { throw "Installed Qt QA startup failed" }
-          if ((Get-Item "build/qt-installer/installed.png").Length -lt 1024) { throw "Installed Qt screenshot missing" }
+          if (-not (Test-Path $capture) -or (Get-Item $capture).Length -lt 1024) { throw "Installed Qt screenshot missing" }
           $uninstall = Join-Path $target "unins000.exe"
           if (-not (Test-Path -LiteralPath $uninstall)) { throw "Isolated QA uninstaller missing" }
-          & $uninstall /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          if ($LASTEXITCODE -ne 0) { throw "QA uninstaller failed" }
+          $uninstallLog = Join-Path (Resolve-Path "build/qt-installer").Path "qa-uninstall.log"
+          $removed = Start-Process -FilePath $uninstall -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`"") -Wait -PassThru
+          if ($removed.ExitCode -ne 0) {
+            if (Test-Path -LiteralPath $uninstallLog) { Get-Content $uninstallLog -Tail 80 }
+            throw "QA uninstaller failed (exit code $($removed.ExitCode))"
+          }
           if (Test-Path -LiteralPath $exe) { throw "QA uninstaller left executable behind" }
 
       - name: Save QA installer smoke screenshot, even on failures
@@ -188,7 +200,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Panacea-Qt-QA-Installer-Evidence
-          path: build/qt-installer/installed.png
+          path: |
+            build/qt-installer/installed.png
+            build/qt-installer/qa-install.log
+            build/qt-installer/qa-uninstall.log
           if-no-files-found: warn
 
       - name: Deliver side-by-side QA installer only after all checks pass

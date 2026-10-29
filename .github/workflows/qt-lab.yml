@@ -8,6 +8,10 @@ on:
     paths:
       - 'qt_lab/**'
       - '.github/workflows/qt-lab.yml'
+  pull_request:
+    paths:
+      - 'qt_lab/**'
+      - '.github/workflows/qt-lab.yml'
   workflow_dispatch:
 
 permissions:

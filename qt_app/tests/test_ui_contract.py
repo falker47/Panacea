@@ -22,7 +22,7 @@ class UiContractTests(unittest.TestCase):
 
     def test_smoke_capture_uses_supported_qscreen_api(self):
         app = (ROOT / "main.py").read_text(encoding="utf-8")
-        self.assertIn("screen().grabWindow(", app)
+        self.assertIn("screen.grabWindow(", app)
         self.assertNotIn("engine.rootObjects()[0].grabWindow()", app)
 
     def test_five_primary_destinations_survive(self):

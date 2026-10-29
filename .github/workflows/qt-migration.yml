@@ -42,8 +42,11 @@ jobs:
       - name: Check read-only API contract and syntax
         run: |
           python -m unittest discover -s qt_app/tests -p "test_*.py" -v
+          if ($LASTEXITCODE -ne 0) { throw "Qt contract tests failed" }
           python -m ruff check qt_app
+          if ($LASTEXITCODE -ne 0) { throw "Qt Ruff checks failed" }
           python -m compileall -q qt_app
+          if ($LASTEXITCODE -ne 0) { throw "Qt compilation failed" }
 
       - name: Qt migration shell source smoke
         shell: pwsh

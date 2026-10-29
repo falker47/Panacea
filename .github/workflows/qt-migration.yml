@@ -1,0 +1,110 @@
+name: Panacea Qt Migration QA
+
+on:
+  push:
+    branches: [feat/panacea-qt-migration-20261029]
+    paths:
+      - 'qt_app/**'
+      - '.github/workflows/qt-migration.yml'
+  pull_request:
+    paths:
+      - 'qt_app/**'
+      - '.github/workflows/qt-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: panacea-qt-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-ui-and-contracts:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+      QT_QUICK_BACKEND: software
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            qt_lab/requirements.txt
+
+      - name: Install test and Qt runtime
+        run: python -m pip install -r requirements-dev.txt -r qt_lab/requirements.txt
+
+      - name: Check read-only API contract and syntax
+        run: |
+          python -m unittest discover -s qt_app/tests -p "test_*.py" -v
+          python -m ruff check qt_app
+          python -m compileall -q qt_app
+
+      - name: Qt migration shell source smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/qt-app | Out-Null
+          python -c "import subprocess,sys; subprocess.run([sys.executable, 'qt_app/main.py', '--smoke-test', '--capture', 'build/qt-app/source.png'], check=True, timeout=45)"
+          if ($LASTEXITCODE -ne 0) { throw "Qt migration source smoke failed" }
+
+      - name: Package independent candidate, not stable release
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" qt_app/main.py
+          if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
+          if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
+
+      - name: Remove unused Qt web runtimes
+        shell: pwsh
+        run: |
+          $root = "dist/PanaceaQtCandidate/_internal/PySide6"
+          foreach ($dll in @("Qt6WebEngineCore.dll", "Qt6WebEngineQuick.dll", "Qt6WebEngineQuickDelegatesQml.dll", "Qt6WebView.dll", "Qt6WebViewQuick.dll")) {
+            $path = Join-Path $root $dll
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+          }
+          foreach ($folder in @("QtWebEngine", "QtWebView")) {
+            $path = Join-Path "$root/qml" $folder
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force -Recurse }
+          }
+          if (-not (Test-Path -LiteralPath "$root/Qt6Quick.dll")) { throw "Required QtQuick DLL missing" }
+
+      - name: Packaged Qt UI smoke and screenshot
+        shell: pwsh
+        run: |
+          python -c "import subprocess; subprocess.run(['dist/PanaceaQtCandidate/PanaceaQtCandidate.exe', '--smoke-test', '--capture', 'build/qt-app/packaged.png'], check=True, timeout=45)"
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Qt migration shell failed" }
+
+      - name: Measure binary size and package QA artifact
+        shell: pwsh
+        run: |
+          $totalBytes = (Get-ChildItem "dist/PanaceaQtCandidate" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          Compress-Archive -Path "dist/PanaceaQtCandidate" -DestinationPath "build/qt-app/PanaceaQtCandidate-Windows.zip" -Force
+          $zipBytes = (Get-Item "build/qt-app/PanaceaQtCandidate-Windows.zip").Length
+          $sha = (Get-FileHash "build/qt-app/PanaceaQtCandidate-Windows.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  PanaceaQtCandidate-Windows.zip" | Set-Content -LiteralPath "build/qt-app/PanaceaQtCandidate-Windows.zip.sha256" -Encoding utf8
+          @{ uncompressed_bytes = [long]$totalBytes; zipped_bytes = [long]$zipBytes; maintenance_enabled = $false } |
+            ConvertTo-Json | Set-Content "build/qt-app/size.json" -Encoding utf8
+
+      - name: Retain QA logs/screenshots, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-Migration-Evidence
+          path: |
+            build/qt-app/*.png
+            build/qt-app/*.json
+          if-no-files-found: warn
+
+      - name: Deliver Qt candidate only after all checks pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-Migration-Candidate
+          path: |
+            build/qt-app/PanaceaQtCandidate-Windows.zip
+            build/qt-app/PanaceaQtCandidate-Windows.zip.sha256
+          if-no-files-found: error

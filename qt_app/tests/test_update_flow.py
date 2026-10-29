@@ -27,6 +27,8 @@ class FakeClient:
         candidate = Path(directory) / "fake-verified.exe"
         candidate.write_bytes(b"fake PE test fixture; no execution")
         if progress(10, 10) is False:
+            # Model the real UpdateClient.download cleanup on cancellation.
+            candidate.unlink(missing_ok=True)
             raise UpdateCancelled("Cancelled")
         return candidate
 

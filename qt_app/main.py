@@ -21,6 +21,7 @@ from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
 from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402
 from qt_app.catalog import cards  # noqa: E402
 from qt_app.confirmation_copy import confirmation_text  # noqa: E402
+from qt_app.elevation import elevation_arguments  # noqa: E402
 from qt_lab.main import MetricsBridge  # noqa: E402
 
 
@@ -235,8 +236,10 @@ def main(argv=None):
     if os.name == 'nt' and not args.smoke_test:
         from modules.utils import is_admin
         if not is_admin():
-            parameters = subprocess.list2cmdline(sys.argv[1:] if argv is None else argv)
-            if getattr(sys, 'frozen', False):
+            frozen = bool(getattr(sys, "frozen", False))
+            startup_argv = sys.argv if argv is None else [sys.argv[0], *argv]
+            parameters = elevation_arguments(startup_argv, frozen=frozen)
+            if frozen:
                 os.environ['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
             code = ctypes.windll.shell32.ShellExecuteW(None, 'runas', sys.executable, parameters, None, 1)
             if code <= 32:

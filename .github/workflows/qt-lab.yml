@@ -63,7 +63,7 @@ jobs:
       - name: Build isolated non-installed Windows package
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtLab --add-data "qt_lab/Main.qml;qt_lab" --collect-all PySide6 qt_lab/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtLab --add-data "qt_lab/Main.qml;qt_lab" qt_lab/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt Lab package build failed" }
           if (-not (Test-Path "dist/PanaceaQtLab/PanaceaQtLab.exe")) { throw "Qt Lab executable missing" }
 
@@ -79,6 +79,19 @@ jobs:
           Compress-Archive -Path "dist/PanaceaQtLab" -DestinationPath "build/qt-lab/PanaceaQtLab-Windows.zip" -Force
           $hash = (Get-FileHash -LiteralPath "build/qt-lab/PanaceaQtLab-Windows.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  PanaceaQtLab-Windows.zip" | Set-Content -LiteralPath "build/qt-lab/PanaceaQtLab-Windows.zip.sha256" -Encoding utf8
+
+      - name: Measure portable size on Windows
+        shell: pwsh
+        run: |
+          $totalBytes = (Get-ChildItem -Path "dist/PanaceaQtLab" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          $compressedBytes = (Get-Item -LiteralPath "build/qt-lab/PanaceaQtLab-Windows.zip").Length
+          @{
+            package = "PanaceaQtLab"
+            collection = "PyInstaller module hooks (without --collect-all PySide6)"
+            uncompressed_bytes = [long]$totalBytes
+            zipped_bytes = [long]$compressedBytes
+            scope = "read-only experimental Qt Quick build"
+          } | ConvertTo-Json | Set-Content -LiteralPath "build/qt-lab/package-sizes.json" -Encoding utf8
 
       - name: Retain baseline and Qt screenshots/measurements
         if: always()

@@ -139,11 +139,27 @@ def main(argv=None):
     app.aboutToQuit.connect(bridge.stop)
 
     engine = QQmlApplicationEngine()
+    warnings = []
+    engine.warnings.connect(lambda errors: warnings.extend(str(error) for error in errors))
     engine.rootContext().setContextProperty("liveMetrics", bridge)
-    source = Path(__file__).resolve().parent / "Main.qml"
+    # PyInstaller relocates the entrypoint inside _MEIPASS. The bundled QML
+    # file retains the qt_lab/ subdirectory added by --add-data.
+    source = (
+        Path(sys._MEIPASS) / "qt_lab" / "Main.qml"
+        if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parent / "Main.qml"
+    )
     engine.load(QUrl.fromLocalFile(str(source)))
     root_objects = engine.rootObjects()
     if not root_objects:
+        failure = {
+            "error": "Qt Quick QML engine did not load a window",
+            "qml_file_exists": source.is_file(),
+            "qml_warnings": warnings,
+            "frozen": bool(getattr(sys, "frozen", False)),
+        }
+        _write_report(args.report, failure)
+        print(json.dumps(failure, ensure_ascii=False), file=sys.stderr, flush=True)
         bridge.stop()
         return 2
     window = root_objects[0]

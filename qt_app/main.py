@@ -11,12 +11,12 @@ import sys
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
-from qt_app.icon_provider import NavigationIconProvider
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from qt_app.icon_provider import NavigationIconProvider  # noqa: E402
 from modules.localization import resolve_language  # noqa: E402
 from modules.ui_dispatch import UiDispatcher, WorkerController  # noqa: E402
 from qt_app.services import READ_ACTIONS, ReadService  # noqa: E402

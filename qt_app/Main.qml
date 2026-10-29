@@ -22,8 +22,8 @@ Window {
         var visits = visited.slice()
         visits[currentTab] = true
         visited = visits
-        if (currentTab === 2 && !readService.busy) readService.request("drives")
-        if (currentTab === 3 && !readService.busy) readService.request("turbo_status")
+        if (!qaSmokeMode && currentTab === 2 && !readService.busy) readService.request("drives")
+        if (!qaSmokeMode && currentTab === 3 && !readService.busy) readService.request("turbo_status")
     }
     onClosing: function(event) {
         if (maintenanceService.busy || updateService.installing) {

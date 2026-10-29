@@ -291,9 +291,21 @@ def main(argv=None):
     modes.add_argument("--panacea-update-ready", metavar="TOKEN",
                        help="Acknowledge verified startup after protected replacement")
     parser.add_argument("--capture", type=Path, help="Save a QA screenshot with --smoke-test")
+    parser.add_argument("--smoke-tab", type=int, choices=range(5), default=0,
+                        help="QA only: navigate to one of the five V2 groups")
+    parser.add_argument("--smoke-width", type=int, help="QA only: logical viewport width")
+    parser.add_argument("--smoke-height", type=int, help="QA only: logical viewport height")
+    parser.add_argument("--smoke-language", choices=("it", "en"), help="QA only: visible locale")
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
+    if not args.smoke_test and (args.smoke_tab != 0 or args.smoke_width
+                                or args.smoke_height or args.smoke_language):
+        parser.error("smoke viewport options require --smoke-test")
+    if args.smoke_width is not None and args.smoke_width < 760:
+        parser.error("--smoke-width must be at least 760")
+    if args.smoke_height is not None and args.smoke_height < 480:
+        parser.error("--smoke-height must be at least 480")
     if args.panacea_update_helper:
         from modules.update_install import run_update_helper
         return run_update_helper(args.panacea_update_helper)
@@ -345,6 +357,7 @@ def main(argv=None):
     app.aboutToQuit.connect(maintenance.stop)
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("applicationLanguage", resolve_language())
+    engine.rootContext().setContextProperty("qaSmokeMode", bool(args.smoke_test))
     engine.rootContext().setContextProperty("liveMetrics", metrics)
     engine.rootContext().setContextProperty("readService", reader)
     engine.rootContext().setContextProperty("maintenanceService", maintenance)
@@ -363,22 +376,50 @@ def main(argv=None):
         # The original V2 loads metadata without a manual "read" click.
         QTimer.singleShot(0, lambda: reader.request("hardware"))
     if args.smoke_test:
+        window = engine.rootObjects()[0]
+
+        def configure_qa_view():
+            if args.smoke_width is not None:
+                window.setWidth(args.smoke_width)
+            if args.smoke_height is not None:
+                window.setHeight(args.smoke_height)
+            if args.smoke_language is not None:
+                window.setProperty("language", args.smoke_language)
+            window.setProperty("currentTab", args.smoke_tab)
+
+        QTimer.singleShot(0, configure_qa_view)
         if args.capture:
             def capture():
                 args.capture.parent.mkdir(parents=True, exist_ok=True)
                 try:
-                    window = engine.rootObjects()[0]
-                    screen = window.screen()
-                    if screen is None:
-                        raise RuntimeError("Qt window has no screen")
-                    img = screen.grabWindow(int(window.winId()))
-                    if img.isNull() or not img.save(str(args.capture)):
+                    # A successful root shell load does not prove the selected
+                    # lazy subview compiled; require its actual QML object.
+                    if window.findChild(QObject, f"parityPage_{args.smoke_tab}") is None:
+                        raise RuntimeError("Selected Qt V2 page was not created")
+                    image = window.grabWindow()
+                    if image.isNull():
+                        screen = window.screen()
+                        if screen is None:
+                            raise RuntimeError("Qt window has no screen")
+                        image = screen.grabWindow(int(window.winId()))
+                    if image.isNull() or not image.save(str(args.capture)):
                         raise RuntimeError("Qt screenshot is empty or cannot be saved")
+                    (args.capture.with_suffix(".json")).write_text(
+                        json.dumps({
+                            "tab": args.smoke_tab,
+                            "language": args.smoke_language or resolve_language(),
+                            "logical_size": [window.width(), window.height()],
+                            "image_size": [image.width(), image.height()],
+                            "qt_scale_factor": os.environ.get("QT_SCALE_FACTOR", "1"),
+                            "safe_mode": True,
+                        }, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
                 except Exception as exc:
                     print(f"Qt UI screenshot failure: {exc}", file=sys.stderr, flush=True)
                     app.exit(3)
-            QTimer.singleShot(550, capture)
-        QTimer.singleShot(1200, app.quit)
+            QTimer.singleShot(950, capture)
+        QTimer.singleShot(1600 if args.capture else 1200, app.quit)
     else:
         if args.panacea_update_ready:
             def acknowledge_update():

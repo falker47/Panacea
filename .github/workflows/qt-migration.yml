@@ -56,6 +56,33 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Qt migration source smoke failed" }
           if (-not (Test-Path -LiteralPath "build/qt-app/source.png") -or (Get-Item "build/qt-app/source.png").Length -lt 1024) { throw "Qt source screenshot was not captured" }
 
+      - name: Capture V2 visual review matrix (safe Qt mode, no maintenance)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($size in @(@{ w=1366; h=768 }, @{ w=1920; h=1080 })) {
+            foreach ($scale in @("1", "1.25", "1.5")) {
+              $env:QT_SCALE_FACTOR = $scale
+              $percent = [int]([double]::Parse($scale, [System.Globalization.CultureInfo]::InvariantCulture) * 100)
+              $factor = [double]::Parse($scale, [System.Globalization.CultureInfo]::InvariantCulture)
+              $logicalW = [int][math]::Round($size.w / $factor)
+              $logicalH = [int][math]::Round($size.h / $factor)
+              foreach ($tab in @(0,1,2,3,4)) {
+                $file = "build/qt-app/matrix-$($size.w)x$($size.h)-$percent-tab$tab-it.png"
+                python qt_app/main.py --smoke-test --smoke-width $logicalW --smoke-height $logicalH --smoke-tab $tab --smoke-language it --capture $file
+                if ($LASTEXITCODE -ne 0) { throw "Qt matrix failed: $file" }
+              }
+            }
+          }
+          $env:QT_SCALE_FACTOR = "1"
+          foreach ($tab in @(0,1,2,3,4)) {
+            $file = "build/qt-app/english-1366x768-tab$tab.png"
+            python qt_app/main.py --smoke-test --smoke-width 1366 --smoke-height 768 --smoke-tab $tab --smoke-language en --capture $file
+            if ($LASTEXITCODE -ne 0) { throw "English Qt page failed: $file" }
+          }
+          python qt_app/visual_review.py --captures build/qt-app --baseline docs/validation/screenshots --out build/qt-app
+          if ($LASTEXITCODE -ne 0) { throw "V2 visual comparison report failed" }
+
       - name: Package independent candidate, not stable release
         shell: pwsh
         run: |
@@ -109,6 +136,7 @@ jobs:
           name: Panacea-Qt-Migration-Evidence
           path: |
             build/qt-app/*.png
+            build/qt-app/*.jpg
             build/qt-app/*.json
           if-no-files-found: warn
 

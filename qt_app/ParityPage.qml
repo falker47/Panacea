@@ -6,6 +6,7 @@ import QtQuick.Layouts
 // allowlisted, single-use confirmation broker.
 Item {
     id: view
+    objectName: "parityPage_" + groupIndex
     property int groupIndex: 0
     property string language: "it"
     property string selectedDrive: ""

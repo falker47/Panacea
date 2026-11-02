@@ -65,6 +65,21 @@ class QtVisualParityContracts(unittest.TestCase):
         self.assertIn('assets/panacea_icon.png;assets', workflow)
         self.assertIn('assets/icons/lucide/png;assets/icons/lucide/png', workflow)
 
+    def test_dashboard_keeps_v2_visual_scenarios_not_empty_metric_cards(self):
+        page = PARITY.read_text(encoding="utf-8")
+        app = (ROOT / "main.py").read_text(encoding="utf-8")
+        self.assertIn("id: overviewCard", page)
+        self.assertIn("image://panacea-nav/battery/detail", page)
+        self.assertIn("function ramCapacityText()", page)
+        self.assertIn("function diskCapacityText()", page)
+        self.assertIn("function powerCaption()", page)
+        self.assertIn("function restartCaption()", page)
+        self.assertIn("modelData.extra ||", page)
+        self.assertIn("progressColor: view.diskAccent()", page)
+        self.assertIn("metrics._history", app)
+        self.assertIn('"visual_fixture": True', app)
+        self.assertIn("if args.smoke_test:", app)
+
     def test_all_qml_actions_use_the_confirmed_allowlist(self):
         page = PARITY.read_text(encoding="utf-8")
         literal_calls = set(re.findall(r'view\.request\("([^"]+)"', page))

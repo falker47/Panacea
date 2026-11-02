@@ -928,9 +928,13 @@ Item {
                     spacing: 8
                     Text { text:view.t("Impostazioni Turbo","Performance settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
                     Rectangle {
-                        width:parent.width; height:151; color:"#142138"; border.color:"#2e415c"; radius:8
+                        width:parent.width; height:turboMasterContent.implicitHeight + 24; color:"#142138"; border.color:"#2e415c"; radius:8
                         Column {
-                            anchors.fill:parent; anchors.margins:12; spacing:9
+                            id: turboMasterContent
+                            x: 12
+                            y: 12
+                            width: parent.width - 24
+                            spacing: 9
                             RowLayout {
                                 width:parent.width
                                 Text { text:view.t("Tutte le impostazioni","All settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:14; Layout.fillWidth:true }
@@ -952,9 +956,21 @@ Item {
                                              "Check the saved-originals state.")
                                 width:parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                             }
-                            Row { spacing:8
-                                PButton { caption:view.t("Ripristina salvati","Restore originals"); interactive:!view.occupied && view.turbo.restore_available === true; onPressed:view.request("turbo_off") }
-                                PButton { caption:view.t("Aggiorna stato","Refresh state"); interactive:!view.occupied; onPressed:view.showRead("turbo_status") }
+                            Column {
+                                width: parent.width
+                                spacing: 5
+                                PButton {
+                                    width: parent.width
+                                    caption: view.t("Ripristina impostazioni salvate", "Restore saved settings")
+                                    interactive: !view.occupied && view.turbo.restore_available === true
+                                    onPressed: view.request("turbo_off")
+                                }
+                                PButton {
+                                    width: parent.width
+                                    caption: view.t("Aggiorna stato", "Refresh state")
+                                    interactive: !view.occupied
+                                    onPressed: view.showRead("turbo_status")
+                                }
                             }
                         }
                     }
@@ -967,9 +983,18 @@ Item {
                             {key:"spooler",name:"Print Spooler",hint:view.t("La stampa viene sospesa","Printing is unavailable"),on:"spooler_on",off:"spooler_off"}
                         ]
                         Rectangle {
-                            width:parent.width; height:73; radius:6; color:"#142138"
+                            width: parent.width
+                            height: width < 390 ? 92 : 62
+                            color: "transparent"
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                color: "#2e415c"
+                            }
                             RowLayout {
-                                anchors.fill:parent; anchors.margins:11; spacing:10
+                                anchors.fill:parent; anchors.margins:8; spacing:10
                                 ColumnLayout {
                                     Layout.fillWidth:true; spacing:3
                                     Text { text:modelData.name; color:"#f1f3f8"; font.pixelSize:13; font.bold:true }

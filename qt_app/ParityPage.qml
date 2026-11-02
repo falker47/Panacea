@@ -10,7 +10,7 @@ Item {
     property int groupIndex: 0
     property string language: "it"
     property string selectedDrive: ""
-    property bool showIndividualCleaning: true
+    property bool showIndividualCleaning: false
     property bool logExpanded: false
     readonly property bool occupied: maintenanceService.busy || readService.busy || updateService.busy
     readonly property var snapshots: readService.results
@@ -182,6 +182,55 @@ Item {
         }
     }
 
+    component PShortcut: Rectangle {
+        id: shortcut
+        property string caption: ""
+        property string iconName: "apps"
+        property bool interactive: true
+        signal triggered()
+        width: parent.width
+        height: 46
+        radius: 6
+        color: "#142138"
+        border.color: activeFocus ? "#76b6e2" : "#2e415c"
+        activeFocusOnTab: interactive
+        Accessible.role: Accessible.Button
+        Accessible.name: caption
+        function activate() { if (interactive) triggered() }
+        Keys.onReturnPressed: activate()
+        Keys.onSpacePressed: activate()
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 10
+            Image {
+                source: "image://panacea-nav/" + shortcut.iconName + "/detail"
+                sourceSize.width: 96
+                sourceSize.height: 96
+                Layout.preferredWidth: 23
+                Layout.preferredHeight: 23
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
+            Text {
+                text: shortcut.caption
+                Layout.fillWidth: true
+                color: shortcut.interactive ? "#f1f3f8" : "#9eafc8"
+                font.family: "Segoe UI"
+                font.pixelSize: 13
+                font.bold: true
+                wrapMode: Text.WordWrap
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            enabled: shortcut.interactive
+            cursorShape: Qt.PointingHandCursor
+            onClicked: shortcut.activate()
+        }
+    }
+
     component PRow: Rectangle {
         id: line
         property string heading: ""
@@ -348,8 +397,9 @@ Item {
 
             Rectangle {
                 width: parent.width
+                visible: view.groupIndex !== 0
                 implicitHeight: logColumn.implicitHeight + 20
-                height: implicitHeight
+                height: visible ? implicitHeight : 0
                 radius: 8
                 color: "#142138"
                 border.color: "#2e415c"
@@ -381,14 +431,7 @@ Item {
                 }
             }
 
-            Text {
-                width: parent.width
-                text: view.t("Candidato QA separato dalla versione stabile. Le modifiche richiedono conferma.",
-                             "QA candidate separate from the stable version. Changes require confirmation.")
-                color: "#8296b0"
-                font.pixelSize: 11
-                wrapMode: Text.WordWrap
-            }
+            // QA identity is shown in the app shell, not repeated on every V2 screen.
         }
     }
 
@@ -694,8 +737,8 @@ Item {
                                      "Manage or uninstall programs in Windows.")
                         width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                     }
-                    PRow { heading:view.t("Gestione applicazioni","Apps settings"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"apps_settings"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Programmi classici","Classic programs"); hint:view.t("Programmi e funzionalità","Programs and Features"); action:"appwiz"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    PShortcut { caption: view.t("Impostazioni applicazioni", "Apps settings"); iconName: "apps"; interactive: !view.occupied; onTriggered: view.request("apps_settings") }
+                    PShortcut { caption: view.t("Programmi classici", "Classic programs"); iconName: "tools"; interactive: !view.occupied; onTriggered: view.request("appwiz") }
                 }
             }
         }
@@ -722,8 +765,8 @@ Item {
                     Text { text: view.t("RETE","NETWORK"); color:"#e4c579"; font.pixelSize:10; font.bold:true }
                     PRow { heading:view.t("Svuota DNS","Flush DNS"); hint:view.t("Cancella la cache DNS","Clear cached DNS records"); action:"dns_flush"; buttonText:view.t("Svuota","Flush"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     PRow { heading:view.t("Ripristina Winsock","Reset Winsock"); hint:view.t("Potrebbe richiedere riavvio","A restart may be required"); action:"winsock_reset"; buttonText:view.t("Ripristina","Reset"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Punto di ripristino","Restore point"); hint:view.t("Crea e verifica","Create and verify"); action:"restore_point"; buttonText:view.t("Crea","Create"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Rapporto batteria","Battery report"); hint:view.t("Esporta rapporto HTML","Save an HTML report"); action:"battery_report"; buttonText:view.t("Crea","Create"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    PShortcut { caption: view.t("Crea punto di ripristino", "Create restore point"); iconName: "restore"; interactive: !view.occupied; onTriggered: view.request("restore_point") }
+                    PShortcut { caption: view.t("Rapporto batteria", "Battery report"); iconName: "battery"; interactive: !view.occupied; onTriggered: view.request("battery_report") }
                 }
                 PPanel {
                     width: view.pairedPanelWidth(pair.width, 305)
@@ -899,7 +942,7 @@ Item {
                                      "Disable unnecessary apps at sign-in.")
                         color:"#9eafc8"; width:parent.width; wrapMode:Text.WordWrap; font.pixelSize:11
                     }
-                    PRow { heading:view.t("Impostazioni di avvio","Startup settings"); hint:view.t("Gestisci app all'accesso","Manage sign-in apps"); action:"startup_settings"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    PShortcut { caption: view.t("Impostazioni di avvio", "Startup settings"); iconName: "turbo"; interactive: !view.occupied; onTriggered: view.request("startup_settings") }
                 }
             }
         }

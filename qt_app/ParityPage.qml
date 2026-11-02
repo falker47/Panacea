@@ -1167,7 +1167,11 @@ Item {
                                     Text {
                                         text: view.stepCaption(index)
                                         Layout.fillWidth: true
-                                        color: index < maintenanceService.progressDone ? "#78c8a8" : "#9eafc8"
+                                        color: progressSteps.length > index ?
+                                               (progressSteps[index].success === true ? "#78c8a8" : "#ee939a") :
+                                               (maintenanceService.busy &&
+                                                maintenanceService.lastAction === "resurrection" &&
+                                                maintenanceService.progressDone === index ? "#e4b66d" : "#9eafc8")
                                         font.pixelSize: 10
                                     }
                                 }

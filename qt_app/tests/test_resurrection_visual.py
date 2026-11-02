@@ -26,6 +26,7 @@ class ResurrectionVisualParityTests(unittest.TestCase):
         self.assertIn("objectName: \"resurrection_step_\" + index", qml)
         self.assertIn("Accessible.description: modelData.help", qml)
         self.assertIn("progressSteps[index].message", qml)
+        self.assertIn('progressSteps[index].success === true ? "#78c8a8" : "#ee939a"', qml)
         self.assertIn("view.stepCaption(index)", qml)
         self.assertEqual(qml.count('help: view.t('), 10)
         self.assertIn("guidedStep.expanded = !guidedStep.expanded", qml)

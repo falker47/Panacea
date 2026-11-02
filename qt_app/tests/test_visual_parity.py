@@ -81,6 +81,16 @@ class QtVisualParityContracts(unittest.TestCase):
         self.assertIn('"visual_fixture": True', app)
         self.assertIn("if args.smoke_test:", app)
 
+    def test_maintenance_rows_reflow_instead_of_clipping_at_high_dpi(self):
+        page = PARITY.read_text(encoding="utf-8")
+        start = page.index("component PRow: Rectangle")
+        end = page.index("component PToggle:", start)
+        row = page[start:end]
+        self.assertIn("implicitHeight: Math.max(64, rowContent.implicitHeight + 20)", row)
+        self.assertIn("anchors.verticalCenter: parent.verticalCenter", row)
+        self.assertNotIn("height: 64", row)
+        self.assertNotIn("elide: Text.ElideRight", row)
+
     def test_all_qml_actions_use_the_confirmed_allowlist(self):
         page = PARITY.read_text(encoding="utf-8")
         literal_calls = set(re.findall(r'view\.request\("([^"]+)"', page))

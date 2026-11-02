@@ -16,6 +16,10 @@ class ReadServiceTests(unittest.TestCase):
                 calls.append("metadata")
                 return {"os": "Windows 11", "cpu_name": "CPU test", "ram_info": "DDR5"}
 
+            def get_windows_update_status(self):
+                calls.append("windows_updates")
+                return (1, 2, "3 Windows updates")
+
             def close(self):
                 calls.append("close_monitor")
 
@@ -79,7 +83,7 @@ class ReadServiceTests(unittest.TestCase):
     def test_only_an_explicit_allowlist_is_exposed(self):
         self.assertEqual(READ_ACTIONS,
                          frozenset({"hardware", "temp_preview", "drives",
-                                    "turbo_status", "guard_status"}))
+                                    "turbo_status", "guard_status", "windows_updates"}))
         for action in ("clean_temp", "resurrect", "run_cmd", "set_turbo", "install_update", ""):
             with self.subTest(action=action), self.assertRaises(ValueError):
                 self.service.collect(action)
@@ -104,6 +108,14 @@ class ReadServiceTests(unittest.TestCase):
         result = self.service.collect("hardware")
         self.assertEqual(result["os"], "Windows 11")
         self.assertEqual(self.calls, ["metadata"])
+
+    def test_windows_update_status_is_read_only(self):
+        output = self.service.collect("windows_updates")
+        self.assertEqual(output["recommended"], 1)
+        self.assertEqual(output["optional"], 2)
+        self.assertEqual(output["status"], "3 Windows updates")
+        self.assertTrue(output["verified"])
+        self.assertEqual(self.calls, ["windows_updates"])
 
     def test_turbo_state_never_toggles_settings(self):
         result = self.service.collect("turbo_status")

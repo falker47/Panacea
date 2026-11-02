@@ -546,7 +546,8 @@ Item {
                             }
                         }
                         Text {
-                            text: view.t("Aggiornamenti gestiti da Windows", "Updates are managed by Windows")
+                            text: view.snapshots.windows_updates ? view.snapshots.windows_updates.status :
+                                          view.t("Verifica aggiornamenti…", "Checking updates…")
                             color: "#9eafc8"; font.pixelSize: 12
                         }
                         PButton {

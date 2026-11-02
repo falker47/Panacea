@@ -10,7 +10,7 @@ import threading
 
 
 READ_ACTIONS = frozenset({
-    "hardware", "temp_preview", "drives", "turbo_status", "guard_status"
+    "hardware", "temp_preview", "drives", "turbo_status", "guard_status", "windows_updates"
 })
 
 
@@ -77,6 +77,14 @@ class ReadService:
                 "cpu_name": str(metadata.get("cpu_name") or "Non disponibile"),
                 "ram_info": str(metadata.get("ram_info") or "Non disponibile"),
                 "disk_model": str(metadata.get("disk_model") or "Non disponibile"),
+            }
+        if action == "windows_updates":
+            recommended, optional, description = self._manager("monitor").get_windows_update_status()
+            return {
+                "recommended": int(recommended),
+                "optional": int(optional),
+                "status": str(description),
+                "verified": recommended >= 0 and optional >= 0,
             }
         if action == "temp_preview":
             manager = self._manager("cleanup")

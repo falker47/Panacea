@@ -98,6 +98,10 @@ class ReadBridge(QObject):
         def done():
             self._busy = False
             self.changed.emit()
+            if (action == "hardware" and getattr(self, "_automatic_updates", False)
+                    and not self._closed):
+                self._automatic_updates = False
+                QTimer.singleShot(0, lambda: self.request("windows_updates"))
         accepted = self._workers.start(
             action, lambda: self._service.collect(action),
             group="read", on_success=successful, on_error=failed, on_done=done)
@@ -367,6 +371,7 @@ def main(argv=None):
 
     metrics = MetricsBridge()
     reader = ReadBridge()
+    reader._automatic_updates = not args.smoke_test
     if args.smoke_test:
         # Deterministic visual fixture, never enabled for an interactive launch.
         # The reference V2 captures show a high-usage disk and RAM condition.

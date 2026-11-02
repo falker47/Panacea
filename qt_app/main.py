@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication, QFontDatabase
+from PySide6.QtGui import QGuiApplication, QFontDatabase, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -344,6 +344,9 @@ def main(argv=None):
                 return 1
             return 0
     app = QGuiApplication([sys.argv[0]])
+    icon = (Path(getattr(sys, "_MEIPASS", ROOT)) / "assets" / "panacea_icon.ico")
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
     if args.smoke_test and os.name == "nt" and os.environ.get("QT_QPA_PLATFORM") == "offscreen":
         # The offscreen QPA has no Windows font catalog. Without registering
         # platform-owned fonts, screenshots can display tofu despite a fully

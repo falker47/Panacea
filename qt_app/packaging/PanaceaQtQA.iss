@@ -5,6 +5,10 @@
   #error "Specify QtOutputDir."
 #endif
 
+#ifndef QtBrandIcon
+  #error "Specify the original Panacea icon path."
+#endif
+
 [Setup]
 ; QA-only AppId: deliberately different from stable Panacea's AppId.
 ; This installer MUST NEVER upgrade, replace or remove the stable application.
@@ -25,6 +29,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17134
 OutputDir={#QtOutputDir}
 OutputBaseFilename=PanaceaQtQASetup
+SetupIconFile={#QtBrandIcon}
 UninstallDisplayIcon={app}\PanaceaQtCandidate.exe
 Compression=lzma2
 SolidCompression=yes

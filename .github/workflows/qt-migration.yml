@@ -88,7 +88,7 @@ jobs:
       - name: Package independent candidate, not stable release
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets/panacea_icon.ico" --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
           if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
 
@@ -187,7 +187,8 @@ jobs:
           if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe missing" }
           $app = (Resolve-Path "build/qt-extracted/PanaceaQtCandidate").Path
           $output = (New-Item -ItemType Directory -Force "build/qt-installer").FullName
-          & $iscc /Qp "/DQtCandidateDir=$app" "/DQtOutputDir=$output" "qt_app/packaging/PanaceaQtQA.iss"
+          $brandIcon = (Resolve-Path "assets/panacea_icon.ico").Path
+          & $iscc /Qp "/DQtCandidateDir=$app" "/DQtOutputDir=$output" "/DQtBrandIcon=$brandIcon" "qt_app/packaging/PanaceaQtQA.iss"
           if ($LASTEXITCODE -ne 0) { throw "Qt QA installer build failed" }
           $setup = "build/qt-installer/PanaceaQtQASetup.exe"
           if (-not (Test-Path $setup) -or (Get-Item $setup).Length -lt 1000000) { throw "QA installer is absent or too small" }
@@ -269,7 +270,7 @@ jobs:
       - name: Build disposable Qt one-file Panacea.exe for updater identity tests
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Panacea --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --icon "assets/panacea_icon.ico" --name Panacea --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt one-file production-identity prototype could not be built" }
           if (-not (Test-Path -LiteralPath "dist/Panacea.exe")) { throw "Qt one-file executable is missing" }
 

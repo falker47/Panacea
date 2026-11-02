@@ -303,7 +303,8 @@ Item {
         property bool interactive: true
         signal invoke(string action, string drive)
         width: parent.width
-        height: 64
+        implicitHeight: Math.max(64, rowContent.implicitHeight + 20)
+        height: implicitHeight
         color: "transparent"
         border.width: 0
         Rectangle {
@@ -315,7 +316,10 @@ Item {
             opacity: 0.7
         }
         RowLayout {
-            anchors.fill: parent
+            id: rowContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 12
             anchors.rightMargin: 12
             spacing: 10
@@ -330,7 +334,7 @@ Item {
                     font.bold: true
                     font.pixelSize: 13
                     wrapMode: Text.WordWrap
-                    maximumLineCount: 2
+                    maximumLineCount: 0
                 }
                 Text {
                     text: line.hint
@@ -339,8 +343,7 @@ Item {
                     font.family: "Segoe UI"
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
+                    maximumLineCount: 0
                 }
             }
             PButton {

@@ -231,6 +231,7 @@ Item {
     component PProgress: Rectangle {
         id: progress
         property real fraction: 0
+        property color progressColor: "#e4c579"
         width: parent.width
         height: 9
         radius: 5
@@ -239,7 +240,7 @@ Item {
             width: Math.max(0, Math.min(1, progress.fraction)) * parent.width
             height: parent.height
             radius: parent.radius
-            color: "#e4c579"
+            color: progress.progressColor
             Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         }
     }
@@ -265,6 +266,13 @@ Item {
                 if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
             }
             ctx.stroke()
+            ctx.lineTo(width - 1, height - 1)
+            ctx.lineTo(1, height - 1)
+            ctx.closePath()
+            ctx.globalAlpha = 0.09
+            ctx.fillStyle = lineColor
+            ctx.fill()
+            ctx.globalAlpha = 1
         }
     }
 

@@ -367,6 +367,23 @@ def main(argv=None):
 
     metrics = MetricsBridge()
     reader = ReadBridge()
+    if args.smoke_test:
+        # Deterministic visual fixture, never enabled for an interactive launch.
+        # The reference V2 captures show a high-usage disk and RAM condition.
+        metrics._values.update({
+            "cpu": "30.8%", "ram": "90.7%", "disk": "97.5%",
+            "details": {
+                "ram": [16.0, 1.5, 90.7], "disk": [256.0, 6.4, 97.5],
+                "battery": 72, "power": "Plugged In",
+                "uptime": "0d 3h 8m",
+            },
+        })
+        metrics._history["cpu"] = [17, 16, 18, 19, 17, 24, 27, 31, 30, 32, 30.8]
+        metrics._history["ram"] = [84, 84.3, 85, 85.1, 86, 88, 89, 90.7]
+        reader._results["hardware"] = {
+            "os": "Windows 11", "cpu_name": "AMD Ryzen 7",
+            "ram_info": "16.0 GB RAM", "disk_model": "System SSD",
+        }
     maintenance = MaintenanceBridge()
     updater = UpdateBridge(reader, maintenance, on_ready=app.quit)
     reader._maintenance = maintenance
@@ -435,6 +452,7 @@ def main(argv=None):
                             "image_size": [image.width(), image.height()],
                             "qt_scale_factor": os.environ.get("QT_SCALE_FACTOR", "1"),
                             "safe_mode": True,
+                            "visual_fixture": True,
                         }, ensure_ascii=False, indent=2) + "\n",
                         encoding="utf-8",
                     )

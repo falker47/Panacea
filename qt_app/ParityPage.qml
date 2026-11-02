@@ -13,7 +13,6 @@ Item {
     property bool showDriveChoices: false
     property bool showExtraDriveTools: false
     property bool showIndividualCleaning: false
-    property bool logExpanded: false
     readonly property bool occupied: maintenanceService.busy || readService.busy || updateService.busy
     readonly property var snapshots: readService.results
     readonly property var hardware: snapshots.hardware || ({})
@@ -243,6 +242,47 @@ Item {
         }
     }
 
+    component PSectionLog: Rectangle {
+        id: sectionLog
+        property string caption: ""
+        property bool expanded: false
+        width: parent.width
+        height: sectionLogContent.implicitHeight + 12
+        radius: 8
+        color: "#142138"
+        border.color: "#2e415c"
+        Column {
+            id: sectionLogContent
+            x: 6
+            y: 6
+            width: parent.width - 12
+            spacing: 6
+            PButton {
+                width: parent.width
+                height: 26
+                caption: (sectionLog.expanded ? "− " : "+ ") + sectionLog.caption
+                onPressed: sectionLog.expanded = !sectionLog.expanded
+            }
+            Text {
+                width: parent.width
+                visible: sectionLog.expanded
+                text: maintenanceService.output + "\n" + readService.output
+                wrapMode: Text.WrapAnywhere
+                color: "#b7c9db"
+                font.family: "Consolas"
+                font.pixelSize: 11
+            }
+            PButton {
+                width: parent.width
+                visible: sectionLog.expanded && maintenanceService.busy
+                height: visible ? 34 : 0
+                caption: view.t("Annulla dopo la fase", "Cancel after current step")
+                interactive: maintenanceService.busy
+                onPressed: maintenanceService.cancel()
+            }
+        }
+    }
+
     component PRow: Rectangle {
         id: line
         property string heading: ""
@@ -432,42 +472,6 @@ Item {
                                  view.groupIndex === 1 ? cleaningAndAppsSection :
                                  view.groupIndex === 2 ? toolsAndDiskSection :
                                  view.groupIndex === 3 ? turboAndStartupSection : resurrectionSection
-            }
-
-            Rectangle {
-                width: parent.width
-                visible: view.groupIndex !== 0
-                implicitHeight: logColumn.implicitHeight + 20
-                height: visible ? implicitHeight : 0
-                radius: 8
-                color: "#142138"
-                border.color: "#2e415c"
-                Column {
-                    id: logColumn
-                    width: parent.width - 22
-                    x: 11; y: 10; spacing: 9
-                    PButton {
-                        caption: view.logExpanded ? view.t("− Nascondi dettagli attività", "− Hide activity details")
-                                                 : view.t("+ Dettagli attività", "+ Activity details")
-                        onPressed: view.logExpanded = !view.logExpanded
-                    }
-                    Text {
-                        visible: view.logExpanded
-                        width: parent.width
-                        text: maintenanceService.output + "\n" + readService.output
-                        wrapMode: Text.WrapAnywhere
-                        color: "#b7c9db"
-                        font.family: "Consolas"
-                        font.pixelSize: 11
-                    }
-                    PButton {
-                        visible: maintenanceService.busy
-                        height: visible ? 34 : 0
-                        caption: view.t("Annulla dopo la fase corrente", "Cancel after current step")
-                        interactive: maintenanceService.busy
-                        onPressed: maintenanceService.cancel()
-                    }
-                }
             }
 
             // QA identity is shown in the app shell, not repeated on every V2 screen.
@@ -797,6 +801,7 @@ Item {
                             width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                         }
                     }
+                    PSectionLog { caption: view.t("Dettagli pulizia", "Cleanup details") }
                 }
                 PPanel {
                     width: view.pairedPanelWidth(pair.width, 300)
@@ -851,6 +856,7 @@ Item {
                     PRow { heading:view.t("Ripristina Winsock","Reset Winsock"); hint:view.t("Potrebbe richiedere riavvio","A restart may be required"); action:"winsock_reset"; buttonText:view.t("Ripristina","Reset"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     PShortcut { caption: view.t("Crea punto di ripristino", "Create restore point"); iconName: "restore"; interactive: !view.occupied; onTriggered: view.request("restore_point") }
                     PShortcut { caption: view.t("Rapporto batteria", "Battery report"); iconName: "battery"; interactive: !view.occupied; onTriggered: view.request("battery_report") }
+                    PSectionLog { caption: view.t("Output comandi", "Command output") }
                 }
                 PPanel {
                     width: view.pairedPanelWidth(pair.width, 305)
@@ -982,6 +988,7 @@ Item {
                         PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                         PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     }
+                    PSectionLog { caption: view.t("Output ottimizzazione", "Optimization output") }
                 }
             }
         }
@@ -1281,6 +1288,7 @@ Item {
                     }
                 }
             }
+            PSectionLog { caption: view.t("Output sequenza completo", "Full sequence output") }
         }
     }
 }

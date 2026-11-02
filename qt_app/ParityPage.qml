@@ -10,6 +10,8 @@ Item {
     property int groupIndex: 0
     property string language: "it"
     property string selectedDrive: ""
+    property bool showDriveChoices: false
+    property bool showExtraDriveTools: false
     property bool showIndividualCleaning: false
     property bool logExpanded: false
     readonly property bool occupied: maintenanceService.busy || readService.busy || updateService.busy
@@ -20,6 +22,15 @@ Item {
     readonly property var drives: snapshots.drives || ({})
     readonly property var guard: snapshots.guard_status || ({})
     readonly property var progressSteps: maintenanceService.steps
+    Connections {
+        target: readService
+        function onChanged() {
+            if (view.groupIndex !== 2) return
+            var letters = readService.driveLetters
+            if (letters.length && letters.indexOf(view.selectedDrive) === -1)
+                view.selectedDrive = letters[0]
+        }
+    }
     function t(it, en) { return language === "it" ? it : en }
     function request(action, drive) {
         if (!occupied)
@@ -778,35 +789,66 @@ Item {
                         width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                     }
                     Rectangle {
-                        width: parent.width; height: 105; radius:8; color:"#142138"; border.color:"#2e415c"
+                        width: parent.width
+                        height: driveSelector.implicitHeight + 20
+                        radius: 8
+                        color: "#142138"
+                        border.color: "#2e415c"
                         Column {
-                            anchors.fill:parent; anchors.margins:11; spacing:9
-                            Row {
-                                spacing:8
-                                PButton { caption:view.t("Aggiorna unità", "Refresh drives"); interactive:!view.occupied; onPressed:view.showRead("drives") }
-                                Text { text: view.selectedDrive || "—"; color:"#e4c579"; font.pixelSize:13; anchors.verticalCenter:parent.verticalCenter }
+                            id: driveSelector
+                            x: 10
+                            y: 10
+                            width: parent.width - 20
+                            spacing: 8
+                            RowLayout {
+                                width: parent.width
+                                spacing: 8
+                                Image {
+                                    source: "image://panacea-nav/disk/detail"
+                                    sourceSize.width: 96; sourceSize.height: 96
+                                    Layout.preferredWidth: 26; Layout.preferredHeight: 26
+                                }
+                                PButton {
+                                    caption: view.selectedDrive || view.t("Seleziona unità", "Select drive")
+                                    interactive: !view.occupied && readService.driveLetters.length > 0
+                                    onPressed: view.showDriveChoices = !view.showDriveChoices
+                                }
+                                Item { Layout.fillWidth: true }
+                                PButton {
+                                    caption: view.t("Aggiorna", "Refresh")
+                                    interactive: !view.occupied
+                                    onPressed: view.showRead("drives")
+                                }
                             }
                             Flow {
-                                width: parent.width; spacing:6
+                                width: parent.width
+                                visible: view.showDriveChoices
+                                spacing: 6
                                 Repeater {
-                                    model:readService.driveLetters
+                                    model: readService.driveLetters
                                     PButton {
-                                        caption:modelData
-                                        primary:view.selectedDrive === modelData
-                                        interactive:!view.occupied
-                                        onPressed:view.selectedDrive = modelData
+                                        caption: modelData
+                                        primary: view.selectedDrive === modelData
+                                        interactive: !view.occupied
+                                        onPressed: {
+                                            view.selectedDrive = modelData
+                                            view.showDriveChoices = false
+                                        }
                                     }
                                 }
                             }
                             Text {
-                                text:view.selectedDrive ? view.t("Unità selezionata: ","Selected drive: ") + view.selectedDrive :
-                                                         view.t("Seleziona un'unità disponibile", "Select an available drive")
-                                color:"#9eafc8"; font.pixelSize:11
+                                text: view.selectedDrive ?
+                                      view.t("Unità selezionata: ", "Selected drive: ") + view.selectedDrive :
+                                      view.t("Lettura delle unità locali…", "Reading local drives…")
+                                width: parent.width
+                                color: "#9eafc8"
+                                font.pixelSize: 11
                             }
                         }
                     }
                     Repeater {
-                        model: view.drives.drives || []
+                        model: (view.drives.drives || []).filter(function(row) { return row.letter === view.selectedDrive })
                         Rectangle {
                             width: parent.width
                             height: 86
@@ -847,10 +889,26 @@ Item {
                         }
                     }
                     PRow { heading:view.t("Ottimizza unità","Optimize drive"); hint:view.t("TRIM / defrag secondo Windows","Windows TRIM / defrag"); action:"drive_optimize"; drive:view.selectedDrive; buttonText:view.t("Ottimizza","Optimize"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Integrità volume","Disk health scan"); hint:"CHKDSK /scan /perf"; action:"chkdsk"; drive:view.selectedDrive; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Ottimizzazione Windows","Windows drive optimizer"); hint:view.t("Interfaccia nativa Windows","Native Windows utility"); action:"open_defrag"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    PShortcut {
+                        caption: view.t("Apri ottimizzazione unità di Windows", "Open Windows drive optimizer")
+                        iconName: "disk"
+                        interactive: !view.occupied
+                        onTriggered: view.request("open_defrag")
+                    }
+                    PButton {
+                        caption: view.showExtraDriveTools ?
+                                 view.t("Nascondi strumenti aggiuntivi", "Hide extra tools") :
+                                 view.t("Strumenti aggiuntivi", "Extra tools")
+                        onPressed: view.showExtraDriveTools = !view.showExtraDriveTools
+                    }
+                    Column {
+                        width: parent.width
+                        visible: view.showExtraDriveTools
+                        spacing: 6
+                        PRow { heading:view.t("Integrità volume","Disk health scan"); hint:"CHKDSK /scan /perf"; action:"chkdsk"; drive:view.selectedDrive; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
+                        PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                        PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    }
                 }
             }
         }

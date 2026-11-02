@@ -4,8 +4,8 @@ import QtQuick.Layouts
 
 Window {
     id: shell
-    width: 1120
-    height: 740
+    width: 1020
+    height: 680
     minimumWidth: 760
     minimumHeight: 480
     visible: true
@@ -228,7 +228,7 @@ Window {
                 spacing: 0
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 58
+                    Layout.preferredHeight: 38
                     color: "#101d30"
                     RowLayout {
                         anchors.fill: parent
@@ -238,7 +238,7 @@ Window {
                         Text {
                             text: "Panacea 2.0.2 · Qt QA"
                             font.family: "Segoe UI Semibold"
-                            font.pixelSize: 16
+                            font.pixelSize: 13
                             font.bold: true
                             color: "#f1f3f8"
                             Layout.fillWidth: true

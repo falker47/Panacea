@@ -946,33 +946,121 @@ Item {
                 text:view.guard.message || ""
                 width:parent.width; color:view.guard.blocked ? "#e4b66d" : "#9eafc8"; font.pixelSize:11; wrapMode:Text.WordWrap
             }
+            Text {
+                text: view.t("Fasi della manutenzione", "Maintenance steps")
+                width: parent.width
+                color: "#f1f3f8"
+                font.pixelSize: 17
+                font.bold: true
+            }
             Flow {
                 id: stepGrid
-                width:parent.width; spacing:8
+                width: parent.width
+                spacing: 8
                 Repeater {
-                    model:[
-                        view.t("Punto di ripristino", "Restore point"),
-                        view.t("Cache browser", "Browser caches"),
-                        view.t("File temporanei", "Temporary files"),
-                        view.t("Cestino", "Recycle Bin"),
-                        "DNS",
-                        view.t("Reset di rete", "Network reset"),
-                        view.t("Ottimizzazione unità", "Drive optimization"),
-                        view.t("Scansione disco", "Disk health scan"),
-                        view.t("Integrità immagine", "Windows image health"),
-                        view.t("Scansione file sistema", "System file scan")
+                    model: [
+                    { title: view.t("Punto di ripristino", "Restore point"), help: view.t("Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati non saranno recuperabili.", "Safety · Verify a new Windows restore point. Deleted files cannot be recovered.") },
+                    { title: view.t("Cache browser", "Browser caches"), help: view.t("Pulizia · Rimuove i dati temporanei della cache dei browser.", "Cleanup · Remove temporary browser cache data.") },
+                    { title: view.t("File temporanei", "Temporary files"), help: view.t("Pulizia · Elimina i file temporanei idonei; quelli protetti vengono ignorati.", "Cleanup · Remove eligible temporary files; protected items are skipped.") },
+                    { title: view.t("Cestino", "Recycle Bin"), help: view.t("Pulizia · Elimina definitivamente tutti gli elementi del Cestino.", "Cleanup · Permanently delete all items in the Recycle Bin.") },
+                    { title: view.t("Cache DNS", "DNS cache"), help: view.t("Rete · Aggiorna le risoluzioni dei nomi di dominio memorizzate localmente.", "Network · Refresh locally cached domain-name lookups.") },
+                    { title: view.t("Reset di rete", "Network reset"), help: view.t("Rete · Reimposta Winsock; potrebbe essere necessario riavviare.", "Network · Reset Winsock; a restart may be needed.") },
+                    { title: view.t("Ottimizzazione unità", "Drive optimization"), help: view.t("Disco · Lascia che Windows utilizzi il metodo di ottimizzazione adatto all'unità.", "Disk · Let Windows use the optimization appropriate for the drive.") },
+                    { title: view.t("Scansione disco", "Disk health scan"), help: view.t("Disco · Analizza il file system per individuare errori con CHKDSK online.", "Disk · Scan the file system for errors using online CHKDSK.") },
+                    { title: view.t("Integrità immagine", "Windows image health"), help: view.t("Riparazione · Verifica la presenza di corruzione registrata nell'immagine Windows.", "Repair · Check recorded corruption in the Windows component image.") },
+                    { title: view.t("Scansione file sistema", "System file scan"), help: view.t("Riparazione · Analizza e ripara i file di sistema protetti con SFC.", "Repair · Scan and repair protected Windows files using SFC.") }
                     ]
                     Rectangle {
-                        width:stepGrid.width >= 640 ? (stepGrid.width - 8) / 2 : stepGrid.width
-                        height:55; radius:7; color:"#142138"; border.color:"#2e415c"
-                        RowLayout {
-                            anchors.fill:parent; anchors.margins:10; spacing:9
-                            Rectangle {
-                                width:25; height:25; radius:13; color:"#263a56"
-                                Text { anchors.centerIn:parent; text:(index+1); color:"#e4c579"; font.pixelSize:12; font.bold:true }
+                        id: guidedStep
+                        objectName: "resurrection_step_" + index
+                        property bool expanded: false
+                        width: stepGrid.width >= 640 ? (stepGrid.width - 8) / 2 : stepGrid.width
+                        height: guidedContent.implicitHeight + 18
+                        radius: 8
+                        color: "#142138"
+                        border.color: "#2e415c"
+                        Column {
+                            id: guidedContent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            anchors.topMargin: 9
+                            spacing: 5
+                            RowLayout {
+                                width: parent.width
+                                spacing: 8
+                                Text {
+                                    text: ("0" + (index + 1)).slice(-2)
+                                    Layout.preferredWidth: 25
+                                    color: "#e4c579"
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        text: modelData.title
+                                        Layout.fillWidth: true
+                                        color: "#f1f3f8"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    Text {
+                                        text: view.stepCaption(index)
+                                        Layout.fillWidth: true
+                                        color: index < maintenanceService.progressDone ? "#78c8a8" : "#9eafc8"
+                                        font.pixelSize: 10
+                                    }
+                                }
+                                Rectangle {
+                                    id: stepInfo
+                                    width: 28
+                                    height: 28
+                                    radius: 6
+                                    color: guidedStep.expanded ? "#263a56" : "#1b2b44"
+                                    border.color: activeFocus ? "#76b6e2" : "#2e415c"
+                                    activeFocusOnTab: true
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: view.t("Dettagli fase ", "Step details ") + (index + 1)
+                                    Accessible.description: modelData.help
+                                    function activate() { guidedStep.expanded = !guidedStep.expanded }
+                                    Keys.onReturnPressed: activate()
+                                    Keys.onSpacePressed: activate()
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "i"
+                                        color: "#9eafc8"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: stepInfo.activate()
+                                    }
+                                }
                             }
-                            Text { text:modelData; Layout.fillWidth:true; color:"#f1f3f8"; font.pixelSize:12; wrapMode:Text.WordWrap }
-                            Text { text:view.stepCaption(index); color:index < maintenanceService.progressDone ? "#78c8a8" : "#9eafc8"; font.pixelSize:10 }
+                            Text {
+                                id: stepExplanation
+                                width: parent.width
+                                visible: guidedStep.expanded
+                                text: modelData.help
+                                color: "#9eafc8"
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                width: parent.width
+                                visible: guidedStep.expanded && progressSteps.length > index
+                                text: progressSteps.length > index ? (progressSteps[index].message || "") : ""
+                                color: "#f1f3f8"
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
                         }
                     }
                 }

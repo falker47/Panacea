@@ -62,7 +62,7 @@ Item {
     }
     function diskAccent() {
         var d = metricCapacity("disk")
-        return !d ? "#9eafc8" : d[2] >= 95 ? "#df7e85" : d[2] >= 85 ? "#e4b66d" : "#e4c579"
+        return !d ? "#9eafc8" : d[2] >= 95 ? "#ee939a" : d[2] >= 85 ? "#e4b66d" : "#e4c579"
     }
     function powerCaption() {
         var state = metricDetails.power || "Unknown"
@@ -523,7 +523,7 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-                            Text { text: modelData.value; color: "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
+                            Text { text: modelData.value; color: modelData.id === "disk" ? view.diskAccent() : modelData.id === "ram" && parseFloat(modelData.value) >= 90 ? "#e4b66d" : "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
                             PMiniGraph {
                                 visible: modelData.id !== "disk"
                                 width: parent.width
@@ -535,12 +535,21 @@ Item {
                                 visible: modelData.id === "disk"
                                 width: parent.width
                                 height: visible ? 12 : 0
+                                progressColor: view.diskAccent()
                                 fraction: modelData.id === "disk" ?
                                           Math.max(0, Math.min(1, (parseFloat(modelData.value) || 0) / 100)) : 0
                             }
                             Text {
                                 text: modelData.detail
                                 width: parent.width; color: "#9eafc8"; font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: modelData.extra || ""
+                                width: parent.width
+                                color: "#9eafc8"
+                                font.pixelSize: 11
+                                visible: text.length > 0
                                 elide: Text.ElideRight
                             }
                         }

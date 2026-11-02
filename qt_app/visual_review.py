@@ -19,16 +19,35 @@ SCALES = (100, 125, 150)
 SIZES = ((1366, 768), (1920, 1080))
 
 
-def inspect(root: Path, baseline: Path, target: Path) -> dict:
+def current_reference_is_fresh(reference: Path, repository_root: Path) -> bool:
+    """Require reference screenshot metadata to identify the same V2 source."""
+    try:
+        metadata = json.loads(reference.read_text(encoding="utf-8"))
+        captured = metadata["source_sha256"]["panacea_ui.py"]
+        actual = hashlib.sha256((repository_root / "panacea_ui.py").read_bytes()).hexdigest()
+        return captured == actual
+    except (OSError, KeyError, TypeError, ValueError):
+        return False
+
+
+def inspect(root: Path, baseline: Path, target: Path,
+            current_baseline: Path | None = None) -> dict:
     """Read captures and their corresponding committed stable reference."""
     records = []
     tiles = []
+    repo = baseline.parents[2]
     for width, height in SIZES:
         for scale in SCALES:
             for tab, screen in enumerate(SCREENS):
                 key = f"{width}x{height}-{scale}"
                 candidate = root / f"matrix-{key}-tab{tab}-it.png"
-                original = baseline / f"v2-final-{key}" / f"{screen}.png"
+                historic = baseline / f"v2-final-{key}"
+                reference_dir = (current_baseline if key == "1366x768-100" and current_baseline is not None
+                                 else historic)
+                original = reference_dir / f"{screen}.png"
+                reference_fresh = current_reference_is_fresh(reference_dir / "observations.json", repo)
+                if key == "1366x768-100" and current_baseline is not None and not reference_fresh:
+                    raise ValueError("Current V2 reference does not match the checked-out Panacea source")
                 meta_file = candidate.with_suffix(".json")
                 if not candidate.is_file() or not original.is_file() or not meta_file.is_file():
                     raise FileNotFoundError(f"Missing screenshot pair or metadata: {key} / {screen}")
@@ -59,6 +78,8 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
                         "qt_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
                         "stable_sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
                         "mean_rgb_difference_0_255": mean_absolute_error,
+                        "reference_matches_current_v2": reference_fresh,
+                        "reference_kind": ("current_v2_capture" if reference_fresh else "historical_v2_capture"),
                         "interpretation": "diagnostic_only_not_pixel_parity",
                     })
                     if key == "1366x768-100":
@@ -89,6 +110,7 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
     sheet.save(target / "visual-parity-contact-sheet.jpg", quality=88)
     report = {
         "status": "comparison_generated_not_approved",
+        "current_source_reference_pairs": sum(x["reference_matches_current_v2"] for x in records),
         "method": "paired screenshots, dimensions, SHA-256, and mean RGB absolute difference",
         "limitations": [
             "Qt and Tk font rasterization differs",
@@ -96,6 +118,7 @@ def inspect(root: Path, baseline: Path, target: Path) -> dict:
             "stable captures use V2 fixture data; Qt safe smoke does not simulate maintenance",
             "color difference is not a functional or accessibility certification",
             "QT_SCALE_FACTOR simulates Qt scaling; this is not a physical Windows display DPI test",
+            "Historical reference captures may predate the current five-group stable UI; only current-source captures are authoritative",
         ],
         "comparisons": records,
     }
@@ -113,9 +136,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--captures", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--current-baseline", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(inspect(args.captures, args.baseline, args.out)))
+    print(json.dumps(inspect(args.captures, args.baseline, args.out, args.current_baseline)))
     return 0
 
 

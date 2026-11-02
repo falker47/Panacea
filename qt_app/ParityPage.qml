@@ -42,6 +42,44 @@ Item {
         if (value === false) return t("Disattivo", "Off")
         return t("Non disponibile", "Unavailable")
     }
+    readonly property var metricDetails: liveMetrics.details || ({})
+    function metricCapacity(key) {
+        var values = metricDetails[key]
+        return values && values.length === 3 && typeof values[0] === "number"
+               && typeof values[1] === "number" ? values : null
+    }
+    function ramCapacityText() {
+        var values = metricCapacity("ram")
+        return values ? t((values[0] - values[1]).toFixed(1) + " GB in uso / ",
+                          (values[0] - values[1]).toFixed(1) + " GB used / ")
+                        + values[0].toFixed(1) + " GB" : t("Memoria non disponibile", "Memory unavailable")
+    }
+    function diskCapacityText() {
+        var values = metricCapacity("disk")
+        return values ? t(values[1].toFixed(1) + " GB liberi / ",
+                          values[1].toFixed(1) + " GB free / ")
+                        + values[0].toFixed(1) + " GB" : t("Disco non disponibile", "Drive unavailable")
+    }
+    function diskAccent() {
+        var d = metricCapacity("disk")
+        return !d ? "#9eafc8" : d[2] >= 95 ? "#df7e85" : d[2] >= 85 ? "#e4b66d" : "#e4c579"
+    }
+    function powerCaption() {
+        var state = metricDetails.power || "Unknown"
+        var label = state === "Charging" ? t("In carica", "Charging") :
+                    state === "Plugged In" ? t("Collegato", "Plugged In") :
+                    state === "On Battery" ? t("A batteria", "On battery") :
+                    t("Non disponibile", "Unavailable")
+        return typeof metricDetails.battery === "number" ? metricDetails.battery + "% · " + label : label
+    }
+    function restartCaption() {
+        var match = /^(\\d+)d (\\d+)h (\\d+)m$/.exec(metricDetails.uptime || "")
+        if (!match) return t("Ultimo riavvio · Non disponibile", "Last restart · Unavailable")
+        var days = Number(match[1]), hours = Number(match[2]), minutes = Number(match[3])
+        var elapsed = days > 0 ? days + t(" g ", "d ") + hours + " h" :
+                      hours > 0 ? hours + " h " + minutes + " min" : minutes + " min"
+        return t("Ultimo riavvio · ", "Last restart · ") + elapsed + t(" fa", " ago")
+    }
     function stepCaption(index) {
         if (progressSteps.length > index) {
             return progressSteps[index].success ? t("Completato", "Completed") : t("Non riuscito", "Failed")
@@ -433,8 +471,8 @@ Item {
                 Repeater {
                     model: [
                         { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
-                        { id: "ram", icon: "memory", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.hardware.ram_info || "—" },
-                        { id: "disk", icon: "drive", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: "#e4c579", detail: view.hardware.disk_model || "—" }
+                        { id: "ram", icon: "memory", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.ramCapacityText(), extra: view.hardware.ram_info || "" },
+                        { id: "disk", icon: "drive", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
                     ]
                     Rectangle {
                         width: metricFlow.width >= 660 ? (metricFlow.width - 20) / 3 :

@@ -404,8 +404,8 @@ Item {
                     width: parent.width - 20
                     spacing: 8
                 Rectangle {
-                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 12) / 2 : summaryFlow.width
-                    height: 128; radius: 8; color: "#142138"; border.color: "#2e415c"
+                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 8) / 2 : summaryFlow.width
+                    height: 145; radius: 8; color: "transparent"; border.width: 0
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
                         Row {
@@ -441,8 +441,8 @@ Item {
                     }
                 }
                 Rectangle {
-                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 12) / 2 : summaryFlow.width
-                    height: 128; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
+                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 8) / 2 : summaryFlow.width
+                    height: 145; radius: 8; color: "#1b2b44"; border.width: 0
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
                         Row {

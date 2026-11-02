@@ -34,10 +34,32 @@ def _percent(value):
 def _format_sample(data):
     ram = data.get("ram")
     disk = data.get("disk")
+    def capacities(values):
+        if not isinstance(values, (tuple, list)) or len(values) < 3:
+            return [None, None, None]
+        try:
+            total, free, used = map(float, values[:3])
+            if total <= 0 or not 0 <= free <= total or not 0 <= used <= 100:
+                return [None, None, None]
+            return [round(total, 1), round(free, 1), round(used, 1)]
+        except (TypeError, ValueError, OverflowError):
+            return [None, None, None]
+    battery = data.get("battery")
+    charge = battery[0] if isinstance(battery, (tuple, list)) and len(battery) == 2 else None
+    power = battery[1] if isinstance(battery, (tuple, list)) and len(battery) == 2 else "Unknown"
+    if isinstance(charge, bool) or not isinstance(charge, (int, float)) or not 0 <= charge <= 100:
+        charge = None
+    if power not in ("On Battery", "Plugged In", "Charging"):
+        power = "Unknown"
     return {
         "cpu": _percent(data.get("cpu")),
         "ram": _percent(ram[2]) if isinstance(ram, (tuple, list)) and len(ram) > 2 else "Non disponibile",
         "disk": _percent(disk[2]) if isinstance(disk, (tuple, list)) and len(disk) > 2 else "Non disponibile",
+        "details": {
+            "ram": capacities(ram), "disk": capacities(disk),
+            "battery": charge, "power": power,
+            "uptime": str(data.get("uptime") or "Unknown"),
+        },
     }
 
 
@@ -59,6 +81,10 @@ class MetricsBridge(QObject):
         self._timer.setInterval(3000)
         self._timer.timeout.connect(self.refresh)
         self.sampleReady.connect(self._apply)
+
+    @Property("QVariantMap", notify=changed)
+    def details(self):
+        return self._values.get("details", {})
 
     @Property(str, notify=changed)
     def cpu(self):

@@ -17,7 +17,8 @@ class V2GroupedControls(unittest.TestCase):
                     "restore_point", "battery_report"):
             self.assertIn('onTriggered: view.request("' + key + '")', page)
         self.assertIn("property bool showIndividualCleaning: false", page)
-        self.assertIn("visible: view.groupIndex !== 0", page)
+        self.assertIn("component PSectionLog: Rectangle", page)
+        self.assertIn("sectionLog.expanded = !sectionLog.expanded", page)
 
     def test_turbo_and_disk_keep_original_compact_focus(self):
         page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")

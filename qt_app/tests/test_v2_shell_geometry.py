@@ -11,7 +11,8 @@ class V2ShellGeometryContracts(unittest.TestCase):
         shell = (ROOT / "qt_app/Main.qml").read_text(encoding="utf-8")
         self.assertIn("self.geometry('1020x680')", old)
         self.assertIn("    width: 1020\n    height: 680", shell)
-        self.assertIn("Layout.preferredHeight: 38", shell)
+        self.assertNotIn("Layout.preferredHeight: 38", shell)
+        self.assertIn("Layout.preferredHeight: 30", shell)
         self.assertIn("Layout.preferredWidth: 302", shell)  # approved sidebar
 
 

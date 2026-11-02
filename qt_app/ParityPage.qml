@@ -192,9 +192,17 @@ Item {
         property bool interactive: true
         signal invoke(string action, string drive)
         width: parent.width
-        height: 70
-        color: "#142138"
-        radius: 6
+        height: 64
+        color: "transparent"
+        border.width: 0
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: "#2e415c"
+            opacity: 0.7
+        }
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 12

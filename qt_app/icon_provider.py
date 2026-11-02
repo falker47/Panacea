@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage
@@ -36,6 +37,17 @@ def _source_image(name: str, tone: str) -> QImage:
     return QImage(pixels, 96, 96, 96 * 4, QImage.Format_RGBA8888).copy()
 
 
+@lru_cache(maxsize=75)
+def _battery_image(percent: int, state: str) -> QImage:
+    art = make_battery_icon(
+        percent, plugged=state in ("charging", "plugged"),
+        charging=state == "charging",
+        color="#e4b66d" if percent < 20 else "#76b6e2",
+        size=96,
+    )
+    return QImage(art.tobytes(), 96, 96, 96 * 4, QImage.Format_RGBA8888).copy()
+
+
 class NavigationIconProvider(QQuickImageProvider):
     """Read-only allowlisted image provider for the five V2 destinations."""
 
@@ -45,11 +57,18 @@ class NavigationIconProvider(QQuickImageProvider):
     def requestImage(self, identifier: str, size: QSize, requestedSize: QSize) -> QImage:
         name, separator, tone = identifier.rpartition("/")
         name = _ALIASES.get(name, name)
-        allowed = (_ORIGINAL_NAMES if tone in ("active", "idle")
-                   else _DETAIL_NAMES if tone == "detail" else frozenset())
-        if not separator or name not in allowed:
-            return QImage()
-        original = _source_image(name, tone)
+        battery = re.fullmatch(r"battery-([0-9]{1,3})-(charging|plugged|unplugged)", name)
+        if battery and tone == "detail":
+            percent = int(battery.group(1))
+            if percent > 100:
+                return QImage()
+            original = _battery_image(percent, battery.group(2))
+        else:
+            allowed = (_ORIGINAL_NAMES if tone in ("active", "idle")
+                       else _DETAIL_NAMES if tone == "detail" else frozenset())
+            if not separator or name not in allowed:
+                return QImage()
+            original = _source_image(name, tone)
         if requestedSize is not None and requestedSize.isValid():
             result = original.scaled(requestedSize, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         else:

@@ -442,7 +442,13 @@ Item {
                             height: 34
                             spacing: 8
                             Image {
-                                source: "image://panacea-nav/battery/detail"
+                                source: typeof view.metricDetails.battery === "number"
+                                    ? "image://panacea-nav/battery-" +
+                                      Math.max(0, Math.min(100, Math.round(view.metricDetails.battery / 5) * 5)) +
+                                      "-" + (view.metricDetails.power === "Charging" ? "charging" :
+                                             view.metricDetails.power === "Plugged In" ? "plugged" : "unplugged") +
+                                      "/detail"
+                                    : "image://panacea-nav/battery/detail"
                                 sourceSize.width: 96; sourceSize.height: 96
                                 width: 34; height: 34
                                 fillMode: Image.PreserveAspectFit

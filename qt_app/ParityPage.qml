@@ -197,13 +197,14 @@ Item {
         id: shortcut
         property string caption: ""
         property string iconName: "apps"
+        property bool primary: false
         property bool interactive: true
         signal triggered()
         width: parent.width
         height: 46
         radius: 6
-        color: "#142138"
-        border.color: activeFocus ? "#76b6e2" : "#2e415c"
+        color: primary ? "#765f33" : "#142138"
+        border.color: activeFocus ? "#76b6e2" : primary ? "#e4c579" : "#2e415c"
         activeFocusOnTab: interactive
         Accessible.role: Accessible.Button
         Accessible.name: caption
@@ -735,22 +736,51 @@ Item {
                         width: parent.width; color: "#9eafc8"; font.pixelSize: 11; wrapMode: Text.WordWrap
                     }
                     Rectangle {
-                        width: parent.width; height: 115; radius: 8; color: "#142138"; border.color: "#2e415c"
+                        width: parent.width
+                        height: quickContent.implicitHeight + 24
+                        radius: 8
+                        color: "#142138"
+                        border.color: "#2e415c"
                         Column {
-                            anchors.fill: parent; anchors.margins: 12; spacing: 9
-                            PButton { caption: view.t("Avvia pulizia rapida", "Run quick cleanup"); primary: true; interactive: !view.occupied; onPressed: view.request("quick_cleanup") }
-                            Text {
-                                text: maintenanceService.lastAction === "quick_cleanup" ?
-                                      maintenanceService.resultStatus :
-                                      view.t("Temporanei, cestino e manutenzione DISM", "Temporary files, Recycle Bin and DISM")
-                                width: parent.width; color: "#9eafc8"; font.pixelSize: 11; wrapMode: Text.WordWrap
+                            id: quickContent
+                            x: 12
+                            y: 12
+                            width: parent.width - 24
+                            spacing: 8
+                            PShortcut {
+                                width: Math.min(190, parent.width)
+                                x: (parent.width - width) / 2
+                                height: 42
+                                primary: true
+                                iconName: "clean"
+                                caption: view.t("Avvia pulizia rapida", "Run quick cleanup")
+                                interactive: !view.occupied
+                                onTriggered: view.request("quick_cleanup")
                             }
-                            PProgress { width: parent.width; fraction: maintenanceService.lastAction === "quick_cleanup" && maintenanceService.progressTotal > 0 ? maintenanceService.progressDone / maintenanceService.progressTotal : 0 }
+                            Text {
+                                visible: maintenanceService.lastAction === "quick_cleanup" &&
+                                         maintenanceService.resultStatus.length > 0
+                                width: parent.width
+                                text: visible ? maintenanceService.resultStatus : ""
+                                color: "#9eafc8"
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                            PProgress {
+                                width: parent.width
+                                visible: maintenanceService.lastAction === "quick_cleanup"
+                                height: visible ? 7 : 0
+                                fraction: maintenanceService.progressTotal > 0 ?
+                                          maintenanceService.progressDone / maintenanceService.progressTotal : 0
+                            }
                         }
                     }
-                    PButton {
-                        caption: view.showIndividualCleaning ? view.t("Nascondi strumenti individuali", "Hide individual tools") : view.t("Mostra strumenti individuali", "Show individual tools")
-                        onPressed: view.showIndividualCleaning = !view.showIndividualCleaning
+                    PShortcut {
+                        caption: view.showIndividualCleaning ?
+                                 view.t("Nascondi strumenti individuali", "Hide individual tools") :
+                                 view.t("Mostra strumenti individuali", "Show individual tools")
+                        iconName: "tools"
+                        onTriggered: view.showIndividualCleaning = !view.showIndividualCleaning
                     }
                     Column {
                         visible: view.showIndividualCleaning
@@ -777,8 +807,22 @@ Item {
                                      "Manage or uninstall programs in Windows.")
                         width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                     }
-                    PShortcut { caption: view.t("Impostazioni applicazioni", "Apps settings"); iconName: "apps"; interactive: !view.occupied; onTriggered: view.request("apps_settings") }
-                    PShortcut { caption: view.t("Programmi classici", "Classic programs"); iconName: "tools"; interactive: !view.occupied; onTriggered: view.request("appwiz") }
+                    Rectangle {
+                        width: parent.width
+                        height: appLinks.implicitHeight + 28
+                        radius: 8
+                        color: "#142138"
+                        border.color: "#2e415c"
+                        Column {
+                            id: appLinks
+                            x: 14
+                            y: 14
+                            width: parent.width - 28
+                            spacing: 8
+                            PShortcut { caption: view.t("Impostazioni applicazioni", "Apps settings"); iconName: "apps"; interactive: !view.occupied; onTriggered: view.request("apps_settings") }
+                            PShortcut { caption: view.t("Programmi classici", "Classic programs"); iconName: "tools"; interactive: !view.occupied; onTriggered: view.request("appwiz") }
+                        }
+                    }
                 }
             }
         }
@@ -1054,7 +1098,20 @@ Item {
                                      "Disable unnecessary apps at sign-in.")
                         color:"#9eafc8"; width:parent.width; wrapMode:Text.WordWrap; font.pixelSize:11
                     }
-                    PShortcut { caption: view.t("Impostazioni di avvio", "Startup settings"); iconName: "turbo"; interactive: !view.occupied; onTriggered: view.request("startup_settings") }
+                    Rectangle {
+                        width: parent.width
+                        height: startupLinks.implicitHeight + 28
+                        radius: 8
+                        color: "#142138"
+                        border.color: "#2e415c"
+                        Column {
+                            id: startupLinks
+                            x: 14
+                            y: 14
+                            width: parent.width - 28
+                            PShortcut { caption: view.t("Impostazioni di avvio", "Startup settings"); iconName: "turbo"; interactive: !view.occupied; onTriggered: view.request("startup_settings") }
+                        }
+                    }
                 }
             }
         }

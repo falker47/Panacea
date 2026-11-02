@@ -89,6 +89,21 @@ jobs:
             python qt_app/main.py --smoke-test --smoke-width 1366 --smoke-height 768 --smoke-tab $tab --smoke-language en --capture $file
             if ($LASTEXITCODE -ne 0) { throw "English Qt page failed: $file" }
           }
+          # Compare both engines at the *actual* size of the Windows V2
+          # window; hosted desktops are sometimes limited to 1024x768.
+          $stableMeta = Get-Content "build/qt-app/stable-v2-current-1366x768-100/observations.json" -Raw | ConvertFrom-Json
+          $view = @($stableMeta.views | Where-Object { $_.section -eq "Dashboard" })[0]
+          if (-not $view) { throw "Stable dashboard size was not captured" }
+          $actualWidth = [int]$view.pixels[0]
+          $actualHeight = [int]$view.pixels[1]
+          if ($actualWidth -lt 760 -or $actualHeight -lt 480) { throw "Stable V2 window is too small for matching QA" }
+          $env:QT_SCALE_FACTOR = "1"
+          foreach ($tab in @(0,1,2,3,4)) {
+            python qt_app/main.py --smoke-test --smoke-width $actualWidth --smoke-height $actualHeight --smoke-tab $tab --smoke-language en --capture "build/qt-app/matched-v2-tab$tab-en.png"
+            if ($LASTEXITCODE -ne 0) { throw "Matched-size Qt screenshot failed for group $tab" }
+          }
+          python qt_app/current_v2_compare.py --captures build/qt-app --stable build/qt-app/stable-v2-current-1366x768-100 --out build/qt-app
+          if ($LASTEXITCODE -ne 0) { throw "Current stable/Qt same-size comparison failed" }
           python qt_app/visual_review.py --captures build/qt-app --baseline docs/validation/screenshots --current-baseline build/qt-app/stable-v2-current-1366x768-100 --out build/qt-app
           if ($LASTEXITCODE -ne 0) { throw "V2 visual comparison report failed" }
           Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue

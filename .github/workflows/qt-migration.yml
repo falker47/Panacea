@@ -91,6 +91,7 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets/panacea_icon.ico" --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
           if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
+          python -c "import pefile; p=pefile.PE(r'dist/PanaceaQtCandidate/PanaceaQtCandidate.exe'); ids={e.id for e in p.DIRECTORY_ENTRY_RESOURCE.entries}; assert 3 in ids and 14 in ids, f'Missing Panacea icon: {ids}'"
 
       - name: Remove unused Qt web runtimes
         shell: pwsh
@@ -273,6 +274,7 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onefile --windowed --icon "assets/panacea_icon.ico" --name Panacea --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt one-file production-identity prototype could not be built" }
           if (-not (Test-Path -LiteralPath "dist/Panacea.exe")) { throw "Qt one-file executable is missing" }
+          python -c "import pefile; p=pefile.PE(r'dist/Panacea.exe'); ids={e.id for e in p.DIRECTORY_ENTRY_RESOURCE.entries}; assert 3 in ids and 14 in ids, f'Missing Panacea icon: {ids}'"
 
       - name: Verify frozen helper imports and full Qt startup in isolated runner
         shell: pwsh

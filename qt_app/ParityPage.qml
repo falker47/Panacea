@@ -390,10 +390,19 @@ Item {
             width: parent.width
             spacing: 13
             PGroupHeader { caption: view.t("Panoramica", "Overview"); iconName: "dashboard" }
-            Flow {
-                id: summaryFlow
+            Rectangle {
+                id: overviewCard
                 width: parent.width
-                spacing: 12
+                height: summaryFlow.width >= 670 ? 169 : 322
+                radius: 8
+                color: "#142138"
+                border.color: "#2e415c"
+                Flow {
+                    id: summaryFlow
+                    x: 10
+                    y: 10
+                    width: parent.width - 20
+                    spacing: 8
                 Rectangle {
                     width: summaryFlow.width >= 670 ? (summaryFlow.width - 12) / 2 : summaryFlow.width
                     height: 128; radius: 8; color: "#142138"; border.color: "#2e415c"
@@ -462,6 +471,7 @@ Item {
                             onPressed: view.request("windows_update")
                         }
                     }
+                }
                 }
             }
             Flow {

@@ -73,7 +73,7 @@ Item {
         return typeof metricDetails.battery === "number" ? metricDetails.battery + "% · " + label : label
     }
     function restartCaption() {
-        var match = /^(\\d+)d (\\d+)h (\\d+)m$/.exec(metricDetails.uptime || "")
+        var match = /^(\d+)d (\d+)h (\d+)m$/.exec(metricDetails.uptime || "")
         if (!match) return t("Ultimo riavvio · Non disponibile", "Last restart · Unavailable")
         var days = Number(match[1]), hours = Number(match[2]), minutes = Number(match[3])
         var elapsed = days > 0 ? days + t(" g ", "d ") + hours + " h" :
@@ -429,14 +429,30 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                        Text {
-                            text: view.hardware.cpu_name || view.t("Dati hardware non ancora letti", "Hardware data not yet read")
-                            width: parent.width; color: "#9eafc8"; font.pixelSize: 12; elide: Text.ElideRight
+                        Row {
+                            width: parent.width
+                            height: 34
+                            spacing: 8
+                            Image {
+                                source: "image://panacea-nav/battery/detail"
+                                sourceSize.width: 96; sourceSize.height: 96
+                                width: 34; height: 34
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
+                            Text {
+                                text: view.powerCaption()
+                                color: view.metricDetails.power === "Charging" ? "#e4c579" : "#f1f3f8"
+                                font.pixelSize: 12; font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
-                        PButton {
-                            caption: view.t("Leggi hardware", "Read hardware")
-                            interactive: !view.occupied
-                            onPressed: view.showRead("hardware")
+                        Text {
+                            text: view.restartCaption()
+                            width: parent.width
+                            color: "#9eafc8"
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
                         }
                     }
                 }

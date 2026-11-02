@@ -263,14 +263,24 @@ Item {
                 caption: (sectionLog.expanded ? "− " : "+ ") + sectionLog.caption
                 onPressed: sectionLog.expanded = !sectionLog.expanded
             }
-            Text {
+            Flickable {
+                id: logViewport
                 width: parent.width
+                height: sectionLog.expanded ? 160 : 0
                 visible: sectionLog.expanded
-                text: maintenanceService.output + "\n" + readService.output
-                wrapMode: Text.WrapAnywhere
-                color: "#b7c9db"
-                font.family: "Consolas"
-                font.pixelSize: 11
+                clip: true
+                contentWidth: width
+                contentHeight: logText.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                Text {
+                    id: logText
+                    width: logViewport.width
+                    text: sectionLog.expanded ? maintenanceService.output + "\n" + readService.output : ""
+                    wrapMode: Text.WrapAnywhere
+                    color: "#b7c9db"
+                    font.family: "Consolas"
+                    font.pixelSize: 11
+                }
             }
             PButton {
                 width: parent.width

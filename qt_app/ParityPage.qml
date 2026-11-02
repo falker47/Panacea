@@ -355,30 +355,57 @@ Item {
         id: spark
         property var points: []
         property color lineColor: "#76b6e2"
+        property bool goldFill: false
         width: parent.width
-        height: 45
+        height: 50
         onPointsChanged: requestPaint()
         onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
         onPaint: {
             var ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (!points || points.length < 2) return
+
+            // The original Tk graph has 60 positions, initially at 0%, and
+            // subtle dotted 25/50/75% guides. Do not stretch 3 samples over
+            // the entire x-axis and imply a history that was not measured.
             ctx.beginPath()
-            ctx.lineWidth = 2
-            ctx.strokeStyle = lineColor
-            for (var i = 0; i < points.length; i++) {
-                var x = i * (width - 2) / (points.length - 1) + 1
-                var y = (height - 3) - Math.max(0, Math.min(100, points[i])) * (height - 6) / 100
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+            ctx.strokeStyle = "#2e415c"
+            ctx.lineWidth = 1
+            for (var level = 25; level <= 75; level += 25) {
+                var gy = height * (1 - level / 100)
+                for (var gx = 0; gx < width; gx += 7) {
+                    ctx.moveTo(gx, gy)
+                    ctx.lineTo(Math.min(width, gx + 2), gy)
+                }
             }
             ctx.stroke()
-            ctx.lineTo(width - 1, height - 1)
-            ctx.lineTo(1, height - 1)
+
+            var length = points ? Math.min(60, points.length) : 0
+            if (length === 0) return
+            var coords = []
+            for (var i = 0; i < 60; i++) {
+                var source = i < 60 - length ? 0 : points[points.length - 60 + i]
+                var y = height * (1 - Math.max(0, Math.min(100, Number(source))) / 100)
+                coords.push([i * (width - 1) / 59, y])
+            }
+
+            ctx.beginPath()
+            ctx.moveTo(coords[0][0], coords[0][1])
+            for (var p = 1; p < coords.length; p++)
+                ctx.lineTo(coords[p][0], coords[p][1])
+            ctx.lineTo(width - 1, height)
+            ctx.lineTo(0, height)
             ctx.closePath()
-            ctx.globalAlpha = 0.09
-            ctx.fillStyle = lineColor
+            ctx.fillStyle = goldFill ? "#3b342b" : "#24364c"
             ctx.fill()
-            ctx.globalAlpha = 1
+
+            ctx.beginPath()
+            ctx.moveTo(coords[0][0], coords[0][1])
+            for (var j = 1; j < coords.length; j++)
+                ctx.lineTo(coords[j][0], coords[j][1])
+            ctx.lineWidth = 2
+            ctx.strokeStyle = lineColor
+            ctx.stroke()
         }
     }
 
@@ -599,6 +626,7 @@ Item {
                                 height: visible ? 45 : 0
                                 points: modelData.series
                                 lineColor: modelData.accent
+                                goldFill: modelData.id === "ram"
                             }
                             PProgress {
                                 visible: modelData.id === "disk"

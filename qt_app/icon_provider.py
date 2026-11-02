@@ -20,7 +20,7 @@ _ALIASES = {
     "shield-plus.png": "resurrect",
 }
 _ORIGINAL_NAMES = frozenset(("dashboard", "clean", "tools", "turbo", "resurrect"))
-_DETAIL_NAMES = frozenset(("cpu", "memory", "drive", "scan", "restore", "updates", "windows", "battery", "apps", "tools", "turbo"))
+_DETAIL_NAMES = frozenset(("cpu", "memory", "drive", "scan", "restore", "updates", "windows", "battery", "apps", "tools", "turbo", "disk"))
 
 
 @lru_cache(maxsize=10)

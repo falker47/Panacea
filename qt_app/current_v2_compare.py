@@ -9,7 +9,14 @@ import json
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageOps, ImageStat
-from qt_app.visual_review import current_reference_is_fresh
+
+# The comparison is also executed directly as python qt_app/current_v2_compare.py.
+import sys
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from qt_app.visual_review import current_reference_is_fresh  # noqa: E402
 
 
 SCREENS = ("dashboard", "cleaning", "tools", "turbo", "resurrect")

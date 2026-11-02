@@ -226,65 +226,6 @@ Window {
             ColumnLayout {
                 anchors.fill: parent
                 spacing: 0
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 38
-                    color: "#101d30"
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 25
-                        anchors.rightMargin: 23
-                        spacing: 10
-                        Text {
-                            text: "Panacea 2.0.2 · Qt QA"
-                            font.family: "Segoe UI Semibold"
-                            font.pixelSize: 13
-                            font.bold: true
-                            color: "#f1f3f8"
-                            Layout.fillWidth: true
-                        }
-                        Rectangle {
-                            width: 116; height: 28; radius: 6
-                            color: updateService.busy ? "#334158" : "#1b2b44"
-                            border.color: "#2e415c"
-                            activeFocusOnTab: !updateService.busy
-                            Accessible.role: Accessible.Button
-                            Accessible.name: shell.label("Controlla aggiornamenti", "Check updates")
-                            function activate() { if (!updateService.busy) updateService.check() }
-                            Keys.onReturnPressed: activate()
-                            Keys.onSpacePressed: activate()
-                            Text {
-                                anchors.centerIn: parent
-                                text: shell.label("Aggiornamenti", "Check updates")
-                                font.pixelSize: 11
-                                color: "#f1f3f8"
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: !updateService.busy
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: parent.activate()
-                            }
-                        }
-                        Rectangle {
-                            width: 51; height: 28; radius: 6; color: "#263a56"
-                            activeFocusOnTab: true
-                            Accessible.role: Accessible.Button
-                            Accessible.name: shell.label("Cambia lingua", "Switch language")
-                            function activate() { shell.language = shell.language === "it" ? "en" : "it" }
-                            Keys.onReturnPressed: activate()
-                            Keys.onSpacePressed: activate()
-                            Text { anchors.centerIn: parent; text: shell.language.toUpperCase(); color: "#e4c579"; font.pixelSize: 12 }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
-                        }
-                        Text {
-                            text: "QA"
-                            color: "#e4c579"
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-                    }
-                }
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -312,8 +253,8 @@ Window {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 35
-                    color: "#101d30"
+                    Layout.preferredHeight: 30
+                    color: "#0b1525"
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 24
@@ -326,6 +267,56 @@ Window {
                             font.pixelSize: 11
                             elide: Text.ElideRight
                             Layout.fillWidth: true
+                        }
+                        Rectangle {
+                            width: 115; height: 24; radius: 5
+                            color: "#1b2b44"
+                            border.color: activeFocus ? "#76b6e2" : "#2e415c"
+                            activeFocusOnTab: !updateService.busy
+                            Accessible.role: Accessible.Button
+                            Accessible.name: shell.label("Controlla aggiornamenti", "Check updates")
+                            function activate() { if (!updateService.busy) updateService.check() }
+                            Keys.onReturnPressed: activate()
+                            Keys.onSpacePressed: activate()
+                            Text {
+                                anchors.centerIn: parent
+                                text: shell.label("Aggiornamenti", "Check updates")
+                                color: "#f1f3f8"
+                                font.pixelSize: 10
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !updateService.busy
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: parent.activate()
+                            }
+                        }
+                        Rectangle {
+                            width: 40; height: 24; radius: 5
+                            color: "#263a56"
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: shell.label("Cambia lingua", "Switch language")
+                            function activate() { shell.language = shell.language === "it" ? "en" : "it" }
+                            Keys.onReturnPressed: activate()
+                            Keys.onSpacePressed: activate()
+                            Text {
+                                anchors.centerIn: parent
+                                text: shell.language.toUpperCase()
+                                color: "#e4c579"
+                                font.pixelSize: 11
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: parent.activate()
+                            }
+                        }
+                        Text {
+                            text: "QA"
+                            color: "#e4c579"
+                            font.pixelSize: 10
+                            font.bold: true
                         }
                     }
                 }

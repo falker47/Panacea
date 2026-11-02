@@ -420,7 +420,7 @@ Item {
         Column {
             id: content
             x: 22
-            y: 23
+            y: view.groupIndex === 0 ? 14 : 23
             width: Math.max(250, viewport.width - 44)
             spacing: 15
 

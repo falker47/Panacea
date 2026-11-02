@@ -13,6 +13,9 @@ class V2ActivityLogParity(unittest.TestCase):
         self.assertIn("readService.output", qml)
         self.assertIn("maintenanceService.cancel()", qml)
         self.assertIn("sectionLog.expanded = !sectionLog.expanded", qml)
+        self.assertIn("contentHeight: logText.implicitHeight", qml)
+        self.assertIn("height: sectionLog.expanded ? 160 : 0", qml)
+        self.assertIn('text: sectionLog.expanded ? maintenanceService.output', qml)
         self.assertNotIn("property bool logExpanded:", qml)
 
 

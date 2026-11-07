@@ -7,6 +7,19 @@ LAB = Path(__file__).resolve().parents[1]
 
 
 class QtLabContract(unittest.TestCase):
+    def test_live_history_keeps_all_sixty_legacy_plot_positions(self):
+        from PySide6.QtCore import QCoreApplication
+        from qt_lab.main import MetricsBridge
+        app = QCoreApplication.instance() or QCoreApplication([])
+        bridge = MetricsBridge()
+        try:
+            for value in range(65):
+                bridge._apply({"cpu": f"{value}.0%", "ram": "—", "disk": "—"})
+            self.assertEqual(bridge.cpuHistory, list(range(5, 65)))
+            app.processEvents()
+        finally:
+            bridge.stop()
+
     def test_five_pages_are_named(self):
         qml = (LAB / "Main.qml").read_text(encoding="utf-8")
         for page in ("Dashboard", "Cleaning", "Tools", "Turbo", "Resurrect"):

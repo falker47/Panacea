@@ -155,7 +155,7 @@ class MetricsBridge(QObject):
             except ValueError:
                 continue
             if 0 <= number <= 100:
-                self._history[key] = (self._history[key] + [number])[-40:]
+                self._history[key] = (self._history[key] + [number])[-60:]
                 updated = True
         if updated:
             self.changed.emit()

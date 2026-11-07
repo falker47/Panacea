@@ -21,6 +21,7 @@ Item {
     readonly property var drives: snapshots.drives || ({})
     readonly property var guard: snapshots.guard_status || ({})
     readonly property var progressSteps: maintenanceService.steps
+    readonly property real dashboardStretch: Math.min(320, Math.max(0, (viewport.height - 14 - 510) * 1.05))
     Connections {
         target: readService
         function onChanged() {
@@ -81,6 +82,26 @@ Item {
                     state === "On Battery" ? t("A batteria", "On battery") :
                     t("Non disponibile", "Unavailable")
         return typeof metricDetails.battery === "number" ? metricDetails.battery + "% · " + label : label
+    }
+    function diskStateText() {
+        var d = metricCapacity("disk")
+        return !d ? t("Spazio non disponibile", "Space unavailable") :
+               d[2] >= 95 ? t("Spazio libero insufficiente", "Low free space") :
+               d[2] >= 85 ? t("Spazio libero ridotto", "Limited free space") :
+               t("Spazio disponibile", "Space available")
+    }
+    function updateCaption() {
+        var u = snapshots.windows_updates
+        if (!u) return t("Verifica in corso…", "Checking…")
+        if (!u.verified) return t("Stato non verificato", "Status unverified")
+        if (u.recommended === 0 && u.optional === 0) return t("Aggiornato", "Up to date")
+        return u.recommended + t(" consigliati · ", " recommended · ") + u.optional + t(" facoltativi", " optional")
+    }
+    function statusCaption(state) {
+        var names = {running:t("In corso", "Running"), completed:t("Completato", "Completed"),
+                     partial:t("Parziale", "Partial"), failed:t("Non riuscito", "Failed"),
+                     cancelled:t("Annullato", "Cancelled"), unknown:t("Completamento da verificare", "Completion unverified")}
+        return names[state] || state
     }
     function restartCaption() {
         var match = /^(\d+)d (\d+)h (\d+)m$/.exec(metricDetails.uptime || "")
@@ -473,9 +494,9 @@ Item {
 
         Column {
             id: content
-            x: 22
+            x: view.groupIndex === 0 ? 24 : 31
             y: view.groupIndex === 0 ? 14 : 23
-            width: Math.max(250, viewport.width - 44)
+            width: Math.max(250, viewport.width - (view.groupIndex === 0 ? 58 : 64))
             spacing: 15
 
             Loader {
@@ -500,19 +521,21 @@ Item {
             Rectangle {
                 id: overviewCard
                 width: parent.width
-                height: summaryFlow.width >= 670 ? 169 : 322
+                height: summaryFlow.implicitHeight + 14
                 radius: 8
                 color: "#142138"
                 border.color: "#2e415c"
                 Flow {
                     id: summaryFlow
                     x: 10
-                    y: 10
+                    y: 7
                     width: parent.width - 20
                     spacing: 8
+                    readonly property bool paired: width >= 2 * 280 + spacing
+                    readonly property real cardHeight: Math.max(145, 108 + Math.round(view.dashboardStretch * .28))
                 Rectangle {
-                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 8) / 2 : summaryFlow.width
-                    height: 145; radius: 8; color: "transparent"; border.width: 0
+                    width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
+                    height: summaryFlow.cardHeight; radius: 8; color: "transparent"; border.width: 0
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
                         Row {
@@ -531,7 +554,7 @@ Item {
                             Text {
                                 text: view.hardware.os || view.t("Caricamento dettagli Windows…", "Loading Windows details…")
                                 width: parent.width - 48
-                                font.pixelSize: 17; font.bold: true; color: "#f1f3f8"
+                                font.pixelSize: 20; font.bold: true; color: "#f1f3f8"
                                 elide: Text.ElideRight
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -555,6 +578,8 @@ Item {
                             }
                             Text {
                                 text: view.powerCaption()
+                                width: parent.width - 42
+                                wrapMode: Text.WordWrap
                                 color: view.metricDetails.power === "Charging" ? "#e4c579" : "#f1f3f8"
                                 font.pixelSize: 12; font.bold: true
                                 anchors.verticalCenter: parent.verticalCenter
@@ -570,33 +595,40 @@ Item {
                     }
                 }
                 Rectangle {
-                    width: summaryFlow.width >= 670 ? (summaryFlow.width - 8) / 2 : summaryFlow.width
-                    height: 145; radius: 8; color: "#1b2b44"; border.width: 0
-                    Column {
-                        anchors.fill: parent; anchors.margins: 14; spacing: 9
-                        Row {
-                            spacing: 8
+                    width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
+                    height: summaryFlow.cardHeight; radius: 8; color: "#1b2b44"; border.width: 0
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 12; spacing: 8
                             Image {
                                 source: "image://panacea-nav/updates/detail"
                                 sourceSize.width: 96
                                 sourceSize.height: 96
-                                width: 46; height: 46
+                                Layout.preferredWidth: 46; Layout.preferredHeight: 46
                                 fillMode: Image.PreserveAspectFit
                                 smooth: true
                             }
-                            Text {
-                                text: "Windows Update"
-                                color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
-                                anchors.verticalCenter: parent.verticalCenter
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: "Windows Update"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
+                                }
+                                Text {
+                                    text: view.updateCaption()
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
+                                           (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
+                                    font.pixelSize: 12
+                                }
                             }
-                        }
-                        Text {
-                            text: view.snapshots.windows_updates ? view.snapshots.windows_updates.status :
-                                          view.t("Verifica aggiornamenti…", "Checking updates…")
-                            color: "#9eafc8"; font.pixelSize: 12
-                        }
                         PButton {
                             caption: view.t("Visualizza", "View")
+                            Layout.preferredWidth: 73
+                            height: 36
                             interactive: !view.occupied
                             onPressed: view.request("windows_update")
                         }
@@ -608,6 +640,8 @@ Item {
                 id: metricFlow
                 width: parent.width
                 spacing: 10
+                readonly property int columns: width >= 3 * 180 + 2 * spacing ? 3 : width >= 2 * 180 + spacing ? 2 : 1
+                readonly property real cardMinimumHeight: 183 + Math.round(view.dashboardStretch * .41)
                 Repeater {
                     model: [
                         { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
@@ -615,13 +649,14 @@ Item {
                         { id: "disk", icon: "drive", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
                     ]
                     Rectangle {
-                        width: metricFlow.width >= 660 ? (metricFlow.width - 20) / 3 :
-                               metricFlow.width >= 410 ? (metricFlow.width - 10) / 2 : metricFlow.width
-                        height: 188
+                        width: (metricFlow.width - (metricFlow.columns - 1) * metricFlow.spacing) / metricFlow.columns
+                        height: Math.max(metricFlow.cardMinimumHeight, metricContent.implicitHeight + 26)
                         radius: 8; color: "#142138"; border.color: "#2e415c"
                         Column {
+                            id: metricContent
                             anchors.fill: parent; anchors.margins: 13; spacing: 8
                             Row {
+                                width: parent.width
                                 spacing: 6
                                 Image {
                                     source: "image://panacea-nav/" + modelData.icon + "/detail"
@@ -633,6 +668,8 @@ Item {
                                 }
                                 Text {
                                     text: modelData.title
+                                    width: parent.width - 28
+                                    wrapMode: Text.WordWrap
                                     color: "#f1f3f8"; font.bold: true; font.pixelSize: 13
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
@@ -641,7 +678,7 @@ Item {
                             PMiniGraph {
                                 visible: modelData.id !== "disk"
                                 width: parent.width
-                                height: visible ? 45 : 0
+                                height: visible ? 50 : 0
                                 points: modelData.series
                                 lineColor: modelData.accent
                                 goldFill: modelData.id === "ram"
@@ -656,8 +693,14 @@ Item {
                             }
                             Text {
                                 text: modelData.detail
-                                width: parent.width; color: "#9eafc8"; font.pixelSize: 11
-                                elide: Text.ElideRight
+                                width: parent.width; color: "#9eafc8"; font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                visible: modelData.id === "disk"
+                                text: visible ? view.diskStateText() : ""
+                                width: parent.width; color: view.diskAccent(); font.pixelSize: 11
+                                wrapMode: Text.WordWrap
                             }
                             Text {
                                 text: modelData.extra || ""
@@ -665,7 +708,7 @@ Item {
                                 color: "#9eafc8"
                                 font.pixelSize: 11
                                 visible: text.length > 0
-                                elide: Text.ElideRight
+                                wrapMode: Text.WordWrap
                             }
                         }
                     }
@@ -677,8 +720,9 @@ Item {
                 spacing: 10
                 Rectangle {
                     width: actionFlow.width >= 570 ? (actionFlow.width - 10) / 2 : actionFlow.width
-                    height: 102; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
+                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
+                        id: scanContent
                         anchors.fill: parent; anchors.margins: 13
                         Image {
                             source: "image://panacea-nav/scan/detail"
@@ -691,7 +735,7 @@ Item {
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
-                            Text { text: view.t("File temporanei","Temporary files"); color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
+                            Text { text: view.t("File temporanei","Temporary files"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
                                 text: view.temp.no_files_deleted ? view.temp.count + " · " + view.formatBytes(view.temp.bytes)
                                       : view.t("Analisi senza eliminazione","Preview without deletion")
@@ -704,8 +748,9 @@ Item {
                 }
                 Rectangle {
                     width: actionFlow.width >= 570 ? (actionFlow.width - 10) / 2 : actionFlow.width
-                    height: 102; radius: 8; color: "#1b2b44"; border.color: "#2e415c"
+                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
+                        id: restoreContent
                         anchors.fill: parent; anchors.margins: 13
                         Image {
                             source: "image://panacea-nav/restore/detail"
@@ -718,7 +763,7 @@ Item {
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
-                            Text { text: view.t("Punto di ripristino","Restore point"); color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
+                            Text { text: view.t("Punto di ripristino","Restore point"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
                                 text: view.t("Creazione con conferma","Confirmation required")
                                 color: "#9eafc8"; font.pixelSize: 11; Layout.fillWidth: true
@@ -1189,6 +1234,7 @@ Item {
                 id: stepGrid
                 width: parent.width
                 spacing: 8
+                readonly property int columns: width >= 1180 ? 5 : width >= 610 ? 3 : width >= 430 ? 2 : 1
                 Repeater {
                     model: [
                     { title: view.t("Punto di ripristino", "Restore point"), help: view.t("Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati non saranno recuperabili.", "Safety · Verify a new Windows restore point. Deleted files cannot be recovered.") },
@@ -1206,7 +1252,7 @@ Item {
                         id: guidedStep
                         objectName: "resurrection_step_" + index
                         property bool expanded: false
-                        width: stepGrid.width >= 640 ? (stepGrid.width - 8) / 2 : stepGrid.width
+                        width: (stepGrid.width - (stepGrid.columns - 1) * stepGrid.spacing) / stepGrid.columns
                         height: guidedContent.implicitHeight + 18
                         radius: 8
                         color: "#142138"

@@ -134,6 +134,54 @@ class BridgeContracts(unittest.TestCase):
         self.assertIn("fixture resurrection", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
         self.assertNotIn("fixture temp_clean", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
 
+    def test_phase_outcome_is_visible_before_the_sequence_finishes(self):
+        import threading
+        import time
+        release = threading.Event()
+        class Running(FakeMaintenance):
+            def prepare(self, action, drive):
+                return {"nonce": "running", "title": action, "details": "Fixture"}
+
+            def execute(self, nonce, *, log, progress):
+                progress(1, 10, {"name": "Restore point", "success": False, "message": "Fixture failure"})
+                release.wait(2)
+                return {"status": "failed", "message": "Fixture failure"}
+
+        self.bridge._service = Running()
+        try:
+            self.bridge.prepare("resurrection", "")
+            self.bridge.confirm()
+            deadline = time.monotonic() + 1
+            while not self.bridge.progressDone and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(.01)
+            self.assertTrue(self.bridge.busy)
+            self.assertEqual(self.bridge.steps, [{"name": "Restore point", "success": False, "message": "Fixture failure"}])
+        finally:
+            release.set()
+            self.bridge._workers.join(2)
+
+    def test_read_failure_is_a_structured_unavailable_snapshot(self):
+        import time
+        class FailingRead:
+            def collect(self, action):
+                raise PermissionError("Fixture read unavailable")
+
+            def close(self):
+                pass
+        reader = ReadBridge()
+        reader._service = FailingRead()
+        try:
+            reader.request("hardware")
+            deadline = time.monotonic() + 1
+            while reader.busy and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(.01)
+            self.assertEqual(reader.results.get("hardware", {}).get("available"), False)
+            self.assertEqual(reader.results["hardware"]["error"], "Fixture read unavailable")
+        finally:
+            reader.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,11 @@ def main():
     metrics, reader, maintenance = MetricsBridge(), ReadBridge(), MaintenanceBridge()
     metrics._values.update(cpu="30.8%", ram="90.7%", disk="97.5%")
     reader._results["hardware"] = {"os": "Windows 11", "cpu_name": "AMD Ryzen 7"}
+    reader._results["drives"] = {"drives": [
+        {"letter": "C:", "available": True, "used_percent": 50},
+        {"letter": "D:", "available": True, "used_percent": 50},
+        {"letter": "Z:", "available": False, "error": "Fixture offline"}]}
+    reader._drives = ["C:", "D:"]
     updater = UpdateBridge(reader, maintenance)
     if len(sys.argv) > 4 and sys.argv[4] == "confirmation":
         maintenance._pending = "invalid-fixture"
@@ -29,7 +34,7 @@ def main():
     warnings = []
     engine.warnings.connect(lambda errors: warnings.extend(str(e) for e in errors))
     engine.addImageProvider("panacea-nav", NavigationIconProvider())
-    for name, value in {"applicationLanguage": sys.argv[5] if len(sys.argv) > 5 else "en", "qaSmokeMode": True,
+    for name, value in {"applicationLanguage": sys.argv[5] if len(sys.argv) > 5 else "en", "qaSmokeMode": True, "nativeConfirmationsEnabled": False,
                         "liveMetrics": metrics, "readService": reader,
                         "maintenanceService": maintenance, "updateService": updater}.items():
         engine.rootContext().setContextProperty(name, value)
@@ -77,8 +82,7 @@ def main():
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]
-            warning = text_item("Before you start" if window.property("language") == "en" else "Prima di iniziare")
-            panel = warning.parentItem().parentItem()
+            panel = next(i for i in visible if i.objectName() == "resurrectionSafety")
             descendants = list(items(panel))
             result["warning_content_height"] = max(box(i)[1] + box(i)[3] for i in descendants) - box(panel)[1]
             result["warning_panel_height"] = panel.height()
@@ -90,12 +94,21 @@ def main():
             result["panels"] = [box(text_item(t).parentItem().parentItem()) for t in names]
             if tab == 2 and window.property("language") == "en":
                 result["group_heading"] = box(next(i for i in visible if i.property("text") == "Diagnostics & Repair" and box(i)[0] >= 302))
+            if tab == 2:
+                picker = next(i for i in visible if isinstance(i.property("caption"), str) and i.property("caption").startswith("C:"))
+                result["drive_card_height"] = picker.parentItem().parentItem().parentItem().height()
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
+            master = next(i for i in visible if i.property("caption") == "All settings")
+            state = next(i for i in master.parentItem().childItems() if i.property("text") == "Unknown")
+            result["master_layout"] = {"title": box(text_item("All settings")), "toggle": box(master), "state": box(state)}
         print(json.dumps(result), flush=True)
         app.quit()
     def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "drive-choices":
+            page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_2")
+            page.setProperty("showDriveChoices", True)
         if len(sys.argv) > 4 and sys.argv[4] == "scrolled":
             page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_" + str(window.property("currentTab")))
             viewport = next(i for i in items(page) if i.objectName() == "pageViewport")

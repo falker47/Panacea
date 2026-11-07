@@ -25,7 +25,7 @@ class V2GroupedControls(unittest.TestCase):
         self.assertIn("id: turboMasterContent", page)
         self.assertIn("height:turboMasterContent.implicitHeight + 24", page)
         self.assertIn('caption: view.t("Ripristina impostazioni salvate", "Restore saved settings")', page)
-        self.assertIn("height: width < 390 ? 92 : 62", page)
+        self.assertIn("height: Math.max(width < 390 ? 110 : 52, turboRow.implicitHeight + 16)", page)
         self.assertIn("property bool showDriveChoices: false", page)
         self.assertIn("property bool showExtraDriveTools: false", page)
         self.assertIn("view.selectedDrive = letters[0]", page)

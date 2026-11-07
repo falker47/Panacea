@@ -105,6 +105,7 @@ class ReadService:
                 "free_bytes": row.get("free_bytes"),
                 "used_percent": row.get("used_percent"),
                 "error": str(row.get("error") or ""),
+                "type": str(row.get("type") or ""),
             } for row in rows]}
         if action == "turbo_status":
             manager = self._manager("performance")

@@ -22,6 +22,12 @@ class FakeGuard:
 
 
 class MaintenanceContracts(unittest.TestCase):
+    def test_progress_preserves_each_verified_phase_result(self):
+        updates = []
+        token = self.confirm("resurrection")
+        self.service.execute(token, progress=lambda done, total, result: updates.append(result))
+        self.assertEqual(updates[0], {"name": "Restore point", "success": True, "message": "Verified restore point"})
+
     def setUp(self):
         self.events = []
         self.guard = FakeGuard()

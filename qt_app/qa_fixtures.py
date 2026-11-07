@@ -30,10 +30,20 @@ class VisualReads:
         pass
 
 
-def apply_scenario(metrics, reader, maintenance, scenario, group, language):
+class VisualUpdates:
+    install_eligible = False
+
+    def check(self):
+        raise RuntimeError("Visual fixture: network/update checks are disabled")
+
+    def cancel_download(self):
+        pass
+
+
+def apply_scenario(metrics, reader, maintenance, scenario, group, language, focus=None):
     reader._results.update({
         "windows_updates": {"recommended": 0, "optional": 0, "verified": True, "status": "Up to date"},
-        "drives": {"drives": [{"letter": "C:", "available": True, "total_bytes": 256 * 1024**3,
+        "drives": {"drives": [{"letter": "C:", "available": True, "type": "Fixed", "total_bytes": 256 * 1024**3,
                                  "free_bytes": 6.4 * 1024**3, "used_percent": 97.5, "error": ""}]},
         "turbo_status": {"states": {"power": True, "visual": False, "sysmain": False,
                                       "wsearch": False, "spooler": False},
@@ -45,7 +55,8 @@ def apply_scenario(metrics, reader, maintenance, scenario, group, language):
     if scenario == "unknown":
         metrics._values = {"cpu": "—", "ram": "—", "disk": "—", "details": {}}
         metrics._history = {"cpu": [], "ram": [], "disk": []}
-        reader._results = {"windows_updates": {"verified": False}, "turbo_status": {}}
+        reader._results = {"hardware": {"available": False, "error": "SIMULATED unavailable hardware"},
+                           "windows_updates": {"verified": False}, "turbo_status": {}}
         reader._drives = []
     if scenario == "long-text":
         reader._results["hardware"].update({
@@ -57,6 +68,8 @@ def apply_scenario(metrics, reader, maintenance, scenario, group, language):
     if scenario in ("running", "completed", "partial", "failed", "cancelled"):
         maintenance._last_action = {0: "restore_point", 1: "quick_cleanup", 2: "sfc",
                                     3: "power_on", 4: "resurrection"}[group]
+        if focus == "disk":
+            maintenance._last_action = "drive_optimize"
         maintenance._result_status = scenario
         maintenance._busy = scenario == "running"
         maintenance._progress_total = 10 if group == 4 else 3
@@ -70,6 +83,8 @@ def apply_scenario(metrics, reader, maintenance, scenario, group, language):
             f"{i + 1}/{maintenance._progress_total}: UI fixture only" for i in range(count))
         maintenance._remember_result()
         scope = {0: "tools", 1: "cleaning", 2: "tools", 3: "turbo", 4: "resurrect"}[group]
+        if focus == "disk":
+            scope = "disk"
         maintenance._section_logs[scope] = maintenance._output
     if scenario == "confirmation":
         maintenance._pending = "visual-fixture-invalid-nonce"

@@ -136,6 +136,7 @@ class ReadBridge(QObject):
         def failed(exc):
             self._state = "error"
             self._last = "Dati non disponibili: " + str(exc)
+            self._results = {**self._results, action: {"available": False, "error": str(exc)}}
             scope = {"temp_preview": "cleaning", "drives": "disk"}.get(action)
             if scope:
                 self._section_logs = {**self._section_logs, scope: self._last}
@@ -308,7 +309,16 @@ class MaintenanceBridge(QObject):
             def apply():
                 self._progress_done = done
                 self._progress_total = total
-                self._append(f"{done}/{total}: {label}")
+                # Resurrection sends a structured result; quick cleanup reuses
+                # the original StepResult. Never infer success from the count.
+                row = label if isinstance(label, dict) else (
+                    {"name": label.name, "success": label.success, "message": label.message}
+                    if hasattr(label, "success") and hasattr(label, "name") else None)
+                if row is not None and done == len(self._steps) + 1:
+                    self._steps = [*self._steps, {"name": str(row.get("name", "")),
+                                                "success": row.get("success") is True,
+                                                "message": str(row.get("message", ""))}]
+                self._append(f"{done}/{total}: " + (str(row.get("name", "")) if row else str(label)))
             self._dispatcher.post(apply)
 
         def success(result):
@@ -384,12 +394,14 @@ def main(argv=None):
         "cancelled", "confirmation", "long-text"))
     parser.add_argument("--smoke-scroll", type=float, default=0, help="QA only: scroll fraction 0..1")
     parser.add_argument("--smoke-focus", choices=("cleaning", "apps", "tools", "disk", "turbo", "startup"))
+    parser.add_argument("--smoke-profile", type=Path, help="QA only: geometry/render navigation measurements")
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
     if not args.smoke_test and (args.smoke_tab != 0 or args.smoke_width
                                 or args.smoke_height or args.smoke_language
-                                or args.smoke_scenario != "default" or args.smoke_scroll or args.smoke_focus):
+                                or args.smoke_scenario != "default" or args.smoke_scroll or args.smoke_focus
+                                or args.smoke_profile):
         parser.error("smoke viewport options require --smoke-test")
     if not 0 <= args.smoke_scroll <= 1:
         parser.error("--smoke-scroll must be between 0 and 1")
@@ -433,6 +445,10 @@ def main(argv=None):
                 print(f'Administrator elevation declined or failed ({code})', file=sys.stderr)
                 return 1
             return 0
+    from qt_app.branding import application_id, configure_windows_identity
+    app_id = application_id(smoke=args.smoke_test, frozen=bool(getattr(sys, "frozen", False)), executable=sys.executable)
+    if os.name == "nt":
+        app_id = configure_windows_identity(app_id)
     _qa_trace("creating QGuiApplication")
     app = QGuiApplication([sys.argv[0]])
     _qa_trace("QGuiApplication created")
@@ -478,13 +494,13 @@ def main(argv=None):
             "ram_info": "16.0 GB RAM", "disk_model": "System SSD",
         }
     if args.smoke_test:
-        from qt_app.qa_fixtures import VisualMaintenance, apply_scenario
+        from qt_app.qa_fixtures import VisualMaintenance, VisualUpdates, apply_scenario
         maintenance = MaintenanceBridge(service=VisualMaintenance())
         apply_scenario(metrics, reader, maintenance, args.smoke_scenario,
-                       args.smoke_tab, args.smoke_language or resolve_language())
+                       args.smoke_tab, args.smoke_language or resolve_language(), args.smoke_focus)
     else:
         maintenance = MaintenanceBridge()
-    updater = UpdateBridge(reader, maintenance, on_ready=app.quit)
+    updater = UpdateBridge(reader, maintenance, flow=VisualUpdates() if args.smoke_test else None, on_ready=app.quit)
     reader._maintenance = maintenance
     reader._updater = updater
     maintenance._reader = reader
@@ -503,6 +519,8 @@ def main(argv=None):
     engine.addImageProvider("panacea-nav", NavigationIconProvider())
     engine.rootContext().setContextProperty("applicationLanguage", resolve_language())
     engine.rootContext().setContextProperty("qaSmokeMode", bool(args.smoke_test))
+    native_confirmations = os.name == "nt" and not args.smoke_test and app.platformName() == "windows"
+    engine.rootContext().setContextProperty("nativeConfirmationsEnabled", native_confirmations)
     engine.rootContext().setContextProperty("liveMetrics", metrics)
     engine.rootContext().setContextProperty("readService", reader)
     engine.rootContext().setContextProperty("maintenanceService", maintenance)
@@ -520,6 +538,9 @@ def main(argv=None):
         metrics.stop()
         return 2
     if not args.smoke_test:
+        if native_confirmations:
+            from qt_app.native_dialogs import NativeConfirmations
+            NativeConfirmations(maintenance, updater, lambda: int(engine.rootObjects()[0].winId()), parent=app)
         # The original V2 loads metadata without a manual "read" click.
         QTimer.singleShot(0, lambda: reader.request("hardware"))
     if args.smoke_test:
@@ -571,6 +592,37 @@ def main(argv=None):
             QTimer.singleShot(0, configure_page)
 
         QTimer.singleShot(0, configure_qa_view)
+        if args.smoke_profile:
+            def profile_navigation():
+                try:
+                    rows = []
+                    for phase in ("first", "warm"):
+                        for tab in range(5):
+                            begun = time.perf_counter()
+                            window.setProperty("currentTab", tab)
+                            callback = time.perf_counter()
+                            app.processEvents()
+                            geometry = time.perf_counter()
+                            frame = window.grabWindow()
+                            if frame.isNull():
+                                raise RuntimeError("Profile did not render the selected QML group")
+                            rendered = time.perf_counter()
+                            rows.append({"tab": tab, "phase": phase,
+                                         "callback_ms": round((callback - begun) * 1000, 3),
+                                         "geometry_ms": round((geometry - callback) * 1000, 3),
+                                         "frame_capture_ms": round((rendered - geometry) * 1000, 3)})
+                    window.setProperty("currentTab", args.smoke_tab)
+                    args.smoke_profile.parent.mkdir(parents=True, exist_ok=True)
+                    args.smoke_profile.write_text(json.dumps({
+                        "fixture_only": True, "platform": app.platformName(),
+                        "logical_size": [window.width(), window.height()],
+                        "method": "GUI callback, event/geometry flush and software frame capture; not compositor latency",
+                        "navigation": rows}, indent=2) + "\n", encoding="utf-8")
+                    _qa_trace("navigation profile saved")
+                except Exception as exc:
+                    _qa_trace("navigation profile failed: " + str(exc))
+                    app.exit(3)
+            QTimer.singleShot(200, profile_navigation)
         if args.capture:
             def capture():
                 _qa_trace("capture begin")
@@ -604,6 +656,7 @@ def main(argv=None):
                             "focus_view": args.smoke_focus,
                             "qml_warnings": qml_warnings,
                             "platform": app.platformName(),
+                            "windows_application_id": app_id,
                             "scaling_method": "QT_SCALE_FACTOR simulation; no Windows display setting changed",
                             "source_sha256": {name: hashlib.sha256((source.parent / name).read_bytes()).hexdigest()
                                               for name in ("Main.qml", "ParityPage.qml")},

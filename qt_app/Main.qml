@@ -32,6 +32,28 @@ Window {
             if (maintenanceService.busy) maintenanceService.cancel()
         }
     }
+    Connections {
+        target: readService
+        property bool wasBusy: false
+        function onChanged() {
+            if (!qaSmokeMode && readService.busy && !wasBusy && readService.lastAction === "temp_preview")
+                shell.currentTab = 1
+            wasBusy = readService.busy
+        }
+    }
+    Connections {
+        target: maintenanceService
+        property bool wasBusy: false
+        function onChanged() {
+            if (!qaSmokeMode && maintenanceService.busy && !wasBusy) {
+                var section = maintenanceService.activeSection
+                if (section === "cleaning") shell.currentTab = 1
+                else if (section === "tools" || section === "disk") shell.currentTab = 2
+                else if (section === "resurrect") shell.currentTab = 4
+            }
+            wasBusy = maintenanceService.busy
+        }
+    }
 
     readonly property var tabs: [
         { name: "Dashboard", detail: shell.label("Panoramica", "Overview"), icon: "dashboard" },
@@ -327,7 +349,7 @@ Window {
     FocusScope {
         id: maintenanceDialog
         anchors.fill: parent
-        visible: maintenanceService.awaitingConfirmation
+        visible: maintenanceService.awaitingConfirmation && !nativeConfirmationsEnabled
         onVisibleChanged: if (visible) cancelMaintenance.forceActiveFocus()
         Keys.onEscapePressed: maintenanceService.reject()
         Rectangle { anchors.fill: parent; color: "#cc07101d" }
@@ -357,6 +379,7 @@ Window {
                         id: confirmationCopy
                         width: parent.width
                         text: maintenanceService.details
+                        textFormat: Text.PlainText
                         color: "#f1f3f8"
                         wrapMode: Text.WordWrap
                         font.pixelSize: 13
@@ -401,7 +424,7 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        visible: updateService.pending
+        visible: updateService.pending && !nativeConfirmationsEnabled
         color: "#cc07101d"
         z: 110
         MouseArea { anchors.fill: parent }

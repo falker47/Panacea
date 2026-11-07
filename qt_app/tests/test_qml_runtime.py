@@ -62,6 +62,17 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         header = self.probe(976, 672, 2, "scrolled")["group_heading"]
         self.assertGreaterEqual(header[1], 0)
 
+    def test_drive_menu_does_not_reflow_the_optimization_panel(self):
+        closed = self.probe(976, 672, 2)["drive_card_height"]
+        opened = self.probe(976, 672, 2, "drive-choices")["drive_card_height"]
+        self.assertEqual(opened, closed)
+
+    def test_master_switch_matches_legacy_order_and_compact_stacking(self):
+        wide = self.probe(976, 672, 3)["master_layout"]
+        self.assertLess(wide["toggle"][0], wide["state"][0])
+        narrow = self.probe(760, 672, 3)["master_layout"]
+        self.assertGreaterEqual(narrow["toggle"][1], narrow["title"][1] + narrow["title"][3])
+
 
 if __name__ == "__main__":
     unittest.main()

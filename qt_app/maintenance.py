@@ -211,7 +211,8 @@ class MaintenanceService:
         def done(finished, total, result):
             log(f"{result.name}: {'completed' if result.success else 'failed'} · {result.message}")
             if progress:
-                progress(finished, total, result.name)
+                progress(finished, total, {"name": result.name, "success": result.success,
+                                           "message": result.message})
 
         result = run_sequence(steps, cancel=lambda: self._cancel.is_set() or self._completion_unknown(),
                               progress=done)

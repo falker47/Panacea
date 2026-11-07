@@ -5,6 +5,14 @@ from qt_app.icon_provider import NavigationIconProvider
 
 
 class BatteryIconTests(unittest.TestCase):
+    def test_report_shortcut_uses_the_original_gold_battery(self):
+        provider = NavigationIconProvider()
+        actual = provider.requestImage("battery-report/detail", QSize(), QSize(96, 96))
+        self.assertFalse(actual.isNull())
+        from modules.ui_icons import make_battery_icon
+        expected = make_battery_icon(70, color="#e4c579", size=96)
+        color = actual.pixelColor(30, 45)
+        self.assertEqual((color.red(), color.green(), color.blue(), color.alpha()), expected.getpixel((30, 45)))
     def test_battery_fill_and_power_state_change_render(self):
         provider = NavigationIconProvider()
         full = provider.requestImage("battery-100-plugged/detail", QSize(), QSize(96, 96))

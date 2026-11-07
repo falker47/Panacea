@@ -20,7 +20,7 @@ _ALIASES = {
     "shield-plus.png": "resurrect",
 }
 _ORIGINAL_NAMES = frozenset(("dashboard", "clean", "tools", "turbo", "resurrect"))
-_DETAIL_NAMES = frozenset(("cpu", "memory", "drive", "scan", "restore", "updates", "windows", "battery", "apps", "tools", "turbo", "disk", "clean"))
+_DETAIL_NAMES = frozenset(("cpu", "memory", "drive", "scan", "restore", "updates", "windows", "battery", "battery-report", "apps", "tools", "turbo", "disk", "clean"))
 
 
 @lru_cache(maxsize=10)
@@ -29,7 +29,8 @@ def _source_image(name: str, tone: str) -> QImage:
         color = "#e4c579" if name in ("drive", "restore", "disk") else "#76b6e2"
     else:
         color = "#e4c579" if tone == "active" else "#a5b5cd"
-    art = (make_windows_icon(color=color, size=96) if name == "windows"
+    art = (make_battery_icon(70, color="#e4c579", size=96) if name == "battery-report"
+           else make_windows_icon(color=color, size=96) if name == "windows"
            else make_battery_icon(None, color=color, size=96) if name == "battery"
            else make_icon(name, color, 96))
     pixels = art.tobytes()

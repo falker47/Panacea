@@ -69,9 +69,8 @@ Item {
     }
     function ramCapacityText() {
         var values = metricCapacity("ram")
-        return values ? t((values[0] - values[1]).toFixed(1) + " GB in uso / ",
-                          (values[0] - values[1]).toFixed(1) + " GB used / ")
-                        + values[0].toFixed(1) + " GB" : t("Memoria non disponibile", "Memory unavailable")
+        return values ? t((values[0] - values[1]).toFixed(1) + " GB usati / " + values[0].toFixed(1) + " GB",
+                          (values[0] - values[1]).toFixed(1) + " GB used / " + values[0].toFixed(1) + " GB") : t("Memoria non disponibile", "Memory unavailable")
     }
     function diskCapacityText() {
         var values = metricCapacity("disk")
@@ -147,7 +146,7 @@ Item {
         width: implicitWidth
         height: 34
         radius: 6
-        color: !interactive ? "#334158" : primary ? "#765f33" : "#1b2b44"
+        color: interactive && buttonPointer.containsMouse ? (primary ? "#957745" : "#304561") : primary ? "#765f33" : "#1b2b44"
         border.width: 1
         border.color: activeFocus ? "#76b6e2" : primary ? "#e4c579" : "#2e415c"
         activeFocusOnTab: interactive
@@ -165,13 +164,15 @@ Item {
             horizontalAlignment: button.leftAligned ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: button.caption
-            color: button.interactive ? "#f1f3f8" : "#a0aaba"
+            color: button.interactive ? "#f1f3f8" : "#999999"
             font.family: "Segoe UI"
             font.pixelSize: 12
-            font.bold: button.primary
+            font.bold: false
         }
         MouseArea {
+            id: buttonPointer
             anchors.fill: parent
+            hoverEnabled: true
             enabled: button.interactive
             cursorShape: Qt.PointingHandCursor
             onClicked: button.activate()
@@ -284,7 +285,7 @@ Item {
         width: parent.width
         height: 46
         radius: 6
-        color: primary ? "#765f33" : "#1b2b44"
+        color: shortcut.interactive && shortcutPointer.containsMouse ? (primary ? "#957745" : "#304561") : primary ? "#765f33" : "#1b2b44"
         border.color: activeFocus ? "#76b6e2" : primary ? "#e4c579" : "#2e415c"
         activeFocusOnTab: interactive
         Accessible.role: Accessible.Button
@@ -309,15 +310,17 @@ Item {
             Text {
                 text: shortcut.caption
                 Layout.fillWidth: true
-                color: shortcut.interactive ? "#f1f3f8" : "#9eafc8"
+                color: shortcut.interactive ? "#f1f3f8" : "#999999"
                 font.family: "Segoe UI"
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
+                font.pixelSize: shortcut.primary ? 12 : 13
+                font.weight: shortcut.primary ? Font.Normal : Font.DemiBold
                 wrapMode: Text.WordWrap
             }
         }
         MouseArea {
+            id: shortcutPointer
             anchors.fill: parent
+            hoverEnabled: true
             enabled: shortcut.interactive
             cursorShape: Qt.PointingHandCursor
             onClicked: shortcut.activate()
@@ -341,7 +344,8 @@ Item {
         }
         Component.onCompleted: {
             operationWasRunning = maintenanceService.busy && maintenanceService.activeSection === scope
-            if (operationWasRunning) revealOutput()
+            readWasRunning = readService.busy && scope === "cleaning" && readService.lastAction === "temp_preview"
+            if (operationWasRunning || readWasRunning) revealOutput()
         }
         Connections {
             target: maintenanceService
@@ -516,11 +520,13 @@ Item {
             x: toggle.checked ? parent.width - width : 0
             anchors.verticalCenter: parent.verticalCenter
             width: 18; height: 18; radius: 7
-            color: "#d5d9de"
+            color: toggle.interactive && togglePointer.containsMouse ? "#ffffff" : "#d5d9de"
             Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
         }
         MouseArea {
+            id: togglePointer
             anchors.fill: parent
+            hoverEnabled: true
             enabled: toggle.interactive
             cursorShape: Qt.PointingHandCursor
             onClicked: toggle.activate()
@@ -1201,6 +1207,7 @@ Item {
                                            origin.y + drivePicker.height : Math.max(0, origin.y - height)
                                         color: "#1b2b44"; radius: 6; border.color: "#2e415c"
                                         property int currentIndex: Math.max(0, view.driveChoices.indexOf(view.selectedDrive))
+                                        onActiveFocusChanged: if (visible && !activeFocus) view.showDriveChoices = false
                                         function revealSelection() {
                                             if (!driveRows) return
                                             var target = driveRows.contentY

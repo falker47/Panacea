@@ -114,6 +114,20 @@ class DashboardRuntimeGeometry(unittest.TestCase):
     def test_reading_drive_metadata_does_not_open_the_operation_log(self):
         self.assertFalse(self.probe(976, 672, 2, "drive-refresh")["disk_log"]["expanded"])
 
+    def test_first_visit_during_analysis_opens_the_live_output(self):
+        self.assertTrue(self.probe(976, 672, 1, "preview-first-visit")["cleaning_log"]["expanded"])
+
+    def test_drive_popup_closes_when_focus_leaves_it(self):
+        self.assertFalse(self.probe(976, 672, 2, "drive-focus-out")["drive_popup_visible"])
+
+    def test_body_buttons_use_the_original_hover_colors(self):
+        for tab, expected in ((0, "#304561"), (1, "#957745")):
+            with self.subTest(tab=tab):
+                self.assertEqual(self.probe(976, 672, tab, "hover-action")["action_color"], expected)
+
+    def test_disabled_button_retains_the_original_panel_color(self):
+        self.assertEqual(self.probe(976, 672, 0, "disabled-action")["action_color"], "#1b2b44")
+
 
 if __name__ == "__main__":
     unittest.main()

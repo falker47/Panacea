@@ -6,7 +6,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QPointF, QTimer, QUrl  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QTimer, QUrl  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtGui import QGuiApplication, QFontDatabase  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 from qt_app.main import MetricsBridge, ReadBridge, MaintenanceBridge  # noqa: E402
@@ -26,6 +27,9 @@ def main():
         {"letter": "D:", "available": True, "used_percent": 50},
         {"letter": "Z:", "available": False, "error": "Fixture offline"}]}
     reader._drives = ["C:", "D:"]
+    if len(sys.argv) > 4 and sys.argv[4] == "preview-first-visit":
+        reader._last_action = "temp_preview"
+        reader._busy = True
     if len(sys.argv) > 4 and sys.argv[4] == "many-drives":
         reader._drives = [chr(65 + i) + ":" for i in range(26)]
         reader._results["drives"] = {"drives": [{"letter": letter, "available": True} for letter in reader._drives]}
@@ -78,7 +82,11 @@ def main():
         thumb = next((i for i in visible if i.objectName() == "pageScrollThumb"), None)
         result["scrollbar"] = box(scrollbar) if scrollbar else None
         result["scroll_thumb"] = box(thumb) if thumb else None
-        for scope in ("tools", "disk"):
+        caption = "Analyze" if int(window.property("currentTab")) == 0 else "Run quick cleanup"
+        action = next((i for i in visible if i.property("caption") == caption), None)
+        if action:
+            result["action_color"] = action.property("color").name()
+        for scope in ("cleaning", "tools", "disk"):
             log = next((i for i in visible if i.objectName() == "sectionLog_" + scope), None)
             if log:
                 result[scope + "_log"] = {"rect": box(log), "expanded": log.property("expanded")}
@@ -122,6 +130,7 @@ def main():
                 result["drive_card_height"] = picker.parentItem().parentItem().parentItem().height()
                 menu = next((i for i in visible if i.objectName() == "drivePopup"), None)
                 result["drive_popup_height"] = menu.height() if menu else None
+                result["drive_popup_visible"] = menu is not None
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
@@ -133,6 +142,10 @@ def main():
         reader._busy = False
         app.quit()
     def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "disabled-action":
+            reader._last_action = "hardware"
+            reader._busy = True
+            reader.changed.emit()
         if len(sys.argv) > 4 and sys.argv[4] == "operation-running":
             maintenance._last_action = "sfc"
             maintenance._busy = True
@@ -141,9 +154,19 @@ def main():
             reader._last_action = "drives"
             reader._busy = True
             reader.changed.emit()
-        if len(sys.argv) > 4 and sys.argv[4] in ("drive-choices", "many-drives"):
+        if len(sys.argv) > 4 and sys.argv[4] in ("drive-choices", "many-drives", "drive-focus-out"):
             page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_2")
             page.setProperty("showDriveChoices", True)
+            if sys.argv[4] == "drive-focus-out":
+                picker = next(i for i in items(page) if i.objectName() == "driveSelector")
+                QTimer.singleShot(200, picker.forceActiveFocus)
+        if len(sys.argv) > 4 and sys.argv[4] == "hover-action":
+            caption = "Analyze" if int(window.property("currentTab")) == 0 else "Run quick cleanup"
+            action = next(i for i in items(window.contentItem()) if i.isVisible() and i.property("caption") == caption)
+            def hover_action():
+                position = action.mapToScene(QPointF(action.width() / 2, action.height() / 2))
+                QTest.mouseMove(window, QPoint(round(position.x()), round(position.y())))
+            QTimer.singleShot(200, hover_action)
         if len(sys.argv) > 4 and sys.argv[4] == "scrolled":
             page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_" + str(window.property("currentTab")))
             viewport = next(i for i in items(page) if i.objectName() == "pageViewport")

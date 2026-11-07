@@ -34,10 +34,32 @@ def _percent(value):
 def _format_sample(data):
     ram = data.get("ram")
     disk = data.get("disk")
+    def capacities(values):
+        if not isinstance(values, (tuple, list)) or len(values) < 3:
+            return [None, None, None]
+        try:
+            total, free, used = map(float, values[:3])
+            if total <= 0 or not 0 <= free <= total or not 0 <= used <= 100:
+                return [None, None, None]
+            return [round(total, 1), round(free, 1), round(used, 1)]
+        except (TypeError, ValueError, OverflowError):
+            return [None, None, None]
+    battery = data.get("battery")
+    charge = battery[0] if isinstance(battery, (tuple, list)) and len(battery) == 2 else None
+    power = battery[1] if isinstance(battery, (tuple, list)) and len(battery) == 2 else "Unknown"
+    if isinstance(charge, bool) or not isinstance(charge, (int, float)) or not 0 <= charge <= 100:
+        charge = None
+    if power not in ("On Battery", "Plugged In", "Charging"):
+        power = "Unknown"
     return {
         "cpu": _percent(data.get("cpu")),
         "ram": _percent(ram[2]) if isinstance(ram, (tuple, list)) and len(ram) > 2 else "Non disponibile",
         "disk": _percent(disk[2]) if isinstance(disk, (tuple, list)) and len(disk) > 2 else "Non disponibile",
+        "details": {
+            "ram": capacities(ram), "disk": capacities(disk),
+            "battery": charge, "power": power,
+            "uptime": str(data.get("uptime") or "Unknown"),
+        },
     }
 
 
@@ -50,6 +72,7 @@ class MetricsBridge(QObject):
     def __init__(self):
         super().__init__()
         self._values = {"cpu": "—", "ram": "—", "disk": "—"}
+        self._history = {"cpu": [], "ram": [], "disk": []}
         self._monitor = None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="panacea-qt-lab")
         self._busy = False
@@ -58,6 +81,10 @@ class MetricsBridge(QObject):
         self._timer.setInterval(3000)
         self._timer.timeout.connect(self.refresh)
         self.sampleReady.connect(self._apply)
+
+    @Property("QVariantMap", notify=changed)
+    def details(self):
+        return self._values.get("details", {})
 
     @Property(str, notify=changed)
     def cpu(self):
@@ -70,6 +97,18 @@ class MetricsBridge(QObject):
     @Property(str, notify=changed)
     def disk(self):
         return self._values["disk"]
+
+    @Property('QVariantList', notify=changed)
+    def cpuHistory(self):
+        return self._history["cpu"]
+
+    @Property('QVariantList', notify=changed)
+    def ramHistory(self):
+        return self._history["ram"]
+
+    @Property('QVariantList', notify=changed)
+    def diskHistory(self):
+        return self._history["disk"]
 
     @Slot()
     def start(self):
@@ -105,8 +144,20 @@ class MetricsBridge(QObject):
         if self._closed:
             return
         self._busy = False
-        if values != self._values:
-            self._values = values
+        updated = values != self._values
+        self._values = values
+        for key in ("cpu", "ram", "disk"):
+            displayed = values.get(key)
+            if not isinstance(displayed, str) or not displayed.endswith("%"):
+                continue
+            try:
+                number = float(displayed[:-1])
+            except ValueError:
+                continue
+            if 0 <= number <= 100:
+                self._history[key] = (self._history[key] + [number])[-60:]
+                updated = True
+        if updated:
             self.changed.emit()
 
     def stop(self):

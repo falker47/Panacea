@@ -81,6 +81,12 @@ def source_hashes():
 def fixture(ui, app, name, releases):
     """Apply real presentation/controller methods to explicit synthetic inputs."""
     app.select_frame(CASES[name][0])
+    if name.startswith('resurrection-'):
+        # State evidence needs every real phase label, including deferred cards.
+        while app._resurrection_next_index < len(app.RESURRECTION_STEPS):
+            app._pause_resurrection_cards()
+            app._build_resurrection_batch()
+        app._pause_resurrection_cards()
     if name.startswith('cleanup-'):
         # Fixtures target the optional individual tools, collapsed in normal UX.
         app._toggle_cleanup_tools()
@@ -128,7 +134,9 @@ def fixture(ui, app, name, releases):
                     return False
             return True
         def verify():
-            text = app.preview_label.cget('text')
+            # V2 now shares its preview result with the Dashboard; the former
+            # optional-tool preview_label is no longer constructed.
+            text = app.dash_preview_status.cget('text')
             status = app.operation_label.cget('text')
             combined = (text + ' ' + status).lower()
             if name == 'cleanup-loading':
@@ -398,6 +406,10 @@ def capture(args):
         def timeout():
             errors.append('UI fixture exceeded 12 seconds')
             close()
+        # Complete CTk's first native-window setup before a fixture may close it.
+        # Its titlebar setup pumps events and could otherwise run close() inside
+        # mainloop initialization. Keep all original fixture deadlines.
+        app.update()
         app.after(400, prepare)
         app.after(12000, timeout)
         app.mainloop()

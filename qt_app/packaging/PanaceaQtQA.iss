@@ -45,4 +45,4 @@ Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
 Source: "{#QtCandidateDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Panacea Qt QA"; Filename: "{app}\PanaceaQtCandidate.exe"; WorkingDir: "{app}"
+Name: "{autoprograms}\Panacea Qt QA"; Filename: "{app}\PanaceaQtCandidate.exe"; WorkingDir: "{app}"; IconFilename: "{app}\PanaceaQtCandidate.exe"; AppUserModelID: "Panacea.QtQA"

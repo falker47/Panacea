@@ -64,6 +64,16 @@ jobs:
           if (-not (Test-Path "build/qt-app/stable-v2-current-1366x768-100/dashboard.png")) { throw "Current stable dashboard screenshot missing" }
           if (-not (Test-Path "build/qt-app/stable-v2-current-1366x768-100/observations.json")) { throw "Current stable source metadata missing" }
 
+      - name: Repeat native source lifecycle with unchanged 45 second deadline
+        shell: pwsh
+        run: |
+          foreach ($attempt in @(1,2,3,4,5)) {
+            $capture = "build/qt-app/source-repeat-$attempt.png"
+            $profile = "build/qt-app/source-profile-$attempt.json"
+            python -c "import subprocess,sys; subprocess.run([sys.executable, 'qt_app/main.py', '--smoke-test', '--capture', sys.argv[1], '--smoke-profile', sys.argv[2]], check=True, timeout=45)" $capture $profile
+            if ($LASTEXITCODE -ne 0) { throw "Qt native lifecycle failed on attempt $attempt; inspect lifecycle trace" }
+          }
+
       - name: Capture V2 visual review matrix (safe Qt mode, no maintenance)
         shell: pwsh
         run: |
@@ -108,13 +118,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "V2 visual comparison report failed" }
           Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
 
+      - name: Eight-view matched fixture comparison in both languages and scales
+        shell: pwsh
+        run: |
+          python qt_app/parity_matrix.py --output build/qt-parity --mode all
+          if ($LASTEXITCODE -ne 0) { throw "Eight-view fixture evidence failed" }
+
       - name: Package independent candidate, not stable release
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets/panacea_icon.ico" --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
           if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
-          python -c "import pefile; p=pefile.PE(r'dist/PanaceaQtCandidate/PanaceaQtCandidate.exe'); ids={e.id for e in p.DIRECTORY_ENTRY_RESOURCE.entries}; assert 3 in ids and 14 in ids, f'Missing Panacea icon: {ids}'"
+          python qt_app/verify_icon.py dist/PanaceaQtCandidate/PanaceaQtCandidate.exe
+          if ($LASTEXITCODE -ne 0) { throw "Candidate original PE icon verification failed" }
 
       - name: Remove unused Qt web runtimes
         shell: pwsh
@@ -164,7 +181,16 @@ jobs:
             build/qt-app/*.png
             build/qt-app/*.jpg
             build/qt-app/*.json
+            build/qt-app/*.log
             build/qt-app/stable-v2-current-1366x768-100/**
+          if-no-files-found: warn
+
+      - name: Retain eight-view original, Qt, A/B and difference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-Qt-Eight-View-Parity-Evidence
+          path: build/qt-parity/**
           if-no-files-found: warn
 
       - name: Deliver Qt candidate only after all checks pass
@@ -185,6 +211,11 @@ jobs:
       QT_QUICK_BACKEND: software
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PE resource reader for QA installer verification
+        run: python -m pip install pefile==2024.8.26
       - uses: actions/download-artifact@v4
         with:
           name: Panacea-Qt-Migration-Candidate
@@ -217,6 +248,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Qt QA installer build failed" }
           $setup = "build/qt-installer/PanaceaQtQASetup.exe"
           if (-not (Test-Path $setup) -or (Get-Item $setup).Length -lt 1000000) { throw "QA installer is absent or too small" }
+          python qt_app/verify_icon.py $setup
+          if ($LASTEXITCODE -ne 0) { throw "Installer original PE icon verification failed" }
           $sha = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  PanaceaQtQASetup.exe" | Set-Content -LiteralPath "$setup.sha256" -Encoding ascii
           Write-Output "QA_INSTALLER_SHA256=$sha"
@@ -230,13 +263,22 @@ jobs:
           # Inno still shows the startup prompt under /VERYSILENT unless /SP- is supplied.
           $installLog = Join-Path (Resolve-Path "build/qt-installer").Path "qa-install.log"
           $arguments = @("/SP-", "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"$target`"", "/LOG=`"$installLog`"")
-          $process = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru
+          $process = Start-Process -FilePath $setup -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
           if ($process.ExitCode -ne 0) {
             if (Test-Path -LiteralPath $installLog) { Get-Content $installLog -Tail 80 }
             throw "Qt QA installer failed (Inno exit code $($process.ExitCode))"
           }
           $exe = Join-Path $target "PanaceaQtCandidate.exe"
           if (-not (Test-Path -LiteralPath $exe)) { throw "Qt QA installed EXE missing" }
+          python qt_app/verify_icon.py $exe
+          if ($LASTEXITCODE -ne 0) { throw "Installed EXE original PE icon verification failed" }
+          $qaLink = Join-Path ([Environment]::GetFolderPath("CommonPrograms")) "Panacea Qt QA.lnk"
+          if (-not (Test-Path -LiteralPath $qaLink)) { throw "QA Start Menu shortcut missing" }
+          $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($qaLink)
+          if ($shortcut.TargetPath -ne $exe -or $shortcut.IconLocation.Split(',')[0].Trim('"') -ne $exe) { throw "QA shortcut target/icon mismatch" }
+          $linkFolder = (New-Object -ComObject Shell.Application).Namespace((Split-Path -Parent $qaLink))
+          $appId = $linkFolder.ParseName((Split-Path -Leaf $qaLink)).ExtendedProperty("System.AppUserModel.ID")
+          if ($appId -cne "Panacea.QtQA") { throw "QA shortcut taskbar identity mismatch: $appId" }
           $capture = Join-Path (Resolve-Path "build/qt-installer").Path "installed.png"
           python -c "import subprocess,sys; subprocess.run([sys.argv[1], '--smoke-test', '--capture', sys.argv[2]], check=True, timeout=60)" $exe $capture
           if ($LASTEXITCODE -ne 0) { throw "Installed Qt QA startup failed" }
@@ -244,12 +286,13 @@ jobs:
           $uninstall = Join-Path $target "unins000.exe"
           if (-not (Test-Path -LiteralPath $uninstall)) { throw "Isolated QA uninstaller missing" }
           $uninstallLog = Join-Path (Resolve-Path "build/qt-installer").Path "qa-uninstall.log"
-          $removed = Start-Process -FilePath $uninstall -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`"") -Wait -PassThru
+          $removed = Start-Process -FilePath $uninstall -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`"") -WindowStyle Hidden -Wait -PassThru
           if ($removed.ExitCode -ne 0) {
             if (Test-Path -LiteralPath $uninstallLog) { Get-Content $uninstallLog -Tail 80 }
             throw "QA uninstaller failed (exit code $($removed.ExitCode))"
           }
           if (Test-Path -LiteralPath $exe) { throw "QA uninstaller left executable behind" }
+          if (Test-Path -LiteralPath $qaLink) { throw "QA uninstaller left its shortcut behind" }
 
       - name: Save QA installer smoke screenshot, even on failures
         if: always()
@@ -258,6 +301,7 @@ jobs:
           name: Panacea-Qt-QA-Installer-Evidence
           path: |
             build/qt-installer/installed.png
+            build/qt-installer/installed.lifecycle.log
             build/qt-installer/qa-install.log
             build/qt-installer/qa-uninstall.log
           if-no-files-found: warn
@@ -298,7 +342,8 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onefile --windowed --icon "assets/panacea_icon.ico" --name Panacea --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt one-file production-identity prototype could not be built" }
           if (-not (Test-Path -LiteralPath "dist/Panacea.exe")) { throw "Qt one-file executable is missing" }
-          python -c "import pefile; p=pefile.PE(r'dist/Panacea.exe'); ids={e.id for e in p.DIRECTORY_ENTRY_RESOURCE.entries}; assert 3 in ids and 14 in ids, f'Missing Panacea icon: {ids}'"
+          python qt_app/verify_icon.py dist/Panacea.exe
+          if ($LASTEXITCODE -ne 0) { throw "One-file original PE icon verification failed" }
 
       - name: Verify frozen helper imports and full Qt startup in isolated runner
         shell: pwsh
@@ -323,5 +368,6 @@ jobs:
           name: Panacea-Qt-OneFile-Compatibility-Evidence
           path: |
             build/qt-onefile/panacea.png
+            build/qt-onefile/panacea.lifecycle.log
             build/qt-onefile/identity.json
           if-no-files-found: warn

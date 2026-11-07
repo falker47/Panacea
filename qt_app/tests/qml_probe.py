@@ -26,6 +26,9 @@ def main():
         {"letter": "D:", "available": True, "used_percent": 50},
         {"letter": "Z:", "available": False, "error": "Fixture offline"}]}
     reader._drives = ["C:", "D:"]
+    if len(sys.argv) > 4 and sys.argv[4] == "many-drives":
+        reader._drives = [chr(65 + i) + ":" for i in range(26)]
+        reader._results["drives"] = {"drives": [{"letter": letter, "available": True} for letter in reader._drives]}
     updater = UpdateBridge(reader, maintenance)
     if len(sys.argv) > 4 and sys.argv[4] in ("cancelled", "failed"):
         maintenance._last_action = "resurrection"
@@ -71,6 +74,10 @@ def main():
             return box(item.parentItem().parentItem().parentItem())
         tab = int(window.property("currentTab"))
         result = {"warnings": warnings}
+        scrollbar = next((i for i in visible if i.objectName() == "pageScrollbar"), None)
+        thumb = next((i for i in visible if i.objectName() == "pageScrollThumb"), None)
+        result["scrollbar"] = box(scrollbar) if scrollbar else None
+        result["scroll_thumb"] = box(thumb) if thumb else None
         overflow = []
         for item in visible:
             if not isinstance(item.property("text"), str):
@@ -86,6 +93,8 @@ def main():
         if tab == 0:
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),
                           metrics=[card(t) for t in ("CPU", "Memory (RAM)", "System drive")])
+            result["graph_height_pixels"] = [i.height() * window.devicePixelRatio() for i in visible
+                                             if i.objectName().startswith("metric_graph_")]
         if tab == 4:
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
@@ -105,8 +114,10 @@ def main():
             if tab == 2 and window.property("language") == "en":
                 result["group_heading"] = box(next(i for i in visible if i.property("text") == "Diagnostics & Repair" and box(i)[0] >= 302))
             if tab == 2:
-                picker = next(i for i in visible if isinstance(i.property("caption"), str) and i.property("caption").startswith("C:"))
+                picker = next(i for i in visible if i.objectName() == "driveSelector")
                 result["drive_card_height"] = picker.parentItem().parentItem().parentItem().height()
+                menu = next((i for i in visible if i.objectName() == "drivePopup"), None)
+                result["drive_popup_height"] = menu.height() if menu else None
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
@@ -116,7 +127,7 @@ def main():
         print(json.dumps(result), flush=True)
         app.quit()
     def arrange():
-        if len(sys.argv) > 4 and sys.argv[4] == "drive-choices":
+        if len(sys.argv) > 4 and sys.argv[4] in ("drive-choices", "many-drives"):
             page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_2")
             page.setProperty("showDriveChoices", True)
         if len(sys.argv) > 4 and sys.argv[4] == "scrolled":

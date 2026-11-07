@@ -543,8 +543,10 @@ Item {
         property var points: []
         property color lineColor: "#76b6e2"
         property bool goldFill: false
+        readonly property real pixelRatio: Screen.devicePixelRatio || 1
         width: parent.width
-        height: 50
+        // Tk's embedded canvas remains 50 physical pixels at scaled DPI.
+        height: 50 / pixelRatio
         onPointsChanged: requestPaint()
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
@@ -557,12 +559,12 @@ Item {
             // the entire x-axis and imply a history that was not measured.
             ctx.beginPath()
             ctx.strokeStyle = "#2e415c"
-            ctx.lineWidth = 1
+            ctx.lineWidth = 1 / pixelRatio
             for (var level = 25; level <= 75; level += 25) {
                 var gy = height * (1 - level / 100)
-                for (var gx = 0; gx < width; gx += 7) {
+                for (var gx = 0; gx < width; gx += 6 / pixelRatio) {
                     ctx.moveTo(gx, gy)
-                    ctx.lineTo(Math.min(width, gx + 2), gy)
+                    ctx.lineTo(Math.min(width, gx + 2 / pixelRatio), gy)
                 }
             }
             ctx.stroke()
@@ -588,9 +590,13 @@ Item {
 
             ctx.beginPath()
             ctx.moveTo(coords[0][0], coords[0][1])
-            for (var j = 1; j < coords.length; j++)
-                ctx.lineTo(coords[j][0], coords[j][1])
-            ctx.lineWidth = 2
+            // Match the legacy smoothed line; the area polygon stays linear.
+            for (var j = 1; j < coords.length - 1; j++)
+                ctx.quadraticCurveTo(coords[j][0], coords[j][1],
+                                     (coords[j][0] + coords[j + 1][0]) / 2,
+                                     (coords[j][1] + coords[j + 1][1]) / 2)
+            ctx.lineTo(coords[coords.length - 1][0], coords[coords.length - 1][1])
+            ctx.lineWidth = 2 / pixelRatio
             ctx.strokeStyle = lineColor
             ctx.stroke()
         }
@@ -622,6 +628,15 @@ Item {
         contentWidth: width
         contentHeight: content.implicitHeight + 42
         boundsBehavior: Flickable.StopAtBounds
+        activeFocusOnTab: true
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_PageDown) contentY = Math.min(Math.max(0, contentHeight - height), contentY + height)
+            else if (event.key === Qt.Key_PageUp) contentY = Math.max(0, contentY - height)
+            else if (event.key === Qt.Key_Home) contentY = 0
+            else if (event.key === Qt.Key_End) contentY = Math.max(0, contentHeight - height)
+            else return
+            event.accepted = true
+        }
 
         Column {
             id: content
@@ -640,6 +655,46 @@ Item {
             }
 
             // QA identity is shown in the app shell, not repeated on every V2 screen.
+        }
+    }
+
+    Item {
+        id: pageScrollbar
+        objectName: "pageScrollbar"
+        anchors.right: parent.right
+        anchors.rightMargin: 4
+        anchors.top: viewport.top
+        anchors.bottom: viewport.bottom
+        anchors.topMargin: 4
+        anchors.bottomMargin: 4
+        width: 16
+        Accessible.role: Accessible.ScrollBar
+        Accessible.name: view.t("Scorri contenuto", "Scroll content")
+        readonly property real maximum: Math.max(0, viewport.contentHeight - viewport.height)
+        function setPosition(position, offset) {
+            var travel = height - scrollThumb.height
+            viewport.contentY = travel > 0 ? Math.max(0, Math.min(1, (position - offset) / travel)) * maximum : 0
+        }
+        Rectangle {
+            id: scrollThumb
+            objectName: "pageScrollThumb"
+            x: 4; width: 8; radius: 4; color: "#707070"
+            height: Math.max(24, Math.min(parent.height, parent.height * viewport.height / Math.max(1, viewport.contentHeight)))
+            y: pageScrollbar.maximum > 0 ? Math.max(0, Math.min(1, viewport.contentY / pageScrollbar.maximum)) * (parent.height - height) : 0
+        }
+        MouseArea {
+            anchors.fill: parent
+            property real grabOffset: 0
+            onPressed: function(mouse) {
+                grabOffset = mouse.y >= scrollThumb.y && mouse.y <= scrollThumb.y + scrollThumb.height ? mouse.y - scrollThumb.y : scrollThumb.height / 2
+                pageScrollbar.setPosition(mouse.y, grabOffset)
+                viewport.forceActiveFocus()
+            }
+            onPositionChanged: function(mouse) { if (pressed) pageScrollbar.setPosition(mouse.y, grabOffset) }
+            onWheel: function(wheel) {
+                viewport.contentY = Math.max(0, Math.min(pageScrollbar.maximum, viewport.contentY - wheel.angleDelta.y / 3))
+                wheel.accepted = true
+            }
         }
     }
 
@@ -825,9 +880,10 @@ Item {
                             }
                             Text { text: /%$/.test(modelData.value) ? modelData.value : "—"; color: modelData.id === "disk" ? view.diskAccent() : modelData.id === "ram" && parseFloat(modelData.value) >= 90 ? "#e4b66d" : "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
                             PMiniGraph {
+                                objectName: "metric_graph_" + modelData.id
                                 visible: modelData.id !== "disk"
                                 width: parent.width
-                                height: visible ? 50 : 0
+                                height: visible ? 50 / pixelRatio : 0
                                 points: modelData.series
                                 lineColor: modelData.accent
                                 goldFill: modelData.id === "ram"
@@ -1112,6 +1168,7 @@ Item {
                                 }
                                 PButton {
                                     id: drivePicker
+                                    objectName: "driveSelector"
                                     Layout.preferredWidth: 112
                                     caption: (view.selectedDrive || view.t("Seleziona unità", "Select drive")) + "  ▾"
                                     interactive: !view.occupied && view.driveChoices.length > 0
@@ -1126,21 +1183,32 @@ Item {
                                     }
                                     Rectangle {
                                         id: driveMenu
+                                        objectName: "drivePopup"
                                         parent: view
                                         z: 200
                                         visible: view.showDriveChoices
                                         width: drivePicker.width
-                                        height: driveOptions.implicitHeight + 8
+                                        height: Math.min(8, view.driveChoices.length) * 24 + 8
                                         property point origin: drivePicker.mapToItem(view, 0, 0)
                                         x: origin.x
                                         y: origin.y + drivePicker.height + height <= view.height ?
                                            origin.y + drivePicker.height : Math.max(0, origin.y - height)
                                         color: "#1b2b44"; radius: 6; border.color: "#2e415c"
                                         property int currentIndex: Math.max(0, view.driveChoices.indexOf(view.selectedDrive))
+                                        function revealSelection() {
+                                            if (!driveRows) return
+                                            var target = driveRows.contentY
+                                            if (currentIndex * 24 < target) target = currentIndex * 24
+                                            if ((currentIndex + 1) * 24 > target + driveRows.height)
+                                                target = (currentIndex + 1) * 24 - driveRows.height
+                                            driveRows.contentY = Math.max(0, Math.min(Math.max(0, driveRows.contentHeight - driveRows.height), target))
+                                        }
+                                        onCurrentIndexChanged: revealSelection()
                                         onVisibleChanged: if (visible) {
                                             origin = drivePicker.mapToItem(view, 0, 0)
                                             currentIndex = Math.max(0, view.driveChoices.indexOf(view.selectedDrive))
                                             forceActiveFocus()
+                                            Qt.callLater(revealSelection)
                                         }
                                         function acceptSelection() {
                                             if (!view.occupied && view.driveChoices[currentIndex])
@@ -1153,24 +1221,30 @@ Item {
                                         Keys.onReturnPressed: acceptSelection()
                                         Keys.onSpacePressed: acceptSelection()
                                         Keys.onEscapePressed: { view.showDriveChoices = false; drivePicker.forceActiveFocus() }
+                                        Flickable {
+                                            id: driveRows
+                                            x: 4; y: 4; width: parent.width - 8; height: parent.height - 8
+                                            clip: true; contentWidth: width; contentHeight: driveOptions.implicitHeight
+                                            boundsBehavior: Flickable.StopAtBounds
                                         Column {
                                             id: driveOptions
-                                            x: 4; y: 4; width: parent.width - 8
+                                            width: parent.width
                                             Repeater {
                                                 model: view.driveChoices
                                                 Rectangle {
                                                     required property int index
                                                     required property string modelData
                                                     width: parent.width; height: 24; radius: 3
-                                                    color: index === driveMenu.currentIndex ? "#244675" : "transparent"
+                                                    color: index === driveMenu.currentIndex ? "#263a56" : "transparent"
                                                     Text { x: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: "#f1f3f8"; font.pixelSize: 12 }
                                                     MouseArea {
                                                         anchors.fill: parent; hoverEnabled: true
-                                                        onEntered: driveMenu.currentIndex = index
+                                                        onPositionChanged: if (containsMouse) driveMenu.currentIndex = index
                                                         onClicked: { driveMenu.currentIndex = index; driveMenu.acceptSelection() }
                                                     }
                                                 }
                                             }
+                                        }
                                         }
                                     }
                                 }

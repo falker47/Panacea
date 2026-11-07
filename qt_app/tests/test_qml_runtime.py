@@ -10,8 +10,8 @@ PROBE = Path(__file__).with_name("qml_probe.py")
 
 
 class DashboardRuntimeGeometry(unittest.TestCase):
-    def probe(self, width, height, tab=0, scenario="default", language="en"):
-        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
+    def probe(self, width, height, tab=0, scenario="default", language="en", scale=1):
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software", QT_SCALE_FACTOR=str(scale))
         result = subprocess.run([sys.executable, str(PROBE), str(width), str(height), str(tab), scenario, language],
                                 env=env, capture_output=True, text=True, timeout=45, check=True)
         data = json.loads(result.stdout.strip().splitlines()[-1])
@@ -87,6 +87,23 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                 labels = self.probe(976, 672, 4, state)["phase_states"]
                 self.assertEqual(labels.count("Not run"), count)
                 self.assertNotIn("Not started", labels)
+
+    def test_long_view_exposes_a_scroll_thumb_that_tracks_the_page(self):
+        top = self.probe(976, 672, 2)
+        scrolled = self.probe(976, 672, 2, "scrolled")
+        self.assertIsNotNone(top["scrollbar"])
+        self.assertLess(top["scroll_thumb"][3], top["scrollbar"][3])
+        self.assertGreater(scrolled["scroll_thumb"][1], top["scroll_thumb"][1])
+
+    def test_graph_height_matches_the_native_fifty_pixel_canvas_at_150_percent(self):
+        heights = self.probe(911, 512, scale=1.5)["graph_height_pixels"]
+        self.assertEqual(len(heights), 2)
+        for height in heights:
+            self.assertAlmostEqual(height, 50, delta=1)
+
+    def test_many_drives_use_the_legacy_eight_row_popup(self):
+        data = self.probe(976, 672, 2, "many-drives")
+        self.assertLessEqual(data["drive_popup_height"], 8 * 24 + 8)
 
 
 if __name__ == "__main__":

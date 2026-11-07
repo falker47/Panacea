@@ -324,16 +324,20 @@ Window {
         }
     }
 
-    Rectangle {
+    FocusScope {
+        id: maintenanceDialog
         anchors.fill: parent
         visible: maintenanceService.awaitingConfirmation
-        color: "#cc07101d"
+        onVisibleChanged: if (visible) cancelMaintenance.forceActiveFocus()
+        Keys.onEscapePressed: maintenanceService.reject()
+        Rectangle { anchors.fill: parent; color: "#cc07101d" }
         MouseArea { anchors.fill: parent }
         z: 100
         Rectangle {
+            id: confirmationPanel
             anchors.centerIn: parent
             width: Math.min(parent.width - 48, 540)
-            height: 300
+            height: Math.min(parent.height - 48, Math.max(300, confirmationCopy.implicitHeight + 150))
             radius: 12
             color: "#1b2b44"
             border.color: "#e4c579"
@@ -341,24 +345,52 @@ Window {
                 anchors.fill: parent
                 anchors.margins: 22
                 spacing: 20
-                Text { text: shell.label("Conferma operazione Windows", "Confirm Windows operation"); color: "#e4c579"; font.bold: true; font.pixelSize: 19 }
-                Text {
+                Text { id: confirmationHeading; width: parent.width; wrapMode: Text.WordWrap; text: shell.label("Conferma operazione Windows", "Confirm Windows operation"); color: "#e4c579"; font.bold: true; font.pixelSize: 19 }
+                Flickable {
                     width: parent.width
-                    height: 170
-                    text: maintenanceService.details
-                    color: "#f1f3f8"
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 13
+                    height: confirmationPanel.height - 44 - confirmationHeading.height - 40 - 38
+                    contentWidth: width
+                    contentHeight: confirmationCopy.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    Text {
+                        id: confirmationCopy
+                        width: parent.width
+                        text: maintenanceService.details
+                        color: "#f1f3f8"
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 13
+                    }
                 }
                 Row {
+                    id: confirmationActions
+                    height: 38
                     spacing: 14
                     Rectangle {
+                        id: cancelMaintenance
                         width: 145; height: 38; color: "#46556b"; radius: 6
+                        activeFocusOnTab: true
+                        border.color: activeFocus ? "#76b6e2" : "transparent"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: shell.label("Annulla", "Cancel")
+                        KeyNavigation.tab: confirmMaintenance
+                        KeyNavigation.backtab: confirmMaintenance
+                        Keys.onReturnPressed: maintenanceService.reject()
+                        Keys.onSpacePressed: maintenanceService.reject()
                         Text { anchors.centerIn: parent; text: shell.label("Annulla", "Cancel"); color: "white" }
                         MouseArea { anchors.fill: parent; onClicked: maintenanceService.reject() }
                     }
                     Rectangle {
+                        id: confirmMaintenance
                         width: 190; height: 38; color: "#8e5e3f"; radius: 6
+                        activeFocusOnTab: true
+                        border.color: activeFocus ? "#76b6e2" : "transparent"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: shell.label("Confermo l'operazione", "Confirm operation")
+                        KeyNavigation.tab: cancelMaintenance
+                        KeyNavigation.backtab: cancelMaintenance
+                        Keys.onReturnPressed: maintenanceService.confirm()
+                        Keys.onSpacePressed: maintenanceService.confirm()
                         Text { anchors.centerIn: parent; text: shell.label("Confermo l'operazione", "Confirm operation"); color: "white" }
                         MouseArea { anchors.fill: parent; onClicked: maintenanceService.confirm() }
                     }

@@ -2,7 +2,7 @@
 import unittest
 
 from PySide6.QtCore import QCoreApplication
-from qt_app.main import MaintenanceBridge
+from qt_app.main import MaintenanceBridge, ReadBridge
 
 
 class FakeMaintenance:
@@ -74,6 +74,65 @@ class BridgeContracts(unittest.TestCase):
         self.assertIn("fixture success", self.bridge.output)
         self.bridge.confirm()
         self.assertEqual(self.fake.executed, ["fixture-nonce"])
+
+    def test_turbo_completion_refreshes_the_state_visible_to_qml(self):
+        import time
+        state = {"power": False}
+        class Toggle(FakeMaintenance):
+            def prepare(self, action, drive):
+                return {"nonce": "toggle", "title": "Power", "details": "Fixture settings"}
+
+            def execute(self, nonce, **callbacks):
+                state["power"] = True
+                return {"status": "completed", "message": "Fixture only"}
+
+        class Reader:
+            def collect(self, action):
+                if action != "turbo_status":
+                    raise AssertionError(action)
+                return {"states": dict(state), "master": True}
+
+            def close(self):
+                pass
+
+        reader = ReadBridge()
+        reader._service = Reader()
+        self.bridge._service = Toggle()
+        self.bridge._reader = reader
+        try:
+            self.bridge.prepare("power_on", "")
+            self.bridge.confirm()
+            deadline = time.monotonic() + 2
+            while "turbo_status" not in reader.results and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(.01)
+            self.assertEqual(reader.results.get("turbo_status", {}).get("states"), {"power": True})
+        finally:
+            reader.stop()
+
+    def test_results_and_logs_remain_with_their_original_section(self):
+        import time
+        class Actions(FakeMaintenance):
+            def prepare(self, action, drive):
+                self.action = action
+                return {"nonce": action, "title": action, "details": "Fixture"}
+
+            def execute(self, nonce, *, log, progress):
+                log("fixture " + nonce)
+                return {"status": "completed", "message": nonce,
+                        "steps": [{"success": True, "message": nonce}], "total": 1}
+
+        self.bridge._service = Actions()
+        for action in ("resurrection", "temp_clean"):
+            self.bridge.prepare(action, "")
+            self.bridge.confirm()
+            deadline = time.monotonic() + 2
+            while self.bridge.busy and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(.01)
+        self.assertEqual(getattr(self.bridge, "results", {}).get("resurrection", {}).get("status"), "completed")
+        self.assertIn("fixture resurrection", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
+        self.assertNotIn("fixture temp_clean", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
 
 
 if __name__ == "__main__":

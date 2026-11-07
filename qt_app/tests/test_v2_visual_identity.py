@@ -32,8 +32,8 @@ class V2VisualIdentityTests(unittest.TestCase):
     def test_dashboard_icons_and_disk_progress_match_v2(self):
         page = (ROOT / "qt_app" / "ParityPage.qml").read_text(encoding="utf-8")
         provider = NavigationIconProvider()
-        for key in ("cpu", "memory", "scan", "updates", "drive", "restore"):
-            tint = "#e4c579" if key in ("drive", "restore") else "#76b6e2"
+        for key in ("cpu", "memory", "scan", "updates", "drive", "restore", "disk"):
+            tint = "#e4c579" if key in ("drive", "restore", "disk") else "#76b6e2"
             expected = make_icon(key, tint, 96)
             actual = provider.requestImage(key + "/detail", QSize(), QSize(96, 96))
             self.assertFalse(actual.isNull(), key)
@@ -59,7 +59,7 @@ class V2VisualIdentityTests(unittest.TestCase):
         original = (ROOT / "panacea_ui.py").read_text(encoding="utf-8")
         self.assertIn("def _group_requires_stack", original)
         self.assertIn("function pairedPanelWidth(total, minimum)", page)
-        self.assertIn("total >= 2 * minimum + 20", page)
+        self.assertIn("canvasWidth >= 2 * minimum + 20", page)
         for threshold in (300, 305, 320):
             self.assertEqual(page.count(f"pairedPanelWidth(pair.width, {threshold})"), 2)
         self.assertEqual(page.count("PPanel {"), 6)

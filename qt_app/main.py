@@ -7,10 +7,44 @@ import os
 import subprocess
 from pathlib import Path
 import sys
+import time
+import faulthandler
+import hashlib
 
-from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
+_qa_trace_file = None
+_qa_started = time.perf_counter()
+if "--smoke-test" in sys.argv:
+    if "--capture" in sys.argv and sys.argv.index("--capture") + 1 < len(sys.argv):
+        _qa_log = Path(sys.argv[sys.argv.index("--capture") + 1]).with_suffix(".lifecycle.log")
+        _qa_log.parent.mkdir(parents=True, exist_ok=True)
+        _qa_trace_file = _qa_log.open("w", encoding="utf-8")
+    else:
+        _qa_trace_file = sys.stderr
+    if _qa_trace_file is not None:
+        faulthandler.enable(file=_qa_trace_file)
+        faulthandler.dump_traceback_later(15, repeat=True, file=_qa_trace_file)
+
+
+def _qa_trace(phase):
+    if _qa_trace_file is not None:
+        print(f"{(time.perf_counter() - _qa_started) * 1000:.1f} ms · {phase}",
+              file=_qa_trace_file, flush=True)
+
+
+_qa_trace("Python started; importing Qt")
+
+from PySide6.QtCore import QEvent, QObject, QPointF, Property, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QFontDatabase, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
+
+_qa_trace("Qt imports complete")
+
+_ACTION_SCOPES = {
+    **dict.fromkeys(("temp_clean", "browser_clean", "recycle_empty", "component_cleanup", "quick_cleanup", "open_cleanmgr"), "cleaning"),
+    **dict.fromkeys(("sfc", "dism_check", "dism_restore", "dns_flush", "winsock_reset", "restore_point", "battery_report"), "tools"),
+    **dict.fromkeys(("drive_optimize", "chkdsk", "open_defrag"), "disk"),
+    "resurrection": "resurrect",
+}
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -42,6 +76,7 @@ class ReadBridge(QObject):
         self._updater = None
         self._drives = []
         self._results = {}
+        self._section_logs = {}
         self._state = "idle"
         self._last_action = ""
         self._timer = QTimer(self)
@@ -64,6 +99,10 @@ class ReadBridge(QObject):
     @Property('QVariantMap', notify=changed)
     def results(self):
         return self._results
+
+    @Property('QVariantMap', notify=changed)
+    def sectionLogs(self):
+        return self._section_logs
 
     @Property(str, notify=changed)
     def state(self):
@@ -88,12 +127,18 @@ class ReadBridge(QObject):
             self._results = {**self._results, action: value}
             self._state = "completed"
             self._last = json.dumps(value, ensure_ascii=False, indent=2)
+            scope = {"temp_preview": "cleaning", "drives": "disk"}.get(action)
+            if scope:
+                self._section_logs = {**self._section_logs, scope: self._last[-16000:]}
             if action == 'drives':
                 self._drives = [row['letter'] for row in value.get('drives', []) if row.get('available') is True]
             self.changed.emit()
         def failed(exc):
             self._state = "error"
             self._last = "Dati non disponibili: " + str(exc)
+            scope = {"temp_preview": "cleaning", "drives": "disk"}.get(action)
+            if scope:
+                self._section_logs = {**self._section_logs, scope: self._last}
             self.changed.emit()
         def done():
             self._busy = False
@@ -129,7 +174,7 @@ class MaintenanceBridge(QObject):
         self._workers = WorkerController(self._dispatcher)
         self._pending = ""
         self._details = ""
-        self._output = "Nessuna manutenzione eseguita."
+        self._output = ""
         self._busy = False
         self._closed = False
         self._reader = None
@@ -141,6 +186,8 @@ class MaintenanceBridge(QObject):
         self._progress_done = 0
         self._progress_total = 0
         self._steps = []
+        self._results = {}
+        self._section_logs = {}
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
@@ -175,6 +222,24 @@ class MaintenanceBridge(QObject):
     @Property('QVariantList', notify=changed)
     def steps(self):
         return self._steps
+
+    @Property('QVariantMap', notify=changed)
+    def results(self):
+        return self._results
+
+    @Property('QVariantMap', notify=changed)
+    def sectionLogs(self):
+        return self._section_logs
+
+    def _remember_result(self):
+        if self._last_action:
+            self._results = {**self._results, self._last_action: {
+                "status": self._result_status, "done": self._progress_done,
+                "total": self._progress_total, "steps": list(self._steps)}}
+
+    @Property(str, notify=changed)
+    def activeSection(self):
+        return _ACTION_SCOPES.get(self._last_action, "")
 
     @Property(str, notify=changed)
     def details(self):
@@ -233,6 +298,7 @@ class MaintenanceBridge(QObject):
         self._progress_total = 10 if self._last_action == "resurrection" else (3 if self._last_action == "quick_cleanup" else 0)
         self._steps = []
         self._output = "Manutenzione in corso. Non chiudere il programma."
+        self._remember_result()
         self.changed.emit()
 
         def log(message):
@@ -261,6 +327,13 @@ class MaintenanceBridge(QObject):
             self._busy = False
             self.changed.emit()
 
+            # Reflect the measured state after an acknowledged change, as V2 does.
+            # Failed/unknown/cancelled completion never implies a successful toggle.
+            from qt_app.maintenance import TURBO
+            if (self._last_action in TURBO and self._reader is not None
+                    and self._result_status in ("completed", "partial") and not self._closed):
+                QTimer.singleShot(0, lambda: self._reader.request("turbo_status"))
+
         accepted = self._workers.start(
             "maintenance", lambda: self._service.execute(nonce, log=log, progress=progress),
             group="maintenance", on_success=success, on_error=failure, on_done=done)
@@ -271,6 +344,11 @@ class MaintenanceBridge(QObject):
 
     def _append(self, message):
         self._output = (self._output + "\n" + message)[-16000:]
+        scope = _ACTION_SCOPES.get(self._last_action)
+        if scope:
+            self._section_logs = {**self._section_logs, scope:
+                                  (self._section_logs.get(scope, "") + "\n" + message)[-16000:]}
+        self._remember_result()
         self.changed.emit()
 
     @Slot()
@@ -301,12 +379,20 @@ def main(argv=None):
     parser.add_argument("--smoke-width", type=int, help="QA only: logical viewport width")
     parser.add_argument("--smoke-height", type=int, help="QA only: logical viewport height")
     parser.add_argument("--smoke-language", choices=("it", "en"), help="QA only: visible locale")
+    parser.add_argument("--smoke-scenario", default="default", choices=(
+        "default", "expanded", "unknown", "running", "completed", "partial", "failed",
+        "cancelled", "confirmation", "long-text"))
+    parser.add_argument("--smoke-scroll", type=float, default=0, help="QA only: scroll fraction 0..1")
+    parser.add_argument("--smoke-focus", choices=("cleaning", "apps", "tools", "disk", "turbo", "startup"))
     args = parser.parse_args(argv)
     if args.capture and not args.smoke_test:
         parser.error("--capture requires --smoke-test")
     if not args.smoke_test and (args.smoke_tab != 0 or args.smoke_width
-                                or args.smoke_height or args.smoke_language):
+                                or args.smoke_height or args.smoke_language
+                                or args.smoke_scenario != "default" or args.smoke_scroll or args.smoke_focus):
         parser.error("smoke viewport options require --smoke-test")
+    if not 0 <= args.smoke_scroll <= 1:
+        parser.error("--smoke-scroll must be between 0 and 1")
     if args.smoke_width is not None and args.smoke_width < 760:
         parser.error("--smoke-width must be at least 760")
     if args.smoke_height is not None and args.smoke_height < 480:
@@ -347,7 +433,9 @@ def main(argv=None):
                 print(f'Administrator elevation declined or failed ({code})', file=sys.stderr)
                 return 1
             return 0
+    _qa_trace("creating QGuiApplication")
     app = QGuiApplication([sys.argv[0]])
+    _qa_trace("QGuiApplication created")
     icon = (Path(getattr(sys, "_MEIPASS", ROOT)) / "assets" / "panacea_icon.ico")
     if icon.is_file():
         app.setWindowIcon(QIcon(str(icon)))
@@ -358,7 +446,7 @@ def main(argv=None):
         # no font files are embedded or distributed with Panacea.
         fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
         registered = []
-        for filename in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf"):
+        for filename in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf", "seguisym.ttf"):
             installed = fonts / filename
             if installed.is_file():
                 family_id = QFontDatabase.addApplicationFont(str(installed))
@@ -389,7 +477,13 @@ def main(argv=None):
             "os": "Windows 11", "cpu_name": "AMD Ryzen 7",
             "ram_info": "16.0 GB RAM", "disk_model": "System SSD",
         }
-    maintenance = MaintenanceBridge()
+    if args.smoke_test:
+        from qt_app.qa_fixtures import VisualMaintenance, apply_scenario
+        maintenance = MaintenanceBridge(service=VisualMaintenance())
+        apply_scenario(metrics, reader, maintenance, args.smoke_scenario,
+                       args.smoke_tab, args.smoke_language or resolve_language())
+    else:
+        maintenance = MaintenanceBridge()
     updater = UpdateBridge(reader, maintenance, on_ready=app.quit)
     reader._maintenance = maintenance
     reader._updater = updater
@@ -399,7 +493,13 @@ def main(argv=None):
     app.aboutToQuit.connect(metrics.stop)
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)
+    _qa_trace("bridges created")
     engine = QQmlApplicationEngine()
+    qml_warnings = []
+    def qml_warning(errors):
+        qml_warnings.extend(str(error) for error in errors)
+        _qa_trace("QML warnings: " + "; ".join(str(error) for error in errors))
+    engine.warnings.connect(qml_warning)
     engine.addImageProvider("panacea-nav", NavigationIconProvider())
     engine.rootContext().setContextProperty("applicationLanguage", resolve_language())
     engine.rootContext().setContextProperty("qaSmokeMode", bool(args.smoke_test))
@@ -410,7 +510,9 @@ def main(argv=None):
     source = ((Path(getattr(sys, "_MEIPASS")) / "qt_app" / "Main.qml")
               if getattr(sys, "frozen", False)
               else Path(__file__).with_name("Main.qml"))
+    _qa_trace("loading QML")
     engine.load(QUrl.fromLocalFile(str(source)))
+    _qa_trace("QML load returned")
     if not engine.rootObjects():
         updater.stop()
         reader.stop()
@@ -422,6 +524,7 @@ def main(argv=None):
         QTimer.singleShot(0, lambda: reader.request("hardware"))
     if args.smoke_test:
         window = engine.rootObjects()[0]
+        qa_configured = [False]
 
         def configure_qa_view():
             if args.smoke_width is not None:
@@ -431,16 +534,54 @@ def main(argv=None):
             if args.smoke_language is not None:
                 window.setProperty("language", args.smoke_language)
             window.setProperty("currentTab", args.smoke_tab)
+            def configure_page():
+                def visual_items(item):
+                    yield item
+                    for child in item.childItems():
+                        yield from visual_items(child)
+                page = next((item for item in visual_items(window.contentItem())
+                             if item.objectName() == "parityPage_" + str(args.smoke_tab)), None)
+                if page is None:
+                    _qa_trace("Selected fixture page not created")
+                    app.exit(3)
+                    return
+                if args.smoke_scenario == "expanded":
+                    page.setProperty("showIndividualCleaning", True)
+                    page.setProperty("showExtraDriveTools", True)
+                    for item in visual_items(page):
+                        if item.metaObject().indexOfProperty("expanded") >= 0:
+                            item.setProperty("expanded", True)
+                def scroll():
+                    viewport = next((item for item in visual_items(page) if item.objectName() == "pageViewport"), None)
+                    if viewport is not None:
+                        maximum = max(0, viewport.property("contentHeight") - viewport.height())
+                        viewport.setProperty("contentY", maximum * args.smoke_scroll)
+                        if args.smoke_focus:
+                            target = next((item for item in visual_items(page) if item.objectName() == "legacyView_" + args.smoke_focus), None)
+                            if target is not None:
+                                offset = target.mapToItem(viewport, QPointF(0, 0)).y() + viewport.property("contentY") - 10
+                                viewport.setProperty("contentY", max(0, min(maximum, offset)))
+                            else:
+                                _qa_trace("Requested fixture subview was not created")
+                                app.exit(3)
+                                return
+                    qa_configured[0] = True
+                    _qa_trace("fixture page configured")
+                QTimer.singleShot(100, scroll)
+            QTimer.singleShot(0, configure_page)
 
         QTimer.singleShot(0, configure_qa_view)
         if args.capture:
             def capture():
+                _qa_trace("capture begin")
                 args.capture.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     # A successful root shell load does not prove the selected
                     # lazy subview compiled; require its actual QML object.
                     if not (int(window.property("loadedMask") or 0) & (1 << args.smoke_tab)):
                         raise RuntimeError("Selected Qt V2 page was not created")
+                    if not qa_configured[0]:
+                        raise RuntimeError("Requested fixture configuration was not applied")
                     image = window.grabWindow()
                     if image.isNull():
                         screen = window.screen()
@@ -458,14 +599,31 @@ def main(argv=None):
                             "qt_scale_factor": os.environ.get("QT_SCALE_FACTOR", "1"),
                             "safe_mode": True,
                             "visual_fixture": True,
+                            "scenario": args.smoke_scenario,
+                            "scroll_fraction": args.smoke_scroll,
+                            "focus_view": args.smoke_focus,
+                            "qml_warnings": qml_warnings,
+                            "platform": app.platformName(),
+                            "scaling_method": "QT_SCALE_FACTOR simulation; no Windows display setting changed",
+                            "source_sha256": {name: hashlib.sha256((source.parent / name).read_bytes()).hexdigest()
+                                              for name in ("Main.qml", "ParityPage.qml")},
                         }, ensure_ascii=False, indent=2) + "\n",
                         encoding="utf-8",
                     )
+                    _qa_trace("capture saved")
+                    if qml_warnings:
+                        raise RuntimeError("QML emitted warnings; see capture metadata")
                 except Exception as exc:
                     print(f"Qt UI screenshot failure: {exc}", file=sys.stderr, flush=True)
                     app.exit(3)
             QTimer.singleShot(950, capture)
-        QTimer.singleShot(1600 if args.capture else 1200, app.quit)
+        def finish_qa():
+            _qa_trace("QA exit requested")
+            # Only the inert visual fixture may release its synthetic busy flag.
+            # The interactive close/cancellation safety policy is untouched.
+            maintenance._busy = False
+            app.exit(0)
+        QTimer.singleShot(1600 if args.capture else 1200, finish_qa)
     else:
         if args.panacea_update_ready:
             def acknowledge_update():
@@ -480,7 +638,15 @@ def main(argv=None):
             # Only acknowledge after QML has loaded and the Qt event loop started.
             QTimer.singleShot(250, acknowledge_update)
         QTimer.singleShot(0, metrics.start)
-    return app.exec()
+    _qa_trace("event loop entering")
+    result = app.exec()
+    _qa_trace("event loop exited")
+    # Dispose QML while every Python context object is still alive. Relying on
+    # local-variable finalization can leave bindings pointing at deleted bridges.
+    engine.deleteLater()
+    app.sendPostedEvents(None, QEvent.DeferredDelete)
+    _qa_trace("QML engine disposed")
+    return result
 
 
 if __name__ == "__main__":

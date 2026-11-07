@@ -30,7 +30,7 @@ class V2GroupedControls(unittest.TestCase):
         self.assertIn("property bool showExtraDriveTools: false", page)
         self.assertIn("view.selectedDrive = letters[0]", page)
         self.assertIn("row.letter === view.selectedDrive", page)
-        self.assertIn('action:"drive_optimize"', page)
+        self.assertIn('view.request("drive_optimize",view.selectedDrive)', page)
         self.assertIn('action:"chkdsk"', page)
         self.assertIn("visible: view.showExtraDriveTools", page)
 

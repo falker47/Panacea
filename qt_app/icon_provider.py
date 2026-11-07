@@ -26,7 +26,7 @@ _DETAIL_NAMES = frozenset(("cpu", "memory", "drive", "scan", "restore", "updates
 @lru_cache(maxsize=10)
 def _source_image(name: str, tone: str) -> QImage:
     if tone == "detail":
-        color = "#e4c579" if name in ("drive", "restore") else "#76b6e2"
+        color = "#e4c579" if name in ("drive", "restore", "disk") else "#76b6e2"
     else:
         color = "#e4c579" if tone == "active" else "#a5b5cd"
     art = (make_windows_icon(color=color, size=96) if name == "windows"

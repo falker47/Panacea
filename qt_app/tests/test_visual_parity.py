@@ -99,7 +99,7 @@ class QtVisualParityContracts(unittest.TestCase):
         self.assertTrue(row_actions)
         self.assertFalse((literal_calls | row_actions) - ACTIONS)
         for action in DRIVE_ACTIONS:
-            self.assertIn('action:"' + action + '"', page)
+            self.assertTrue('action:"' + action + '"' in page or 'view.request("' + action + '"' in page)
         self.assertIn('maintenanceService.prepare(action, drive || "")', page)
         self.assertNotIn("subprocess", page)
         self.assertNotIn("os.system", page)

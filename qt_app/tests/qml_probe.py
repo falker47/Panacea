@@ -6,8 +6,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QTimer, QUrl  # noqa: E402
-from PySide6.QtGui import QGuiApplication  # noqa: E402
+from PySide6.QtCore import QPointF, QTimer, QUrl  # noqa: E402
+from PySide6.QtGui import QGuiApplication, QFontDatabase  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 from qt_app.main import MetricsBridge, ReadBridge, MaintenanceBridge  # noqa: E402
 from qt_app.icon_provider import NavigationIconProvider  # noqa: E402
@@ -16,19 +16,26 @@ from qt_app.update_bridge import UpdateBridge  # noqa: E402
 
 def main():
     app = QGuiApplication([])
+    for font in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf", "seguisym.ttf"):
+        QFontDatabase.addApplicationFont("C:/Windows/Fonts/" + font)
     metrics, reader, maintenance = MetricsBridge(), ReadBridge(), MaintenanceBridge()
     metrics._values.update(cpu="30.8%", ram="90.7%", disk="97.5%")
     reader._results["hardware"] = {"os": "Windows 11", "cpu_name": "AMD Ryzen 7"}
     updater = UpdateBridge(reader, maintenance)
+    if len(sys.argv) > 4 and sys.argv[4] == "confirmation":
+        maintenance._pending = "invalid-fixture"
+        maintenance._details = "Safety warning requiring explicit confirmation. " * 50
     engine = QQmlApplicationEngine()
     warnings = []
     engine.warnings.connect(lambda errors: warnings.extend(str(e) for e in errors))
     engine.addImageProvider("panacea-nav", NavigationIconProvider())
-    for name, value in {"applicationLanguage": "en", "qaSmokeMode": True,
+    for name, value in {"applicationLanguage": sys.argv[5] if len(sys.argv) > 5 else "en", "qaSmokeMode": True,
                         "liveMetrics": metrics, "readService": reader,
                         "maintenanceService": maintenance, "updateService": updater}.items():
         engine.rootContext().setContextProperty(name, value)
     engine.load(QUrl.fromLocalFile(str(ROOT / "qt_app/Main.qml")))
+    if not engine.rootObjects():
+        raise RuntimeError(warnings)
     window = engine.rootObjects()[0]
     window.setWidth(int(sys.argv[1]))
     window.setHeight(int(sys.argv[2]))
@@ -44,13 +51,25 @@ def main():
         def text_item(text):
             return next(i for i in visible if i.property("text") == text)
         def box(item):
-            p = item.mapToScene(item.boundingRect().topLeft())
+            p = item.mapToScene(QPointF(0, 0))
             return [round(p.x(), 2), round(p.y(), 2), round(item.width(), 2), round(item.height(), 2)]
         def card(text):
             item = text_item(text)
             return box(item.parentItem().parentItem().parentItem())
         tab = int(window.property("currentTab"))
         result = {"warnings": warnings}
+        overflow = []
+        for item in visible:
+            if not isinstance(item.property("text"), str):
+                continue
+            rect = box(item)
+            if rect[0] >= 302 and rect[0] + rect[2] > window.width() + 1:
+                overflow.append({"text": item.property("text"), "rect": rect})
+        result["horizontal_overflow"] = overflow
+        if len(sys.argv) > 4 and sys.argv[4] == "confirmation":
+            copy = text_item(maintenance.details)
+            result["confirmation_scrollable"] = copy.parentItem().property("contentHeight") is not None
+            result["confirmation_readable_height"] = copy.implicitHeight() <= copy.height() + 1
         if tab == 0:
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),
                           metrics=[card(t) for t in ("CPU", "Memory (RAM)", "System drive")])
@@ -58,9 +77,45 @@ def main():
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]
+            warning = text_item("Before you start" if window.property("language") == "en" else "Prima di iniziare")
+            panel = warning.parentItem().parentItem()
+            descendants = list(items(panel))
+            result["warning_content_height"] = max(box(i)[1] + box(i)[3] for i in descendants) - box(panel)[1]
+            result["warning_panel_height"] = panel.height()
+        if tab in (1, 2):
+            if window.property("language") == "it":
+                names = ("Pulizia", "Applicazioni installate") if tab == 1 else ("Strumenti di riparazione", "Ottimizzazione dischi")
+            else:
+                names = ("Cleanup", "Installed apps") if tab == 1 else ("Repair tools", "Drive optimization")
+            result["panels"] = [box(text_item(t).parentItem().parentItem()) for t in names]
+            if tab == 2 and window.property("language") == "en":
+                result["group_heading"] = box(next(i for i in visible if i.property("text") == "Diagnostics & Repair" and box(i)[0] >= 302))
+        if tab == 3 and window.property("language") == "en":
+            toggle = next(i for i in visible if i.property("caption") == "High performance")
+            result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
         print(json.dumps(result), flush=True)
         app.quit()
-    QTimer.singleShot(400, measure)
+    def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "scrolled":
+            page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_" + str(window.property("currentTab")))
+            viewport = next(i for i in items(page) if i.objectName() == "pageViewport")
+            QTimer.singleShot(200, lambda: viewport.setProperty("contentY", 100))
+        if len(sys.argv) > 4 and sys.argv[4] == "expanded":
+            page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_" + str(window.property("currentTab")))
+            page.setProperty("showIndividualCleaning", True)
+            page.setProperty("showExtraDriveTools", True)
+            for i in items(page):
+                if i.metaObject().indexOfProperty("expanded") >= 0:
+                    i.setProperty("expanded", True)
+        def checked_measure():
+            try:
+                measure()
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                app.exit(1)
+        QTimer.singleShot(400, checked_measure)
+    QTimer.singleShot(0, arrange)
     app.aboutToQuit.connect(metrics.stop)
     app.aboutToQuit.connect(reader.stop)
     app.aboutToQuit.connect(maintenance.stop)

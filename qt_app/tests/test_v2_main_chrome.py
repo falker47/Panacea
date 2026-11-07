@@ -13,7 +13,7 @@ class V2MainChromeTests(unittest.TestCase):
         self.assertIn("self.geometry('1020x680')", stable)
         self.assertIn("    width: 1020\n    height: 680", ui)
         self.assertNotIn("Layout.preferredHeight: 38", ui)
-        self.assertIn("y: view.groupIndex === 0 ? 14 : 23", page)
+        self.assertIn("y: view.groupIndex === 0 || view.groupIndex === 4 ? 16 : 10", page)
         self.assertIn("Layout.preferredHeight: 30", ui)
         self.assertIn("Layout.preferredWidth: 302", ui)
 

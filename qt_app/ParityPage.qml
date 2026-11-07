@@ -20,7 +20,12 @@ Item {
     readonly property var turbo: snapshots.turbo_status || ({})
     readonly property var drives: snapshots.drives || ({})
     readonly property var guard: snapshots.guard_status || ({})
-    readonly property var progressSteps: maintenanceService.steps
+    readonly property var resurrectionResult: maintenanceService.results.resurrection || ({})
+    readonly property var progressSteps: resurrectionResult.steps || (maintenanceService.lastAction === "resurrection" ? maintenanceService.steps : [])
+    Component.onCompleted: {
+        if (groupIndex === 2 && readService.driveLetters.length)
+            selectedDrive = readService.driveLetters[0]
+    }
     readonly property real dashboardStretch: Math.min(320, Math.max(0, (viewport.height - 14 - 510) * 1.05))
     Connections {
         target: readService
@@ -41,12 +46,14 @@ Item {
             readService.request(action)
     }
     function pairedPanelWidth(total, minimum) {
-        return total >= 2 * minimum + 20 ? (total - 12) / 2 : total
+        // CTk tests the canvas before the page's 18px of horizontal gutters.
+        var canvasWidth = total + 18
+        return canvasWidth >= 2 * minimum + 20 ? (total - 20) / 2 : total
     }
     function formatBytes(bytes) {
         if (typeof bytes !== "number" || bytes < 0) return "—"
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GiB"
-        return (bytes / 1048576).toFixed(1) + " MiB"
+        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
+        return (bytes / 1048576).toFixed(1) + " MB"
     }
     function stateCaption(value) {
         if (value === true) return t("Attivo", "On")
@@ -86,8 +93,7 @@ Item {
     function diskStateText() {
         var d = metricCapacity("disk")
         return !d ? t("Spazio non disponibile", "Space unavailable") :
-               d[2] >= 95 ? t("Spazio libero insufficiente", "Low free space") :
-               d[2] >= 85 ? t("Spazio libero ridotto", "Limited free space") :
+               d[2] >= 90 ? t("Spazio libero insufficiente", "Low free space") :
                t("Spazio disponibile", "Space available")
     }
     function updateCaption() {
@@ -116,9 +122,9 @@ Item {
             return progressSteps[index].success ? t("Completato", "Completed") : t("Non riuscito", "Failed")
         }
         if (maintenanceService.busy && maintenanceService.lastAction === "resurrection"
-                && maintenanceService.progressDone === index)
+                && resurrectionResult.done === index)
             return t("In corso", "Running")
-        return t("Non eseguito", "Not run")
+        return t("Non avviato", "Not started")
     }
 
     component PButton: Rectangle {
@@ -126,6 +132,7 @@ Item {
         property string caption: ""
         property bool primary: false
         property bool interactive: true
+        property bool leftAligned: false
         signal pressed()
         implicitWidth: Math.max(90, captionLabel.implicitWidth + 26)
         width: implicitWidth
@@ -143,7 +150,11 @@ Item {
         Keys.onSpacePressed: activate()
         Text {
             id: captionLabel
-            anchors.centerIn: parent
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            horizontalAlignment: button.leftAligned ? Text.AlignLeft : Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: button.caption
             color: button.interactive ? "#f1f3f8" : "#a0aaba"
             font.family: "Segoe UI"
@@ -162,8 +173,10 @@ Item {
         id: groupHeader
         property string caption: ""
         property string iconName: "dashboard"
-        width: parent.width
-        implicitHeight: Math.max(38, heading.implicitHeight)
+        property string subtitle: ""
+        x: view.groupIndex === 0 ? 8 : 4
+        width: parent.width - x
+        implicitHeight: Math.max(38, heading.implicitHeight + (subtitle.length ? headerSubtitle.implicitHeight + 6 : 0))
         height: implicitHeight
         Image {
             id: headingIcon
@@ -182,7 +195,7 @@ Item {
             anchors.left: headingIcon.right
             anchors.right: parent.right
             anchors.leftMargin: 9
-            anchors.verticalCenter: parent.verticalCenter
+            y: groupHeader.subtitle.length ? 0 : (parent.height - height) / 2
             text: groupHeader.caption
             color: "#f1f3f8"
             font.family: "Segoe UI"
@@ -190,11 +203,25 @@ Item {
             font.bold: true
             wrapMode: Text.WordWrap
         }
+        Text {
+            id: headerSubtitle
+            x: heading.x
+            y: heading.y + heading.height + 6
+            width: heading.width
+            visible: groupHeader.subtitle.length > 0
+            text: groupHeader.subtitle
+            color: "#9eafc8"
+            font.family: "Segoe UI"
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
+        }
     }
 
     // The original V2 paired subviews are bordered, independent panels.
     component PPanel: Rectangle {
         id: panelSurface
+        property string viewName: ""
+        objectName: "legacyView_" + viewName
         default property alias panelContent: panelBody.data
         property alias spacing: panelBody.spacing
         width: parent.width
@@ -211,6 +238,26 @@ Item {
             width: Math.max(0, panelSurface.width - 28)
             spacing: 8
         }
+    }
+
+    component PSectionTitle: Text {
+        x: 8
+        width: parent.width - 16
+        color: "#f1f3f8"
+        font.family: "Segoe UI"
+        font.pixelSize: 21
+        font.bold: true
+        wrapMode: Text.WordWrap
+    }
+
+    component PSectionHint: Text {
+        x: 8
+        width: parent.width - 16
+        height: Math.max(implicitHeight, width < 400 ? 43 : 18)
+        color: "#9eafc8"
+        font.family: "Segoe UI"
+        font.pixelSize: 11
+        wrapMode: Text.WordWrap
     }
 
     component PShortcut: Rectangle {
@@ -267,6 +314,27 @@ Item {
         id: sectionLog
         property string caption: ""
         property bool expanded: false
+        property string scope: ""
+        property bool operationWasRunning: false
+        property bool readWasRunning: false
+        Connections {
+            target: maintenanceService
+            function onChanged() {
+                var running = maintenanceService.busy && maintenanceService.activeSection === sectionLog.scope
+                if (running && !sectionLog.operationWasRunning) sectionLog.expanded = true
+                sectionLog.operationWasRunning = running
+            }
+        }
+        Connections {
+            target: readService
+            function onChanged() {
+                var running = readService.busy &&
+                    ((sectionLog.scope === "cleaning" && readService.lastAction === "temp_preview") ||
+                     (sectionLog.scope === "disk" && readService.lastAction === "drives"))
+                if (running && !sectionLog.readWasRunning) sectionLog.expanded = true
+                sectionLog.readWasRunning = running
+            }
+        }
         width: parent.width
         height: sectionLogContent.implicitHeight + 12
         radius: 8
@@ -281,6 +349,7 @@ Item {
             PButton {
                 width: parent.width
                 height: 26
+                leftAligned: true
                 caption: (sectionLog.expanded ? "− " : "+ ") + sectionLog.caption
                 onPressed: sectionLog.expanded = !sectionLog.expanded
             }
@@ -293,11 +362,22 @@ Item {
                 contentWidth: width
                 contentHeight: logText.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                Text {
+                activeFocusOnTab: sectionLog.expanded
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_PageDown) contentY = Math.max(0, Math.min(contentHeight - height, contentY + height))
+                    else if (event.key === Qt.Key_PageUp) contentY = Math.max(0, contentY - height)
+                    else if (event.key === Qt.Key_Home) contentY = 0
+                    else if (event.key === Qt.Key_End) contentY = Math.max(0, contentHeight - height)
+                    else return
+                    event.accepted = true
+                }
+                TextEdit {
                     id: logText
                     width: logViewport.width
-                    text: sectionLog.expanded ? maintenanceService.output + "\n" + readService.output : ""
-                    wrapMode: Text.WrapAnywhere
+                    text: sectionLog.expanded ? (maintenanceService.sectionLogs[sectionLog.scope] || "") + "\n" + (readService.sectionLogs[sectionLog.scope] || "") : ""
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.WrapAnywhere
                     color: "#b7c9db"
                     font.family: "Consolas"
                     font.pixelSize: 11
@@ -305,7 +385,7 @@ Item {
             }
             PButton {
                 width: parent.width
-                visible: sectionLog.expanded && maintenanceService.busy
+                visible: sectionLog.expanded && maintenanceService.busy && maintenanceService.activeSection === sectionLog.scope
                 height: visible ? 34 : 0
                 caption: view.t("Annulla dopo la fase", "Cancel after current step")
                 interactive: maintenanceService.busy
@@ -322,6 +402,8 @@ Item {
         property string buttonText: ""
         property string drive: ""
         property bool interactive: true
+        property int collapseWidth: 305
+        property int buttonWidth: 105
         signal invoke(string action, string drive)
         width: parent.width
         implicitHeight: Math.max(64, rowContent.implicitHeight + 20)
@@ -336,20 +418,24 @@ Item {
             color: "#2e415c"
             opacity: 0.7
         }
-        RowLayout {
+        GridLayout {
             id: rowContent
+            columns: line.width - 24 < line.collapseWidth ? 1 : 2
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 12
             anchors.rightMargin: 12
-            spacing: 10
+            columnSpacing: 10
+            rowSpacing: 5
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 spacing: 2
                 Text {
                     text: line.heading
                     Layout.fillWidth: true
+                    Layout.minimumHeight: line.collapseWidth === 225 ? 26 : 19
                     color: "#f1f3f8"
                     font.family: "Segoe UI"
                     font.bold: true
@@ -360,6 +446,7 @@ Item {
                 Text {
                     text: line.hint
                     Layout.fillWidth: true
+                    Layout.minimumHeight: line.collapseWidth === 225 ? 26 : 16
                     color: "#9eafc8"
                     font.family: "Segoe UI"
                     font.pixelSize: 11
@@ -369,6 +456,7 @@ Item {
             }
             PButton {
                 caption: line.buttonText
+                Layout.preferredWidth: line.buttonWidth
                 interactive: line.interactive
                 onPressed: line.invoke(line.action, line.drive)
             }
@@ -381,10 +469,10 @@ Item {
         property bool interactive: true
         property string caption: ""
         signal changed(bool nextValue)
-        width: 48
-        height: 27
-        radius: 14
-        color: !interactive ? "#334158" : checked ? "#765f33" : "#30425a"
+        width: 36
+        height: 18
+        radius: 9
+        color: !interactive ? "#334158" : checked ? "#e4c579" : "#30425a"
         border.width: 1
         border.color: activeFocus ? "#76b6e2" : checked ? "#e4c579" : "#59708a"
         activeFocusOnTab: interactive
@@ -395,9 +483,9 @@ Item {
         Keys.onReturnPressed: activate()
         Keys.onSpacePressed: activate()
         Rectangle {
-            x: toggle.checked ? parent.width - width - 4 : 4
+            x: toggle.checked ? parent.width - width - 2 : 2
             anchors.verticalCenter: parent.verticalCenter
-            width: 19; height: 19; radius: 10
+            width: 14; height: 14; radius: 7
             color: toggle.interactive ? "#f1f3f8" : "#9eafc8"
             Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
         }
@@ -484,9 +572,28 @@ Item {
         }
     }
 
+    Column {
+        id: groupChrome
+        x: 31; y: 23; width: parent.width - 64
+        visible: view.groupIndex >= 1 && view.groupIndex <= 3
+        spacing: 13
+        PGroupHeader {
+            caption: view.groupIndex === 1 ? view.t("Spazio e pulizia", "Space & Cleanup") :
+                     view.groupIndex === 2 ? view.t("Diagnostica e riparazione", "Diagnostics & Repair") :
+                     view.t("Prestazioni e avvio", "Performance & Startup")
+            iconName: view.groupIndex === 1 ? "clean" : view.groupIndex === 2 ? "tools" : "turbo"
+        }
+        Rectangle { width: parent.width; height: 1; color: "#2e415c" }
+    }
+
     Flickable {
         id: viewport
-        anchors.fill: parent
+        objectName: "pageViewport"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.top: groupChrome.visible ? groupChrome.bottom : parent.top
+        anchors.topMargin: groupChrome.visible ? 10 : 0
         clip: true
         contentWidth: width
         contentHeight: content.implicitHeight + 42
@@ -495,7 +602,7 @@ Item {
         Column {
             id: content
             x: view.groupIndex === 0 ? 24 : 31
-            y: view.groupIndex === 0 ? 14 : 23
+            y: view.groupIndex === 0 || view.groupIndex === 4 ? 16 : 10
             width: Math.max(250, viewport.width - (view.groupIndex === 0 ? 58 : 64))
             spacing: 15
 
@@ -592,6 +699,11 @@ Item {
                             font.pixelSize: 12
                             elide: Text.ElideRight
                         }
+                        Text {
+                            visible: Number((view.metricDetails.uptime || "").split("d")[0]) >= 7
+                            text: view.t("Riavvio consigliato", "Restart recommended")
+                            color: "#e4b66d"; font.pixelSize: 11
+                        }
                     }
                 }
                 Rectangle {
@@ -626,7 +738,7 @@ Item {
                                 }
                             }
                         PButton {
-                            caption: view.t("Visualizza", "View")
+                            caption: view.t("Apri", "View")
                             Layout.preferredWidth: 73
                             height: 36
                             interactive: !view.occupied
@@ -646,7 +758,7 @@ Item {
                     model: [
                         { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
                         { id: "ram", icon: "memory", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.ramCapacityText(), extra: view.hardware.ram_info || "" },
-                        { id: "disk", icon: "drive", title: view.t("Disco di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
+                        { id: "disk", icon: "drive", title: view.t("Unità di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
                     ]
                     Rectangle {
                         width: (metricFlow.width - (metricFlow.columns - 1) * metricFlow.spacing) / metricFlow.columns
@@ -723,13 +835,13 @@ Item {
                     height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: scanContent
-                        anchors.fill: parent; anchors.margins: 13
+                        anchors.fill: parent; anchors.margins: 13; spacing: 8
                         Image {
                             source: "image://panacea-nav/scan/detail"
                             sourceSize.width: 96
                             sourceSize.height: 96
-                            Layout.preferredWidth: 40
-                            Layout.preferredHeight: 40
+                            Layout.preferredWidth: 46
+                            Layout.preferredHeight: 46
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                         }
@@ -738,12 +850,12 @@ Item {
                             Text { text: view.t("File temporanei","Temporary files"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
                                 text: view.temp.no_files_deleted ? view.temp.count + " · " + view.formatBytes(view.temp.bytes)
-                                      : view.t("Analisi senza eliminazione","Preview without deletion")
+                                      : view.t("Analisi facoltativa · Nessun file eliminato","Analysis optional · No files deleted")
                                 Layout.fillWidth: true; color: "#9eafc8"; font.pixelSize: 11
                                 wrapMode: Text.WordWrap
                             }
                         }
-                        PButton { caption: view.t("Analizza","Analyze"); interactive: !view.occupied; onPressed: view.showRead("temp_preview") }
+                        PButton { Layout.preferredWidth:85; caption: view.t("Analizza","Analyze"); interactive: !view.occupied; onPressed: view.showRead("temp_preview") }
                     }
                 }
                 Rectangle {
@@ -751,13 +863,13 @@ Item {
                     height: Math.max(92 + Math.round(view.dashboardStretch * .27), restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: restoreContent
-                        anchors.fill: parent; anchors.margins: 13
+                        anchors.fill: parent; anchors.margins: 13; spacing: 8
                         Image {
                             source: "image://panacea-nav/restore/detail"
                             sourceSize.width: 96
                             sourceSize.height: 96
-                            Layout.preferredWidth: 40
-                            Layout.preferredHeight: 40
+                            Layout.preferredWidth: 46
+                            Layout.preferredHeight: 46
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                         }
@@ -765,12 +877,12 @@ Item {
                             Layout.fillWidth: true
                             Text { text: view.t("Punto di ripristino","Restore point"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
-                                text: view.t("Creazione con conferma","Confirmation required")
+                                text: view.t("Crea un punto di ripristino · conferma richiesta","Create a restore point · confirmation required")
                                 color: "#9eafc8"; font.pixelSize: 11; Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }
                         }
-                        PButton { caption: view.t("Crea","Create"); interactive: !view.occupied; onPressed: view.request("restore_point") }
+                        PButton { Layout.preferredWidth:85; caption: view.t("Crea","Create"); interactive: !view.occupied; onPressed: view.request("restore_point") }
                     }
                 }
             }
@@ -781,21 +893,19 @@ Item {
         id: cleaningAndAppsSection
         Column {
             width: parent.width
-            spacing: 12
-            PGroupHeader { caption: view.t("Spazio e pulizia", "Space & Cleanup"); iconName: "clean" }
-            Rectangle { width: parent.width; height: 1; color: "#2e415c" }
+            spacing: 16
             Flow {
                 id: pair
                 width: parent.width
-                spacing: 12
+                spacing: 20
                 PPanel {
+                    viewName: "cleaning"
                     width: view.pairedPanelWidth(pair.width, 300)
                     spacing: 8
-                    Text { text: view.t("Pulizia", "Cleanup"); color: "#f1f3f8"; font.bold: true; font.pixelSize: 19 }
-                    Text {
-                        text: view.t("File protetti esclusi. I risultati restano nel log.",
-                                     "Protected files are skipped. Results remain in the log.")
-                        width: parent.width; color: "#9eafc8"; font.pixelSize: 11; wrapMode: Text.WordWrap
+                    PSectionTitle { text: view.t("Pulizia", "Cleanup") }
+                    PSectionHint {
+                        text: view.t("Pulizia rapida o strumenti singoli. I file protetti vengono ignorati.",
+                                     "Quick cleanup or individual tools. Protected files are skipped.")
                     }
                     Rectangle {
                         width: parent.width
@@ -859,16 +969,16 @@ Item {
                             width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                         }
                     }
-                    PSectionLog { caption: view.t("Dettagli pulizia", "Cleanup details") }
+                    PSectionLog { scope: "cleaning"; caption: view.t("Dettagli pulizia", "Cleanup details") }
                 }
                 PPanel {
+                    viewName: "apps"
                     width: view.pairedPanelWidth(pair.width, 300)
                     spacing: 8
-                    Text { text: view.t("Applicazioni installate","Installed apps"); font.pixelSize: 19; font.bold: true; color: "#f1f3f8" }
-                    Text {
+                    PSectionTitle { text: view.t("Applicazioni installate","Installed apps") }
+                    PSectionHint {
                         text: view.t("Gestisci o disinstalla programmi dalle impostazioni Windows.",
                                      "Manage or uninstall programs in Windows.")
-                        width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                     }
                     Rectangle {
                         width: parent.width
@@ -895,142 +1005,121 @@ Item {
         id: toolsAndDiskSection
         Column {
             width: parent.width
-            spacing: 12
-            PGroupHeader { caption: view.t("Diagnostica e riparazione", "Diagnostics & Repair"); iconName: "tools" }
-            Rectangle { width: parent.width; height: 1; color: "#2e415c" }
+            spacing: 16
             Flow {
                 id: pair
-                width: parent.width; spacing: 12
+                width: parent.width; spacing: 20
                 PPanel {
+                    viewName: "tools"
                     width: view.pairedPanelWidth(pair.width, 305)
                     spacing: 7
-                    Text { text: view.t("Strumenti di riparazione","Repair tools"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
+                    PSectionTitle { text: view.t("Strumenti di riparazione","Repair tools") }
+                    PSectionHint {
+                        text: view.t("Verifica l'integrità o ripara problemi di Windows e della rete.",
+                                     "Check integrity or repair Windows and network issues.")
+                    }
                     Text { text: view.t("INTEGRITÀ WINDOWS","WINDOWS INTEGRITY"); color:"#e4c579"; font.pixelSize:10; font.bold:true }
-                    PRow { heading:view.t("Scansione file di sistema","System file scan"); hint:"SFC /scannow"; action:"sfc"; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Salute immagine","Image health"); hint:"DISM CheckHealth"; action:"dism_check"; buttonText:view.t("Verifica","Check"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Riparazione immagine","Repair image"); hint:"DISM RestoreHealth"; action:"dism_restore"; buttonText:view.t("Ripara","Repair"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    Rectangle {
+                        width: parent.width; height: integrityRows.implicitHeight
+                        radius: 8; color: "#142138"; border.color: "#2e415c"
+                        Column {
+                            id: integrityRows
+                            width: parent.width
+                            PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Scansione file di sistema","System file scan"); hint:view.t("Verifica e ripara i file protetti.","Verify and repair protected files."); action:"sfc"; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                            PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Salute immagine","Image health"); hint:view.t("Controlla i danni registrati nell'immagine di sistema.","Check the component image for recorded corruption."); action:"dism_check"; buttonText:view.t("Verifica","Check"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                            PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Riparazione immagine","Repair image"); hint:view.t("Ripara i danni; può usare Windows Update.","Repair corruption; may use Windows Update."); action:"dism_restore"; buttonText:view.t("Ripara","Repair"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                        }
+                    }
                     Text { text: view.t("RETE","NETWORK"); color:"#e4c579"; font.pixelSize:10; font.bold:true }
-                    PRow { heading:view.t("Svuota DNS","Flush DNS"); hint:view.t("Cancella la cache DNS","Clear cached DNS records"); action:"dns_flush"; buttonText:view.t("Svuota","Flush"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                    PRow { heading:view.t("Ripristina Winsock","Reset Winsock"); hint:view.t("Potrebbe richiedere riavvio","A restart may be required"); action:"winsock_reset"; buttonText:view.t("Ripristina","Reset"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                    Rectangle {
+                        width: parent.width; height: networkRows.implicitHeight
+                        radius: 8; color: "#142138"; border.color: "#2e415c"
+                        Column {
+                            id: networkRows
+                            width: parent.width
+                            PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Svuota DNS","Flush DNS"); hint:view.t("Cancella la cache DNS.","Clear cached DNS records."); action:"dns_flush"; buttonText:view.t("Svuota","Flush"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                            PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Ripristina Winsock","Reset Winsock"); hint:view.t("Può interrompere le connessioni e richiedere un riavvio.","May interrupt connections and require a restart."); action:"winsock_reset"; buttonText:view.t("Ripristina","Reset"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
+                        }
+                    }
                     PShortcut { caption: view.t("Crea punto di ripristino", "Create restore point"); iconName: "restore"; interactive: !view.occupied; onTriggered: view.request("restore_point") }
                     PShortcut { caption: view.t("Rapporto batteria", "Battery report"); iconName: "battery"; interactive: !view.occupied; onTriggered: view.request("battery_report") }
-                    PSectionLog { caption: view.t("Output comandi", "Command output") }
+                    PSectionLog { scope: "tools"; caption: view.t("Output comandi", "Command output") }
                 }
                 PPanel {
+                    viewName: "disk"
                     width: view.pairedPanelWidth(pair.width, 305)
                     spacing: 8
-                    Text { text: view.t("Ottimizzazione dischi","Drive optimization"); color:"#f1f3f8"; font.pixelSize:19; font.bold:true }
-                    Text {
+                    PSectionTitle { text: view.t("Ottimizzazione dischi","Drive optimization") }
+                    PSectionHint {
                         text: view.t("Windows sceglie TRIM o deframmentazione in base all'unità.",
                                      "Windows selects TRIM or defragmentation according to drive type.")
-                        width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
                     }
                     Rectangle {
                         width: parent.width
-                        height: driveSelector.implicitHeight + 20
-                        radius: 8
-                        color: "#142138"
-                        border.color: "#2e415c"
+                        height: driveSelector.implicitHeight + 24
+                        radius: 8; color: "#142138"; border.color: "#2e415c"
                         Column {
                             id: driveSelector
-                            x: 10
-                            y: 10
-                            width: parent.width - 20
-                            spacing: 8
+                            x: 14; y: 12; width: parent.width - 28; spacing: 12
                             RowLayout {
-                                width: parent.width
-                                spacing: 8
+                                width: parent.width; spacing: 8
                                 Image {
                                     source: "image://panacea-nav/disk/detail"
                                     sourceSize.width: 96; sourceSize.height: 96
-                                    Layout.preferredWidth: 26; Layout.preferredHeight: 26
+                                    Layout.preferredWidth: 28; Layout.preferredHeight: 28
                                 }
                                 PButton {
-                                    caption: view.selectedDrive || view.t("Seleziona unità", "Select drive")
+                                    Layout.preferredWidth: 112
+                                    caption: (view.selectedDrive || view.t("Seleziona unità", "Select drive")) + "  ▾"
                                     interactive: !view.occupied && readService.driveLetters.length > 0
                                     onPressed: view.showDriveChoices = !view.showDriveChoices
                                 }
                                 Item { Layout.fillWidth: true }
-                                PButton {
-                                    caption: view.t("Aggiorna", "Refresh")
-                                    interactive: !view.occupied
-                                    onPressed: view.showRead("drives")
-                                }
+                                PButton { Layout.preferredWidth: 85; caption:view.t("Aggiorna","Refresh"); interactive:!view.occupied; onPressed:view.showRead("drives") }
                             }
                             Flow {
-                                width: parent.width
-                                visible: view.showDriveChoices
-                                spacing: 6
+                                width: parent.width; visible: view.showDriveChoices; spacing: 6
                                 Repeater {
                                     model: readService.driveLetters
                                     PButton {
-                                        caption: modelData
-                                        primary: view.selectedDrive === modelData
+                                        caption: modelData; primary:view.selectedDrive === modelData
                                         interactive: !view.occupied
-                                        onPressed: {
-                                            view.selectedDrive = modelData
-                                            view.showDriveChoices = false
-                                        }
+                                        onPressed: { view.selectedDrive = modelData; view.showDriveChoices = false }
                                     }
                                 }
                             }
-                            Text {
-                                text: view.selectedDrive ?
-                                      view.t("Unità selezionata: ", "Selected drive: ") + view.selectedDrive :
-                                      view.t("Lettura delle unità locali…", "Reading local drives…")
-                                width: parent.width
-                                color: "#9eafc8"
-                                font.pixelSize: 11
-                            }
-                        }
-                    }
-                    Repeater {
-                        model: (view.drives.drives || []).filter(function(row) { return row.letter === view.selectedDrive })
-                        Rectangle {
-                            width: parent.width
-                            height: 86
-                            radius: 7
-                            color: "#142138"
-                            border.color: "#2e415c"
-                            Column {
-                                anchors.fill: parent
-                                anchors.margins: 11
-                                spacing: 7
-                                RowLayout {
-                                    width: parent.width
-                                    Text { text: modelData.letter; color: "#f1f3f8"; font.pixelSize: 13; font.bold: true }
+                            Repeater {
+                                model: (view.drives.drives || []).filter(function(row) { return row.letter === view.selectedDrive })
+                                Column {
+                                    width: parent.width; spacing: 12
                                     Text {
-                                        text: modelData.available ?
+                                        text: modelData.available ? modelData.letter + " · " + view.t("Unità locale", "Local drive") + " · " +
                                               view.formatBytes(modelData.free_bytes) + " / " + view.formatBytes(modelData.total_bytes) :
-                                              view.t("Unità non disponibile", "Drive unavailable")
-                                        color: "#9eafc8"
-                                        font.pixelSize: 11
-                                        Layout.fillWidth: true
-                                        horizontalAlignment: Text.AlignRight
+                                              view.t("Unità non disponibile", "Drive unavailable") + " · " + (modelData.error || "")
+                                        width: parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:13
+                                    }
+                                    PProgress {
+                                        width: parent.width; height:8
+                                        fraction:typeof modelData.used_percent === "number" ? modelData.used_percent / 100 : 0
                                     }
                                 }
-                                PProgress {
-                                    width: parent.width
-                                    fraction: typeof modelData.used_percent === "number" ? modelData.used_percent / 100 : 0
-                                }
-                                Text {
-                                    width: parent.width
-                                    color: modelData.available ? "#9eafc8" : "#e4b66d"
-                                    font.pixelSize: 10
-                                    elide: Text.ElideRight
-                                    text: modelData.available ?
-                                          view.t("Spazio utilizzato: ", "Used space: ") + modelData.used_percent + "%" :
-                                          (modelData.error || view.t("Informazioni non disponibili", "Unavailable"))
-                                }
+                            }
+                            PShortcut {
+                                height: 38; caption:view.t("Ottimizza","Optimize"); iconName:"disk"
+                                interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1
+                                onTriggered:view.request("drive_optimize",view.selectedDrive)
                             }
                         }
                     }
-                    PRow { heading:view.t("Ottimizza unità","Optimize drive"); hint:view.t("TRIM / defrag secondo Windows","Windows TRIM / defrag"); action:"drive_optimize"; drive:view.selectedDrive; buttonText:view.t("Ottimizza","Optimize"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
-                    PShortcut {
-                        caption: view.t("Apri ottimizzazione unità di Windows", "Open Windows drive optimizer")
-                        iconName: "disk"
-                        interactive: !view.occupied
-                        onTriggered: view.request("open_defrag")
+                    Rectangle {
+                        width: parent.width; height: 64
+                        radius:8; color:"#142138"; border.color:"#2e415c"
+                        PShortcut {
+                            x:14; y:12; width:parent.width - 28; height:40
+                            caption: view.t("Apri ottimizzazione unità di Windows", "Open Windows drive optimizer")
+                            iconName: "disk"; interactive:!view.occupied
+                            onTriggered:view.request("open_defrag")
+                        }
                     }
                     PButton {
                         caption: view.showExtraDriveTools ?
@@ -1046,7 +1135,7 @@ Item {
                         PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                         PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     }
-                    PSectionLog { caption: view.t("Output ottimizzazione", "Optimization output") }
+                    PSectionLog { scope: "disk"; caption: view.t("Output ottimizzazione", "Optimization output") }
                 }
             }
         }
@@ -1055,16 +1144,16 @@ Item {
     Component {
         id: turboAndStartupSection
         Column {
-            width: parent.width; spacing: 12
-            PGroupHeader { caption: view.t("Prestazioni e avvio", "Performance & Startup"); iconName: "turbo" }
-            Rectangle { width:parent.width; height:1; color:"#2e415c" }
+            width: parent.width; spacing: 16
             Flow {
                 id: pair
-                width: parent.width; spacing:12
+                width: parent.width; spacing:20
                 PPanel {
+                    viewName: "turbo"
                     width: view.pairedPanelWidth(pair.width, 320)
                     spacing: 8
-                    Text { text:view.t("Impostazioni Turbo","Performance settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
+                    PSectionTitle { text:view.t("Impostazioni Turbo","Performance settings") }
+                    PSectionHint { text:view.t("Le impostazioni originali vengono salvate per il ripristino.", "Original settings are saved for restoration.") }
                     Rectangle {
                         width:parent.width; height:turboMasterContent.implicitHeight + 24; color:"#142138"; border.color:"#2e415c"; radius:8
                         Column {
@@ -1112,6 +1201,12 @@ Item {
                             }
                         }
                     }
+                    Rectangle {
+                        width: parent.width; height: turboOptions.implicitHeight
+                        radius: 8; color: "#142138"; border.color: "#2e415c"
+                        Column {
+                            id: turboOptions
+                            width: parent.width
                     Repeater {
                         model:[
                             {key:"power", name:view.t("Alte prestazioni","High performance"), hint:view.t("Aumenta consumi e calore","More power and heat"), on:"power_on", off:"power_off"},
@@ -1131,21 +1226,28 @@ Item {
                                 height: 1
                                 color: "#2e415c"
                             }
-                            RowLayout {
-                                anchors.fill:parent; anchors.margins:8; spacing:10
+                            GridLayout {
+                                anchors.fill:parent; anchors.margins:8
+                                columns: parent.width < 390 ? 1 : 2
+                                rowSpacing: 6; columnSpacing: 10
                                 ColumnLayout {
-                                    Layout.fillWidth:true; spacing:3
-                                    Text { text:modelData.name; color:"#f1f3f8"; font.pixelSize:13; font.bold:true }
+                                    Layout.fillWidth:true; Layout.minimumWidth:0; spacing:3
+                                    Text { text:modelData.name; color:"#f1f3f8"; font.pixelSize:13; font.bold:true; Layout.fillWidth:true; wrapMode:Text.WordWrap }
                                     Text { text:modelData.hint; color:"#9eafc8"; font.pixelSize:11; Layout.fillWidth:true; wrapMode:Text.WordWrap }
                                 }
-                                Text { text:view.stateCaption(view.turbo.states ? view.turbo.states[modelData.key] : null); font.pixelSize:10; color:"#9eafc8" }
+                                RowLayout {
+                                    spacing: 8
                                 PToggle {
                                     caption:modelData.name
-                                    checked:view.turbo.states && view.turbo.states[modelData.key] === true
-                                    interactive:!view.occupied && view.turbo.states && typeof view.turbo.states[modelData.key] === "boolean"
+                                    checked: !!view.turbo.states && view.turbo.states[modelData.key] === true
+                                    interactive: !view.occupied && !!view.turbo.states && typeof view.turbo.states[modelData.key] === "boolean"
                                     onChanged: view.request(nextValue ? modelData.on : modelData.off)
                                 }
+                                Text { text:view.stateCaption(view.turbo.states ? view.turbo.states[modelData.key] : null); font.pixelSize:11; color:"#9eafc8" }
+                                }
                             }
+                        }
+                    }
                         }
                     }
                     Text {
@@ -1155,13 +1257,13 @@ Item {
                     }
                 }
                 PPanel {
+                    viewName: "startup"
                     width: view.pairedPanelWidth(pair.width, 320)
                     spacing: 9
-                    Text { text:view.t("Applicazioni all'avvio","Startup apps"); color:"#f1f3f8"; font.bold:true; font.pixelSize:19 }
-                    Text {
+                    PSectionTitle { text:view.t("Applicazioni all'avvio","Startup apps") }
+                    PSectionHint {
                         text:view.t("Disabilita applicazioni non necessarie all'accesso a Windows.",
                                      "Disable unnecessary apps at sign-in.")
-                        color:"#9eafc8"; width:parent.width; wrapMode:Text.WordWrap; font.pixelSize:11
                     }
                     Rectangle {
                         width: parent.width
@@ -1186,42 +1288,43 @@ Item {
         id: resurrectionSection
         Column {
             width:parent.width; spacing:12
-            PGroupHeader { caption: view.t("Manutenzione guidata", "Guided Maintenance"); iconName: "resurrect" }
-            Text { text:view.t("10 fasi · Punto di ripristino verificato obbligatorio", "10 steps · Verified restore point required"); color:"#9eafc8"; font.pixelSize:12 }
+            PGroupHeader {
+                caption: view.t("Manutenzione guidata", "Guided Maintenance"); iconName: "resurrect"
+                subtitle: view.t("10 fasi · Punto di ripristino verificato obbligatorio", "10 steps · Verified restore point required")
+            }
             Rectangle {
-                width:parent.width; height:146; radius:8; color:"#142138"; border.color:"#2e415c"
+                width:parent.width; height:resurrectionHero.implicitHeight + 28; radius:8; color:"#142138"; border.color:"#2e415c"
                 Column {
+                    id: resurrectionHero
                     anchors.fill:parent; anchors.margins:14; spacing:10
                     Text {
-                        text:maintenanceService.lastAction === "resurrection" ? maintenanceService.resultStatus : view.t("Pronto · Nessuna fase eseguita","Ready · No steps run")
+                        text:resurrectionResult.status ? view.statusCaption(resurrectionResult.status) : view.t("Pronto · Nessuna fase eseguita","Ready · No steps run")
                         color:"#f1f3f8"; font.pixelSize:16; font.bold:true
                     }
-                    Text { text:maintenanceService.progressDone + " / 10 " + view.t("fasi","steps"); color:"#e4c579"; font.pixelSize:12 }
-                    PProgress { width:parent.width; fraction:maintenanceService.progressDone / 10 }
-                    Row {
+                    Text { text:(resurrectionResult.done || 0) + " / 10 " + view.t("fasi","steps"); color:"#e4c579"; font.pixelSize:12 }
+                    PProgress { width:parent.width; fraction:(resurrectionResult.done || 0) / 10 }
+                    Flow {
+                        width: parent.width
                         spacing:9
-                        PButton { caption:view.t("Avvia sequenza","Start sequence"); primary:true; interactive:!view.occupied; onPressed:view.request("resurrection") }
-                        PButton { caption:view.t("Annulla dopo la fase","Cancel after step"); interactive:maintenanceService.busy && maintenanceService.lastAction === "resurrection"; onPressed:maintenanceService.cancel() }
+                        PButton { width: 168; height: 38; caption:view.t("Avvia sequenza","Start sequence"); primary:true; interactive:!view.occupied; onPressed:view.request("resurrection") }
+                        PButton { width:176; height:36; visible:maintenanceService.busy && maintenanceService.lastAction === "resurrection"; caption:view.t("Annulla dopo la fase","Cancel after step"); interactive:maintenanceService.busy && maintenanceService.lastAction === "resurrection"; onPressed:maintenanceService.cancel() }
                     }
                 }
             }
             Rectangle {
-                width:parent.width; height:118; radius:8; color:"#242b37"; border.color:"#8d6d40"
+                width:parent.width; height:safetyBody.implicitHeight + 24; radius:8; color:"#242b37"; border.color:"#8d6d40"
                 Column {
-                    anchors.fill:parent; anchors.margins:13; spacing:8
+                    id: safetyBody
+                    anchors.left:parent.left; anchors.right:parent.right; anchors.top:parent.top
+                    anchors.margins:13; spacing:8
                     Text { text:view.t("Prima di iniziare", "Before you start"); color:"#e4b66d"; font.bold:true; font.pixelSize:13 }
                     Text {
                         width:parent.width
-                        text:view.t("La sequenza verifica prima un nuovo punto di ripristino. Cache browser, temporanei e Cestino vengono poi eliminati definitivamente e non sono recuperabili dal punto di ripristino. La rete potrebbe interrompersi. L'annullamento avviene tra le fasi.",
-                                    "A new restore point is verified first. Browser caches, temporary files and the Recycle Bin are then permanently deleted and cannot be recovered by a restore point. Network service may be interrupted. Cancellation occurs between steps.")
+                        text:view.t("Prima di procedere Panacea deve verificare un nuovo punto di ripristino. Poi eliminerà definitivamente le cache dei browser, i file temporanei e il contenuto del Cestino: il punto di ripristino non può recuperarli.\nIl ripristino della rete può interrompere la connessione o richiedere un riavvio. Salva il lavoro. Se premi Annulla, Panacea termina il passaggio in corso e non avvia i successivi.",
+                                    "A new restore point must be verified first. Browser caches, temporary files and Recycle Bin contents will then be deleted permanently. A restore point cannot bring them back.\nResetting the network can interrupt your connection or require a restart. Save your work. If you cancel, Panacea finishes the current step and stops before the next one.")
                         color:"#f1f3f8"; wrapMode:Text.WordWrap; font.pixelSize:12
                     }
                 }
-            }
-            PButton { caption:view.t("Verifica blocco manutenzione", "Check maintenance guard"); interactive:!view.occupied; onPressed:view.showRead("guard_status") }
-            Text {
-                text:view.guard.message || ""
-                width:parent.width; color:view.guard.blocked ? "#e4b66d" : "#9eafc8"; font.pixelSize:11; wrapMode:Text.WordWrap
             }
             Text {
                 text: view.t("Fasi della manutenzione", "Maintenance steps")
@@ -1294,7 +1397,7 @@ Item {
                                                (progressSteps[index].success === true ? "#78c8a8" : "#ee939a") :
                                                (maintenanceService.busy &&
                                                 maintenanceService.lastAction === "resurrection" &&
-                                                maintenanceService.progressDone === index ? "#e4b66d" : "#9eafc8")
+                                                resurrectionResult.done === index ? "#e4b66d" : "#9eafc8")
                                         font.pixelSize: 10
                                     }
                                 }
@@ -1347,7 +1450,13 @@ Item {
                     }
                 }
             }
-            PSectionLog { caption: view.t("Output sequenza completo", "Full sequence output") }
+            PSectionLog { scope: "resurrect"; caption: view.t("Output sequenza completo", "Full sequence output") }
+            PButton { caption:view.t("Verifica blocco manutenzione", "Check maintenance guard"); interactive:!view.occupied; onPressed:view.showRead("guard_status") }
+            Text {
+                visible: text.length > 0
+                text:view.guard.message || ""
+                width:parent.width; color:view.guard.blocked ? "#e4b66d" : "#9eafc8"; font.pixelSize:11; wrapMode:Text.WordWrap
+            }
         }
     }
 }

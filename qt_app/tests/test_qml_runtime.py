@@ -25,6 +25,14 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         for rect in data["metrics"]:
             self.assertLessEqual(rect[0] + rect[2], 976)
 
+    def test_legacy_dashboard_grid_survives_scaled_logical_viewports(self):
+        for width in (760, 781, 911):
+            with self.subTest(width=width):
+                data = self.probe(width, 512)
+                self.assertEqual(data["windows"][1], data["updates"][1])
+                self.assertEqual(len({r[1] for r in data["metrics"]}), 1)
+                self.assertEqual(data["horizontal_overflow"], [])
+
     def test_guided_steps_follow_the_legacy_responsive_columns(self):
         for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
             with self.subTest(width=width):
@@ -72,6 +80,13 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         self.assertLess(wide["toggle"][0], wide["state"][0])
         narrow = self.probe(760, 672, 3)["master_layout"]
         self.assertGreaterEqual(narrow["toggle"][1], narrow["title"][1] + narrow["title"][3])
+
+    def test_stopped_sequence_marks_unattempted_phases_as_not_run(self):
+        for state, count in (("cancelled", 8), ("failed", 9)):
+            with self.subTest(state=state):
+                labels = self.probe(976, 672, 4, state)["phase_states"]
+                self.assertEqual(labels.count("Not run"), count)
+                self.assertNotIn("Not started", labels)
 
 
 if __name__ == "__main__":

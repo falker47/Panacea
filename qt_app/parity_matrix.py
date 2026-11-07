@@ -158,8 +158,27 @@ def capture_states(output: Path):
             subprocess.run(command, cwd=ROOT, check=True, timeout=45,
                            env=dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software", QT_SCALE_FACTOR="1", PYTHONUTF8="1"))
             records.append({"view": view, "scenario": state, "language": language, "image": str(target)})
-    (output / "state-report.json").write_text(json.dumps({"fixture_only": True, "captures": records}, indent=2) + "\n", encoding="utf-8")
-    print(f"{len(records)} inert state captures completed", flush=True)
+    legacy = output / "legacy-states"
+    subprocess.run([sys.executable, str(ROOT / "scripts/ui_state_check.py"), "--output", str(legacy),
+                    "--width", "976", "--height", "672"], cwd=ROOT, check=True, timeout=600,
+                   env=dict(os.environ, PANACEA_LANGUAGE="english", PYTHONUTF8="1"))
+    manifest = json.loads((legacy / "manifest.json").read_text(encoding="utf-8"))
+    if not manifest.get("all_passed"):
+        raise ValueError("Native legacy state fixture failed")
+    analogues = [("tools-output-" + old, "tools-" + new) for old, new in (("running", "running"), ("completed", "completed"))]
+    analogues += [("disk-output-" + old, "disk-" + new) for old, new in (("running", "running"), ("completed", "completed"))]
+    analogues += [("turbo-unknown", "turbo-unknown"), ("dashboard-unavailable", "dashboard-unknown")]
+    analogues += [("resurrection-" + state, "resurrect-" + state)
+                  for state in ("running", "completed", "partial", "failed", "cancelled")]
+    comparisons = []
+    for old, new in analogues:
+        result = compare_images(legacy / f"{old}.png", output / "states" / f"{new}-en.png",
+                                output / "state-comparison" / new)
+        result["method"] = "semantic state analogue; synthetic inputs differ, not a data-equality assertion"
+        comparisons.append(result)
+    (output / "state-report.json").write_text(json.dumps({"fixture_only": True, "captures": records,
+        "legacy_case_count": manifest["case_count"], "state_comparisons": comparisons}, indent=2) + "\n", encoding="utf-8")
+    print(f"{len(records)} Qt and {manifest['case_count']} native legacy inert state captures completed", flush=True)
 
 
 def main():

@@ -27,6 +27,14 @@ def main():
         {"letter": "Z:", "available": False, "error": "Fixture offline"}]}
     reader._drives = ["C:", "D:"]
     updater = UpdateBridge(reader, maintenance)
+    if len(sys.argv) > 4 and sys.argv[4] in ("cancelled", "failed"):
+        maintenance._last_action = "resurrection"
+        maintenance._result_status = sys.argv[4]
+        maintenance._progress_done = 2 if sys.argv[4] == "cancelled" else 1
+        maintenance._progress_total = 10
+        maintenance._steps = [{"success": sys.argv[4] != "failed", "message": "Fixture only"}
+                              for _ in range(maintenance._progress_done)]
+        maintenance._remember_result()
     if len(sys.argv) > 4 and sys.argv[4] == "confirmation":
         maintenance._pending = "invalid-fixture"
         maintenance._details = "Safety warning requiring explicit confirmation. " * 50
@@ -82,13 +90,15 @@ def main():
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]
+            result["phase_states"] = [i.property("text") for step in steps for i in items(step)
+                                      if i.property("text") in ("Completed", "Failed", "Not started", "Not run")]
             panel = next(i for i in visible if i.objectName() == "resurrectionSafety")
             descendants = list(items(panel))
             result["warning_content_height"] = max(box(i)[1] + box(i)[3] for i in descendants) - box(panel)[1]
             result["warning_panel_height"] = panel.height()
         if tab in (1, 2):
             if window.property("language") == "it":
-                names = ("Pulizia", "Applicazioni installate") if tab == 1 else ("Strumenti di riparazione", "Ottimizzazione dischi")
+                names = ("Pulizia", "App installate") if tab == 1 else ("Strumenti di riparazione", "Ottimizzazione unità")
             else:
                 names = ("Cleanup", "Installed apps") if tab == 1 else ("Repair tools", "Drive optimization")
             result["panels"] = [box(text_item(t).parentItem().parentItem()) for t in names]

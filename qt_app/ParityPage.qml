@@ -37,7 +37,7 @@ Item {
                 view.selectedDrive = letters[0]
         }
     }
-    function t(it, en) { return language === "it" ? it : en }
+    function t(it, en) { return readService.localizedCopy(it, en, language) }
     function request(action, drive) {
         if (!occupied)
             maintenanceService.prepare(action, drive || "")
@@ -125,6 +125,8 @@ Item {
         if (maintenanceService.busy && maintenanceService.lastAction === "resurrection"
                 && resurrectionResult.done === index)
             return t("In corso", "Running")
+        if (resurrectionResult.status === "cancelled" || resurrectionResult.status === "failed")
+            return t("Non eseguito", "Not run")
         return t("Non avviato", "Not started")
     }
     function stepDisplay(index, fallback) {
@@ -646,7 +648,7 @@ Item {
         Column {
             width: parent.width
             spacing: 13
-            PGroupHeader { caption: view.t("Panoramica", "Overview"); iconName: "dashboard" }
+            PGroupHeader { caption: view.t("Panoramica", "Overview"); iconName: "dashboard"; height: viewport.height < 520 ? 33 : implicitHeight }
             Rectangle {
                 id: overviewCard
                 width: parent.width
@@ -660,8 +662,9 @@ Item {
                     y: 7
                     width: parent.width - 20
                     spacing: 8
-                    readonly property bool paired: width >= 2 * 280 + spacing
-                    readonly property real cardHeight: Math.max(145, 108 + Math.round(view.dashboardStretch * .28))
+                    // V2 uses a uniform two-column summary at every scale.
+                    readonly property bool paired: true
+                    readonly property real cardHeight: Math.max(viewport.height < 520 ? 117 : 143, 108 + Math.round(view.dashboardStretch * .28))
                 Rectangle {
                     width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
                     height: summaryFlow.cardHeight; radius: 8; color: "transparent"; border.width: 0
@@ -744,17 +747,20 @@ Item {
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 spacing: 2
                                 Text {
                                     text: "Windows Update"
                                     Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
+                                    Layout.minimumWidth: 0
+                                    wrapMode: Text.Wrap
                                     color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
                                 }
                                 Text {
                                     text: view.updateCaption()
                                     Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
+                                    Layout.minimumWidth: 0
+                                    wrapMode: Text.Wrap
                                     color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
                                            (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
                                     font.pixelSize: 12
@@ -771,12 +777,17 @@ Item {
                 }
                 }
             }
-            Flow {
+            GridLayout {
                 id: metricFlow
                 width: parent.width
-                spacing: 10
-                readonly property int columns: width >= 3 * 180 + 2 * spacing ? 3 : width >= 2 * 180 + spacing ? 2 : 1
-                readonly property real cardMinimumHeight: 183 + Math.round(view.dashboardStretch * .41)
+                height: implicitHeight
+                columnSpacing: 10
+                rowSpacing: 10
+                uniformCellWidths: true
+                uniformCellHeights: true
+                // Match V2's fixed uniform metric grid; text wraps within cards.
+                columns: 3
+                readonly property real cardMinimumHeight: (viewport.height < 520 ? 196 : 183) + Math.round(view.dashboardStretch * .41)
                 Repeater {
                     model: [
                         { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
@@ -784,8 +795,11 @@ Item {
                         { id: "disk", icon: "drive", title: view.t("Unità di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
                     ]
                     Rectangle {
-                        width: (metricFlow.width - (metricFlow.columns - 1) * metricFlow.spacing) / metricFlow.columns
-                        height: Math.max(metricFlow.cardMinimumHeight, metricContent.implicitHeight + 26)
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: 0
+                        Layout.preferredWidth: 0
+                        implicitHeight: Math.max(metricFlow.cardMinimumHeight, metricContent.implicitHeight + 26)
                         radius: 8; color: "#142138"; border.color: "#2e415c"
                         Column {
                             id: metricContent
@@ -856,8 +870,8 @@ Item {
                 width: parent.width
                 spacing: 10
                 Rectangle {
-                    width: actionFlow.width >= 570 ? (actionFlow.width - 10) / 2 : actionFlow.width
-                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
+                    width: (actionFlow.width - 10) / 2
+                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26, restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: scanContent
                         anchors.fill: parent; anchors.margins: 13; spacing: 8
@@ -872,6 +886,7 @@ Item {
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             Text { text: view.t("File temporanei","Temporary files"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
                                 text: view.temp.error ? view.t("Analisi non riuscita · Nessun file eliminato", "Analysis failed · No files deleted") : view.temp.no_files_deleted ? view.temp.count + " · " + view.formatBytes(view.temp.bytes)
@@ -884,8 +899,8 @@ Item {
                     }
                 }
                 Rectangle {
-                    width: actionFlow.width >= 570 ? (actionFlow.width - 10) / 2 : actionFlow.width
-                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
+                    width: (actionFlow.width - 10) / 2
+                    height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26, restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: restoreContent
                         anchors.fill: parent; anchors.margins: 13; spacing: 8
@@ -900,6 +915,7 @@ Item {
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             Text { text: view.t("Punto di ripristino","Restore point"); Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#f1f3f8"; font.pixelSize: 14; font.bold: true }
                             Text {
                                 text: view.t("Crea un punto di ripristino · conferma richiesta","Create a restore point · confirmation required")
@@ -1077,8 +1093,8 @@ Item {
                     spacing: 8
                     PSectionTitle { text: view.t("Ottimizzazione dischi","Drive optimization") }
                     PSectionHint {
-                        text: view.t("Windows sceglie TRIM o deframmentazione in base all'unità.",
-                                     "Windows selects TRIM or defragmentation according to drive type.")
+                        text: view.t("Windows usa il metodo di ottimizzazione adatto a ciascuna unità.",
+                                     "Windows uses the appropriate optimization method for each drive.")
                     }
                     Rectangle {
                         width: parent.width

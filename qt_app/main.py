@@ -64,6 +64,12 @@ from qt_lab.main import MetricsBridge  # noqa: E402
 class ReadBridge(QObject):
     changed = Signal()
 
+    @Slot(str, str, str, result=str)
+    def localizedCopy(self, italian, english, language):
+        from modules.localization import translate
+        rendered = translate(english, language)
+        return italian if language == "it" and rendered == english else rendered
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._service = ReadService()

@@ -45,6 +45,15 @@ class BridgeContracts(unittest.TestCase):
     def tearDown(self):
         self.bridge.stop()
 
+    def test_content_copy_reuses_the_stable_translation_catalog(self):
+        reader = ReadBridge()
+        try:
+            self.assertEqual(reader.localizedCopy("Applicazioni installate", "Installed apps", "it"), "App installate")
+            self.assertEqual(reader.localizedCopy("Applicazioni installate", "Installed apps", "en"), "Installed apps")
+            self.assertEqual(reader.localizedCopy("Stato Qt aggiuntivo", "Additional Qt status", "it"), "Stato Qt aggiuntivo")
+        finally:
+            reader.stop()
+
     def test_prepare_must_be_confirmed_and_is_one_use(self):
         self.bridge.prepare("temp_clean", "")
         self.assertTrue(self.bridge.awaitingConfirmation)

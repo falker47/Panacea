@@ -128,6 +128,11 @@ class DashboardRuntimeGeometry(unittest.TestCase):
     def test_disabled_button_retains_the_original_panel_color(self):
         self.assertEqual(self.probe(976, 672, 0, "disabled-action")["action_color"], "#1b2b44")
 
+    def test_failed_drive_query_clears_selection_and_explains_the_unavailable_state(self):
+        data = self.probe(976, 672, 2, "drive-query-failed")
+        self.assertEqual(data["selected_drive"], "")
+        self.assertTrue(data["drive_error_visible"])
+
 
 if __name__ == "__main__":
     unittest.main()

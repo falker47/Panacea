@@ -143,6 +143,8 @@ class ReadBridge(QObject):
             self._state = "error"
             self._last = "Dati non disponibili: " + str(exc)
             self._results = {**self._results, action: {"available": False, "error": str(exc)}}
+            if action == "drives":
+                self._drives = []
             scope = {"temp_preview": "cleaning", "drives": "disk"}.get(action)
             if scope:
                 self._section_logs = {**self._section_logs, scope: self._last}

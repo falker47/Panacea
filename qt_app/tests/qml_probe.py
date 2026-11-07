@@ -131,6 +131,9 @@ def main():
                 menu = next((i for i in visible if i.objectName() == "drivePopup"), None)
                 result["drive_popup_height"] = menu.height() if menu else None
                 result["drive_popup_visible"] = menu is not None
+                page = next(i for i in visible if i.objectName() == "parityPage_2")
+                result["selected_drive"] = page.property("selectedDrive")
+                result["drive_error_visible"] = any(i.property("text") == "Drive information unavailable: Fixture query failed" for i in visible)
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
@@ -142,6 +145,10 @@ def main():
         reader._busy = False
         app.quit()
     def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "drive-query-failed":
+            reader._results["drives"] = {"available": False, "error": "Fixture query failed"}
+            reader._drives = []
+            reader.changed.emit()
         if len(sys.argv) > 4 and sys.argv[4] == "disabled-action":
             reader._last_action = "hardware"
             reader._busy = True

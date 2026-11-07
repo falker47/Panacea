@@ -33,7 +33,10 @@ Item {
         function onChanged() {
             if (view.groupIndex !== 2) return
             var letters = view.driveChoices
-            if (letters.length && letters.indexOf(view.selectedDrive) === -1)
+            if (!letters.length) {
+                view.selectedDrive = ""
+                view.showDriveChoices = false
+            } else if (letters.indexOf(view.selectedDrive) === -1)
                 view.selectedDrive = letters[0]
         }
     }
@@ -1263,6 +1266,13 @@ Item {
                                 }
                                 Item { Layout.fillWidth: true }
                                 PButton { Layout.preferredWidth: 85; caption:view.t("Aggiorna","Refresh"); interactive:!view.occupied; onPressed:view.showRead("drives") }
+                            }
+                            Text {
+                                visible: !!view.drives.error
+                                width: parent.width
+                                text: view.t("Informazioni unità non disponibili: ", "Drive information unavailable: ") + (view.drives.error || "")
+                                textFormat: Text.PlainText; wrapMode: Text.WordWrap
+                                color: "#e4b66d"; font.pixelSize: 13
                             }
                             Repeater {
                                 model: (view.drives.drives || []).filter(function(row) { return row.letter === view.selectedDrive })

@@ -191,6 +191,27 @@ class BridgeContracts(unittest.TestCase):
         finally:
             reader.stop()
 
+    def test_failed_drive_refresh_invalidates_cached_available_letters(self):
+        import time
+        class FailingRead:
+            def collect(self, action):
+                raise PermissionError("Fixture drive query unavailable")
+
+            def close(self):
+                pass
+        reader = ReadBridge()
+        reader._service = FailingRead()
+        reader._drives = ["C:"]
+        try:
+            reader.request("drives")
+            deadline = time.monotonic() + 1
+            while reader.busy and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(.01)
+            self.assertEqual(reader.driveLetters, [])
+        finally:
+            reader.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

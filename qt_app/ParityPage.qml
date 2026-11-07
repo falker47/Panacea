@@ -326,30 +326,36 @@ Item {
 
     component PSectionLog: Rectangle {
         id: sectionLog
+        objectName: "sectionLog_" + scope
         property string caption: ""
         property bool expanded: false
         property string scope: ""
         property bool operationWasRunning: false
         property bool readWasRunning: false
+        function revealOutput() {
+            expanded = true
+            Qt.callLater(function() {
+                var target = sectionLog.mapToItem(viewport.contentItem, 0, 0).y - 16
+                viewport.contentY = Math.max(0, Math.min(Math.max(0, viewport.contentHeight - viewport.height), target))
+            })
+        }
         Component.onCompleted: {
             operationWasRunning = maintenanceService.busy && maintenanceService.activeSection === scope
-            if (operationWasRunning) expanded = true
+            if (operationWasRunning) revealOutput()
         }
         Connections {
             target: maintenanceService
             function onChanged() {
                 var running = maintenanceService.busy && maintenanceService.activeSection === sectionLog.scope
-                if (running && !sectionLog.operationWasRunning) sectionLog.expanded = true
+                if (running && !sectionLog.operationWasRunning) sectionLog.revealOutput()
                 sectionLog.operationWasRunning = running
             }
         }
         Connections {
             target: readService
             function onChanged() {
-                var running = readService.busy &&
-                    ((sectionLog.scope === "cleaning" && readService.lastAction === "temp_preview") ||
-                     (sectionLog.scope === "disk" && readService.lastAction === "drives"))
-                if (running && !sectionLog.readWasRunning) sectionLog.expanded = true
+                var running = readService.busy && sectionLog.scope === "cleaning" && readService.lastAction === "temp_preview"
+                if (running && !sectionLog.readWasRunning) sectionLog.revealOutput()
                 sectionLog.readWasRunning = running
             }
         }

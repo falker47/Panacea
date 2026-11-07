@@ -105,6 +105,15 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         data = self.probe(976, 672, 2, "many-drives")
         self.assertLessEqual(data["drive_popup_height"], 8 * 24 + 8)
 
+    def test_operation_start_reveals_its_output_like_the_legacy_controller(self):
+        log = self.probe(976, 672, 2, "operation-running")["tools_log"]
+        self.assertTrue(log["expanded"])
+        self.assertGreaterEqual(log["rect"][1], 85)
+        self.assertLess(log["rect"][1], 150)
+
+    def test_reading_drive_metadata_does_not_open_the_operation_log(self):
+        self.assertFalse(self.probe(976, 672, 2, "drive-refresh")["disk_log"]["expanded"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -78,6 +78,10 @@ def main():
         thumb = next((i for i in visible if i.objectName() == "pageScrollThumb"), None)
         result["scrollbar"] = box(scrollbar) if scrollbar else None
         result["scroll_thumb"] = box(thumb) if thumb else None
+        for scope in ("tools", "disk"):
+            log = next((i for i in visible if i.objectName() == "sectionLog_" + scope), None)
+            if log:
+                result[scope + "_log"] = {"rect": box(log), "expanded": log.property("expanded")}
         overflow = []
         for item in visible:
             if not isinstance(item.property("text"), str):
@@ -125,8 +129,18 @@ def main():
             state = next(i for i in master.parentItem().childItems() if i.property("text") == "Unknown")
             result["master_layout"] = {"title": box(text_item("All settings")), "toggle": box(master), "state": box(state)}
         print(json.dumps(result), flush=True)
+        maintenance._busy = False
+        reader._busy = False
         app.quit()
     def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "operation-running":
+            maintenance._last_action = "sfc"
+            maintenance._busy = True
+            maintenance.changed.emit()
+        if len(sys.argv) > 4 and sys.argv[4] == "drive-refresh":
+            reader._last_action = "drives"
+            reader._busy = True
+            reader.changed.emit()
         if len(sys.argv) > 4 and sys.argv[4] in ("drive-choices", "many-drives"):
             page = next(i for i in items(window.contentItem()) if i.objectName() == "parityPage_2")
             page.setProperty("showDriveChoices", True)

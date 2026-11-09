@@ -71,6 +71,14 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                     data = self.probe(width, 672, tab, "expanded", "it")
                     self.assertEqual(data["horizontal_overflow"], [])
 
+    def test_resurrection_start_button_fills_narrow_action_row_like_stable_v2(self):
+        for width, height, scale in ((760, 480, 1.5), (781, 538, 1.25)):
+            with self.subTest(width=width, scale=scale):
+                sizes = self.probe(width, height, 4, language="it", scale=scale)["guided_action_widths"]
+                self.assertAlmostEqual(sizes["start"], sizes["container"], delta=1, msg=sizes)
+        wide = self.probe(976, 672, 4)["guided_action_widths"]
+        self.assertAlmostEqual(wide["start"], 168, delta=1)
+
     def test_guided_warning_fits_its_panel_at_minimum_width(self):
         data = self.probe(760, 480, 4)
         self.assertLessEqual(data["warning_content_height"], data["warning_panel_height"])

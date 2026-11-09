@@ -119,6 +119,9 @@ def main():
             result["graph_height_pixels"] = [i.height() * window.devicePixelRatio() for i in visible
                                              if i.objectName().startswith("metric_graph_")]
         if tab == 4:
+            actions = next(i for i in visible if i.objectName() == "resurrectionActions")
+            start_button = next(i for i in visible if i.objectName() == "resurrectionStartButton")
+            result["guided_action_widths"] = {"container": round(actions.width(), 2), "start": round(start_button.width(), 2)}
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]

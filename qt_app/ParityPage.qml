@@ -1509,10 +1509,25 @@ Item {
                     Text { text:(resurrectionResult.done || 0) + " / 10 " + view.t("fasi","steps"); color:"#e4c579"; font.pixelSize:12 }
                     PProgress { width:parent.width; height:11; fraction:(resurrectionResult.done || 0) / 10 }
                     Flow {
+                        id: resurrectionActions
+                        objectName: "resurrectionActions"
                         width: parent.width
                         spacing:9
-                        PButton { width: 168; height: 38; caption:view.t("Avvia sequenza","Start sequence"); primary:true; interactive:!view.occupied; onPressed:view.request("resurrection") }
-                        PButton { width:176; height:36; visible:maintenanceService.busy && maintenanceService.lastAction === "resurrection"; caption:view.t("Annulla dopo la fase","Cancel after step"); interactive:maintenanceService.busy && maintenanceService.lastAction === "resurrection"; onPressed:maintenanceService.cancel() }
+                        PButton {
+                            objectName: "resurrectionStartButton"
+                            width: resurrectionActions.width < 400 ? resurrectionActions.width : 168
+                            height:38; caption:view.t("Avvia sequenza","Start sequence")
+                            primary:true; interactive:!view.occupied
+                            onPressed:view.request("resurrection")
+                        }
+                        PButton {
+                            width: resurrectionActions.width < 400 ? resurrectionActions.width : 176
+                            height:36
+                            visible:maintenanceService.busy && maintenanceService.lastAction === "resurrection"
+                            caption:view.t("Annulla dopo la fase","Cancel after step")
+                            interactive:maintenanceService.busy && maintenanceService.lastAction === "resurrection"
+                            onPressed:maintenanceService.cancel()
+                        }
                     }
                 }
             }

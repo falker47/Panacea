@@ -754,10 +754,13 @@ Item {
                                 Accessible.name: "Windows"
                             }
                             Text {
+                                objectName: "dashboardSystemTitle"
                                 text: view.hardware.os || (view.hardware.error ? view.t("Dettagli Windows non disponibili", "Windows details unavailable") : view.t("Caricamento dettagli Windows…", "Loading Windows details…"))
                                 textFormat: Text.PlainText
                                 width: parent.width - 48
-                                font.pixelSize: 20; font.bold: true; color: "#f1f3f8"
+                                // The narrow 150% viewport must still show the OS version.
+                                font.pixelSize: parent.width < 165 ? 16 : 20
+                                font.bold: true; color: "#f1f3f8"
                                 elide: Text.ElideRight
                                 anchors.verticalCenter: parent.verticalCenter
                             }

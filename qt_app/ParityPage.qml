@@ -803,45 +803,62 @@ Item {
                     }
                 }
                 Rectangle {
+                    id: windowsUpdateCard
+                    objectName: "windowsUpdateCard"
                     width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
                     height: summaryFlow.cardHeight; radius: 8; color: "#1b2b44"; border.width: 0
-                    RowLayout {
-                        anchors.fill: parent; anchors.margins: 12; spacing: 8
-                            Image {
-                                source: "image://panacea-nav/updates/detail"
-                                sourceSize.width: 96
-                                sourceSize.height: 96
-                                Layout.preferredWidth: 46; Layout.preferredHeight: 46
-                                fillMode: Image.PreserveAspectFit
-                                smooth: true
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.minimumWidth: 0
-                                spacing: 2
-                                Text {
-                                    text: "Windows Update"
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    wrapMode: Text.NoWrap
-                                    elide: Text.ElideRight
-                                    color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
-                                }
-                                Text {
-                                    text: view.updateCaption()
-                                    Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    wrapMode: Text.NoWrap
-                                    elide: Text.ElideRight
-                                    color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
-                                           (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
-                                    font.pixelSize: 12
-                                }
-                            }
+                    readonly property bool compact: width < 260
+                    GridLayout {
+                        anchors.fill: parent; anchors.margins: 12
+                        columns: 3
+                        columnSpacing: 8
+                        rowSpacing: 2
+                        Image {
+                            source: "image://panacea-nav/updates/detail"
+                            sourceSize.width: 96
+                            sourceSize.height: 96
+                            Layout.row: 0
+                            Layout.column: 0
+                            Layout.rowSpan: windowsUpdateCard.compact ? 1 : 2
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: windowsUpdateCard.compact ? 32 : 46
+                            Layout.preferredHeight: windowsUpdateCard.compact ? 32 : 46
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
+                        Text {
+                            text: "Windows Update"
+                            Layout.row: 0
+                            Layout.column: 1
+                            Layout.columnSpan: windowsUpdateCard.compact ? 2 : 1
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            wrapMode: Text.NoWrap
+                            elide: Text.ElideRight
+                            color: "#f1f3f8"; font.bold: true
+                            font.pixelSize: windowsUpdateCard.compact ? 14 : 16
+                        }
+                        Text {
+                            text: view.updateCaption()
+                            Layout.row: 1
+                            Layout.column: windowsUpdateCard.compact ? 0 : 1
+                            Layout.columnSpan: windowsUpdateCard.compact ? 2 : 1
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            wrapMode: Text.NoWrap
+                            elide: Text.ElideRight
+                            color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
+                                   (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
+                            font.pixelSize: windowsUpdateCard.compact ? 11 : 12
+                        }
                         PButton {
                             caption: view.t("Apri", "View")
-                            Layout.preferredWidth: 73
-                            height: 36
+                            Layout.row: windowsUpdateCard.compact ? 1 : 0
+                            Layout.column: 2
+                            Layout.rowSpan: windowsUpdateCard.compact ? 1 : 2
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: windowsUpdateCard.compact ? 64 : 73
+                            height: windowsUpdateCard.compact ? 32 : 36
                             interactive: !view.occupied
                             onPressed: view.request("windows_update")
                         }

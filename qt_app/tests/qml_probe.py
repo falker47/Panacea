@@ -74,6 +74,8 @@ def main():
             p = item.mapToScene(QPointF(0, 0))
             return [round(p.x(), 2), round(p.y(), 2), round(item.width(), 2), round(item.height(), 2)]
         def card(text):
+            if text == "Windows Update":
+                return box(next(i for i in visible if i.objectName() == "windowsUpdateCard"))
             item = text_item(text)
             return box(item.parentItem().parentItem().parentItem())
         tab = int(window.property("currentTab"))
@@ -108,7 +110,9 @@ def main():
                           metrics=[card(title) for title in metric_titles])
             update_title = text_item("Windows Update")
             result["update_caption_lines"] = [
-                {"text": item.property("text"), "lines": int(item.property("lineCount"))}
+                {"text": item.property("text"), "lines": int(item.property("lineCount")),
+                 "truncated": bool(item.property("truncated")),
+                 "visible_width": round(item.width(), 2), "implicit_width": round(item.implicitWidth(), 2)}
                 for item in update_title.parentItem().childItems()
                 if item.isVisible() and isinstance(item.property("text"), str)
             ]

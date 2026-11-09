@@ -46,6 +46,16 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                     for label in labels:
                         self.assertEqual(label["lines"], 1, label)
 
+    def test_windows_update_title_remains_readable_in_compact_scaled_layouts(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    title = data["update_caption_lines"][0]
+                    self.assertEqual(title["text"], "Windows Update")
+                    self.assertFalse(title["truncated"], title)
+                    self.assertGreaterEqual(title["visible_width"] + 1, title["implicit_width"], title)
+
     def test_guided_steps_follow_the_legacy_responsive_columns(self):
         for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
             with self.subTest(width=width):

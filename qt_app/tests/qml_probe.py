@@ -116,6 +116,13 @@ def main():
                 for item in update_title.parentItem().childItems()
                 if item.isVisible() and isinstance(item.property("text"), str)
             ]
+            action_titles = (("File temporanei", "Punto di ripristino") if window.property("language") == "it"
+                             else ("Temporary files", "Restore point"))
+            result["dashboard_action_titles"] = [
+                {"text": label, "width": round(text_item(label).width(), 2),
+                 "lines": int(text_item(label).property("lineCount"))}
+                for label in action_titles
+            ]
             result["graph_height_pixels"] = [i.height() * window.devicePixelRatio() for i in visible
                                              if i.objectName().startswith("metric_graph_")]
         if tab == 4:

@@ -56,6 +56,16 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                     self.assertFalse(title["truncated"], title)
                     self.assertGreaterEqual(title["visible_width"] + 1, title["implicit_width"], title)
 
+    def test_compact_dashboard_action_titles_keep_readable_width(self):
+        for width, height, scale in ((781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    titles = self.probe(width, height, language=language, scale=scale)["dashboard_action_titles"]
+                    self.assertEqual(len(titles), 2)
+                    for label in titles:
+                        self.assertGreaterEqual(label["width"], 65, label)
+                        self.assertLessEqual(label["lines"], 3, label)
+
     def test_guided_steps_follow_the_legacy_responsive_columns(self):
         for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
             with self.subTest(width=width):

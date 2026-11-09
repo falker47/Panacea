@@ -108,6 +108,11 @@ def main():
             metric_titles = ("CPU", "Memoria (RAM)", "Unità di sistema") if window.property("language") == "it" else ("CPU", "Memory (RAM)", "System drive")
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),
                           metrics=[card(title) for title in metric_titles])
+            system_title = next(i for i in visible if i.objectName() == "dashboardSystemTitle")
+            result["system_title"] = {"text": system_title.property("text"),
+                                      "truncated": bool(system_title.property("truncated")),
+                                      "width": round(system_title.width(), 2),
+                                      "implicit_width": round(system_title.implicitWidth(), 2)}
             update_title = text_item("Windows Update")
             result["update_caption_lines"] = [
                 {"text": item.property("text"), "lines": int(item.property("lineCount")),

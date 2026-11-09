@@ -46,6 +46,15 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                     for label in labels:
                         self.assertEqual(label["lines"], 1, label)
 
+    def test_dashboard_system_version_not_truncated_at_simulated_high_dpi(self):
+        for width, height, scale in ((760, 480, 1.5), (781, 538, 1.25), (976, 672, 1)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, height=height, scale=scale, language=language):
+                    title = self.probe(width, height, language=language, scale=scale)["system_title"]
+                    self.assertEqual(title["text"], "Windows 11")
+                    self.assertFalse(title["truncated"], title)
+                    self.assertGreaterEqual(title["width"] + 1, title["implicit_width"], title)
+
     def test_windows_update_title_remains_readable_in_compact_scaled_layouts(self):
         for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
             for language in ("it", "en"):

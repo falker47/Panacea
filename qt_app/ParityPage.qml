@@ -823,14 +823,16 @@ Item {
                                     text: "Windows Update"
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 0
-                                    wrapMode: Text.Wrap
+                                    wrapMode: Text.NoWrap
+                                    elide: Text.ElideRight
                                     color: "#f1f3f8"; font.bold: true; font.pixelSize: 16
                                 }
                                 Text {
                                     text: view.updateCaption()
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 0
-                                    wrapMode: Text.Wrap
+                                    wrapMode: Text.NoWrap
+                                    elide: Text.ElideRight
                                     color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
                                            (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
                                     font.pixelSize: 12

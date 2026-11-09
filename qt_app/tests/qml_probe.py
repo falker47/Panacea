@@ -105,6 +105,12 @@ def main():
         if tab == 0:
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),
                           metrics=[card(t) for t in ("CPU", "Memory (RAM)", "System drive")])
+            update_title = text_item("Windows Update")
+            result["update_caption_lines"] = [
+                {"text": item.property("text"), "lines": int(item.property("lineCount"))}
+                for item in update_title.parentItem().childItems()
+                if item.isVisible() and isinstance(item.property("text"), str)
+            ]
             result["graph_height_pixels"] = [i.height() * window.devicePixelRatio() for i in visible
                                              if i.objectName().startswith("metric_graph_")]
         if tab == 4:

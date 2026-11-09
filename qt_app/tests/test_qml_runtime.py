@@ -33,6 +33,17 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                 self.assertEqual(len({r[1] for r in data["metrics"]}), 1)
                 self.assertEqual(data["horizontal_overflow"], [])
 
+    def test_windows_update_caption_does_not_wrap_inside_words_at_high_scaling(self):
+        for width, height, scale in ((781, 538, 1.25), (760, 512, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    labels = data["update_caption_lines"]
+                    self.assertEqual(len(labels), 2)
+                    self.assertEqual(labels[0]["text"], "Windows Update")
+                    for label in labels:
+                        self.assertEqual(label["lines"], 1, label)
+
     def test_guided_steps_follow_the_legacy_responsive_columns(self):
         for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
             with self.subTest(width=width):

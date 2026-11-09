@@ -103,8 +103,9 @@ def main():
             result["confirmation_scrollable"] = copy.parentItem().property("contentHeight") is not None
             result["confirmation_readable_height"] = copy.implicitHeight() <= copy.height() + 1
         if tab == 0:
+            metric_titles = ("CPU", "Memoria (RAM)", "Unità di sistema") if window.property("language") == "it" else ("CPU", "Memory (RAM)", "System drive")
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),
-                          metrics=[card(t) for t in ("CPU", "Memory (RAM)", "System drive")])
+                          metrics=[card(title) for title in metric_titles])
             update_title = text_item("Windows Update")
             result["update_caption_lines"] = [
                 {"text": item.property("text"), "lines": int(item.property("lineCount"))}

@@ -13,7 +13,9 @@ class DashboardRuntimeGeometry(unittest.TestCase):
     def probe(self, width, height, tab=0, scenario="default", language="en", scale=1):
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software", QT_SCALE_FACTOR=str(scale))
         result = subprocess.run([sys.executable, str(PROBE), str(width), str(height), str(tab), scenario, language],
-                                env=env, capture_output=True, text=True, timeout=45, check=True)
+                                env=env, capture_output=True, text=True, timeout=45, check=False)
+        if result.returncode:
+            self.fail(f"QML probe exited {result.returncode}; stdout={result.stdout[-2000:]!r}; stderr={result.stderr[-4000:]!r}")
         data = json.loads(result.stdout.strip().splitlines()[-1])
         self.assertEqual(data["warnings"], [])
         return data

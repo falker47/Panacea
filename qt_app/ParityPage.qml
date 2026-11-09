@@ -960,17 +960,21 @@ Item {
                 width: parent.width
                 spacing: 10
                 Rectangle {
+                    id: scanActionCard
                     width: (actionFlow.width - 10) / 2
+                    readonly property bool compact: width < 230
                     height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26, restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: scanContent
-                        anchors.fill: parent; anchors.margins: 13; spacing: 8
+                        anchors.fill: parent
+                        anchors.margins: scanActionCard.compact ? 8 : 13
+                        spacing: scanActionCard.compact ? 4 : 8
                         Image {
                             source: "image://panacea-nav/scan/detail"
                             sourceSize.width: 96
                             sourceSize.height: 96
-                            Layout.preferredWidth: 46
-                            Layout.preferredHeight: 46
+                            Layout.preferredWidth: scanActionCard.compact ? 28 : 46
+                            Layout.preferredHeight: scanActionCard.compact ? 28 : 46
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                         }
@@ -985,21 +989,25 @@ Item {
                                 wrapMode: Text.WordWrap
                             }
                         }
-                        PButton { Layout.preferredWidth:85; caption: view.t("Analizza","Analyze"); interactive: !view.occupied; onPressed: view.showRead("temp_preview") }
+                        PButton { Layout.preferredWidth:scanActionCard.compact ? 68 : 85; caption: view.t("Analizza","Analyze"); interactive: !view.occupied; onPressed: view.showRead("temp_preview") }
                     }
                 }
                 Rectangle {
+                    id: restoreActionCard
                     width: (actionFlow.width - 10) / 2
+                    readonly property bool compact: width < 230
                     height: Math.max(92 + Math.round(view.dashboardStretch * .27), scanContent.implicitHeight + 26, restoreContent.implicitHeight + 26); radius: 8; color: "#1b2b44"; border.color: "#2e415c"
                     RowLayout {
                         id: restoreContent
-                        anchors.fill: parent; anchors.margins: 13; spacing: 8
+                        anchors.fill: parent
+                        anchors.margins: restoreActionCard.compact ? 8 : 13
+                        spacing: restoreActionCard.compact ? 4 : 8
                         Image {
                             source: "image://panacea-nav/restore/detail"
                             sourceSize.width: 96
                             sourceSize.height: 96
-                            Layout.preferredWidth: 46
-                            Layout.preferredHeight: 46
+                            Layout.preferredWidth: restoreActionCard.compact ? 28 : 46
+                            Layout.preferredHeight: restoreActionCard.compact ? 28 : 46
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                         }
@@ -1013,7 +1021,7 @@ Item {
                                 wrapMode: Text.WordWrap
                             }
                         }
-                        PButton { Layout.preferredWidth:85; caption: view.t("Crea","Create"); interactive: !view.occupied; onPressed: view.request("restore_point") }
+                        PButton { Layout.preferredWidth:restoreActionCard.compact ? 68 : 85; caption: view.t("Crea","Create"); interactive: !view.occupied; onPressed: view.request("restore_point") }
                     }
                 }
             }

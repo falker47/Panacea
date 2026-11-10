@@ -85,11 +85,14 @@ Window {
                 spacing: shell.height < 620 ? 4 : 12
 
                 RowLayout {
+                    id: sidebarBrandRow
                     Layout.fillWidth: true
                     Layout.preferredHeight: shell.height < 620 ? 65 : 112
                     Layout.bottomMargin: shell.height < 620 ? 0 : 11
                     spacing: 9
                     Image {
+                        objectName: "brandLogo"
+                        Layout.alignment: Qt.AlignVCenter
                         source: Qt.resolvedUrl("../assets/panacea_icon.png")
                         sourceSize.width: 148
                         sourceSize.height: 148
@@ -101,15 +104,18 @@ Window {
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
                         spacing: 0
                         Text {
+                            objectName: "brandWordmark"
                             text: "Panacea"
                             font.family: "Segoe UI"
-                            font.pixelSize: shell.height < 620 ? 32 : 35
+                            font.pixelSize: shell.height < 620 ? 32 : 38
                             font.bold: true
                             color: "#f1f3f8"
                         }
                         Text {
+                            objectName: "brandTagline"
                             text: "SYSTEM MAINTENANCE"
                             font.family: "Segoe UI Semibold"
                             font.pixelSize: shell.height < 620 ? 11 : 12

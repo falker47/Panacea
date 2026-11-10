@@ -851,81 +851,87 @@ Item {
                     id: windowsUpdateCard
                     objectName: "windowsUpdateCard"
                     width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
-                    height: summaryFlow.cardHeight; radius: 8; color: "#1b2b44"
+                    height: summaryFlow.cardHeight
+                    radius: 8
+                    color: "#1b2b44"
                     border.width: 1
                     border.color: hasRecommendedUpdates ? "#765f33" : "#2e415c"
                     readonly property bool compact: width < 260
                     readonly property bool hasRecommendedUpdates: !!(view.snapshots.windows_updates &&
                         view.snapshots.windows_updates.verified &&
                         (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0))
-                    GridLayout {
-                        anchors.fill: parent; anchors.margins: 12
-                        columns: 3
-                        columnSpacing: 8
-                        rowSpacing: 2
-                        Image {
-                            source: "image://panacea-nav/updates/detail"
-                            sourceSize.width: 96
-                            sourceSize.height: 96
-                            Layout.row: 0
-                            Layout.column: 0
-                            Layout.rowSpan: windowsUpdateCard.compact ? 1 : 2
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: windowsUpdateCard.compact ? 32 : 46
-                            Layout.preferredHeight: windowsUpdateCard.compact ? 32 : 46
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                        }
-                        Text {
-                            objectName: "updateHeaderTitle"
-                            text: "Windows Update"
-                            Layout.row: 0
-                            Layout.column: 1
-                            Layout.columnSpan: windowsUpdateCard.compact ? 2 : 1
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: windowsUpdateCard.compact ? 8 : 13
+                        spacing: windowsUpdateCard.compact ? 5 : 9
+                        RowLayout {
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            wrapMode: Text.NoWrap
-                            elide: Text.ElideRight
-                            color: "#f1f3f8"; font.bold: true
-                            font.pixelSize: windowsUpdateCard.compact ? 14 : 16
-                        }
-                        Rectangle {
-                            id: updateStateBadge
-                            objectName: "updateStateBadge"
-                            Layout.row: 1
-                            Layout.column: windowsUpdateCard.compact ? 0 : 1
-                            Layout.columnSpan: windowsUpdateCard.compact ? 2 : 1
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            Layout.preferredHeight: 25
-                            radius: 5
-                            color: windowsUpdateCard.hasRecommendedUpdates ? "#3d3429" :
-                                   view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#1d3a39" : "#263a56"
+                            spacing: 9
+                            Image {
+                                source: "image://panacea-nav/updates/detail"
+                                sourceSize.width: 96
+                                sourceSize.height: 96
+                                Layout.preferredWidth: windowsUpdateCard.compact ? 29 : 38
+                                Layout.preferredHeight: windowsUpdateCard.compact ? 29 : 38
+                                Layout.alignment: Qt.AlignVCenter
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
                             Text {
-                                objectName: "updateStatusCaption"
-                                anchors.fill: parent
-                                anchors.leftMargin: windowsUpdateCard.width < 205 ? 2 : windowsUpdateCard.compact ? 5 : 8
-                                anchors.rightMargin: windowsUpdateCard.width < 205 ? 2 : windowsUpdateCard.compact ? 5 : 8
-                                verticalAlignment: Text.AlignVCenter
-                                text: view.updateCaption()
-                                textFormat: Text.PlainText
+                                objectName: "updateHeaderTitle"
+                                text: "Windows Update"
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 wrapMode: Text.NoWrap
                                 elide: Text.ElideRight
-                                color: windowsUpdateCard.hasRecommendedUpdates ? "#e4c579" :
-                                       view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#78c8a8" : "#9eafc8"
-                                font.pixelSize: windowsUpdateCard.compact ? 11 : 12
+                                color: "#f1f3f8"
+                                font.bold: true
+                                font.pixelSize: windowsUpdateCard.compact ? 14 : 16
+                                verticalAlignment: Text.AlignVCenter
                             }
                         }
-                        PButton {
-                            caption: view.t("Apri", "View")
-                            Layout.row: windowsUpdateCard.compact ? 1 : 0
-                            Layout.column: 2
-                            Layout.rowSpan: windowsUpdateCard.compact ? 1 : 2
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: windowsUpdateCard.compact ? 64 : 73
-                            height: windowsUpdateCard.compact ? 32 : 36
-                            interactive: !view.occupied
-                            onPressed: view.request("windows_update")
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: windowsUpdateCard.compact ? 1 : 2
+                            columnSpacing: 8
+                            rowSpacing: windowsUpdateCard.compact ? 5 : 0
+                            Rectangle {
+                                id: updateStateBadge
+                                objectName: "updateStateBadge"
+                                Layout.row: 0
+                                Layout.column: 0
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                Layout.preferredHeight: 26
+                                radius: 5
+                                color: windowsUpdateCard.hasRecommendedUpdates ? "#3d3429" :
+                                       view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#1d3a39" : "#263a56"
+                                Text {
+                                    objectName: "updateStatusCaption"
+                                    anchors.fill: parent
+                                    anchors.leftMargin: windowsUpdateCard.compact ? 6 : 9
+                                    anchors.rightMargin: windowsUpdateCard.compact ? 6 : 9
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: view.updateCaption()
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.NoWrap
+                                    elide: Text.ElideRight
+                                    color: windowsUpdateCard.hasRecommendedUpdates ? "#e4c579" :
+                                           view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#78c8a8" : "#9eafc8"
+                                    font.pixelSize: windowsUpdateCard.compact ? 11 : 12
+                                }
+                            }
+                            PButton {
+                                objectName: "updateOpenButton"
+                                caption: view.t("Apri", "View")
+                                Layout.row: windowsUpdateCard.compact ? 1 : 0
+                                Layout.column: windowsUpdateCard.compact ? 0 : 1
+                                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                                Layout.preferredWidth: windowsUpdateCard.compact ? 66 : 72
+                                Layout.preferredHeight: windowsUpdateCard.compact ? 29 : 34
+                                interactive: !view.occupied
+                                onPressed: view.request("windows_update")
+                            }
                         }
                     }
                 }
@@ -1417,8 +1423,6 @@ Item {
                         visible: view.showExtraDriveTools
                         spacing: 6
                         PRow { heading:view.t("Integrità volume","Disk health scan"); hint:"CHKDSK /scan /perf"; action:"chkdsk"; drive:view.selectedDrive; buttonText:view.t("Analizza","Scan"); interactive:!view.occupied && readService.driveLetters.indexOf(view.selectedDrive) !== -1; onInvoke:view.request(action,drive) }
-                        PRow { heading:"Windows Update"; hint:view.t("Apri aggiornamenti","Open updates"); action:"windows_update"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
-                        PRow { heading:view.t("Aggiornamenti facoltativi","Optional updates"); hint:view.t("Impostazioni Windows","Windows Settings"); action:"windows_optional"; buttonText:view.t("Apri","Open"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                     }
                     PSectionLog { scope: "disk"; caption: view.t("Output ottimizzazione", "Optimization output") }
                 }
@@ -1440,27 +1444,70 @@ Item {
                     PSectionTitle { text:view.t("Impostazioni Turbo","Performance settings") }
                     PSectionHint { text:view.t("Le impostazioni originali vengono salvate per il ripristino.", "Original settings are saved for restoration.") }
                     Rectangle {
-                        width:parent.width; height:turboMasterContent.implicitHeight + 24; color:"#142138"; border.color:"#2e415c"; radius:8
+                        id: turboMasterCard
+                        objectName: "turboMasterCard"
+                        width: parent.width
+                        height:turboMasterContent.implicitHeight + 24
+                        radius: 8
+                        color: "#1b2b44"
+                        border.width: 1
+                        border.color: view.turbo.master === true ? "#e4c579" : "#60738d"
                         Column {
                             id: turboMasterContent
                             x: 12
                             y: 12
                             width: parent.width - 24
                             spacing: 9
+                            Text {
+                                text: view.t("CONTROLLO GENERALE", "MASTER CONTROL")
+                                width: parent.width
+                                color: "#e4c579"
+                                font.bold: true
+                                font.pixelSize: 10
+                            }
                             GridLayout {
-                                width:parent.width
+                                width: parent.width
                                 columns: width < 390 ? 1 : 2
-                                rowSpacing: 6
-                                Text { text:view.t("Tutte le impostazioni","All settings"); color:"#f1f3f8"; font.bold:true; font.pixelSize:14; Layout.fillWidth:true }
-                                RowLayout {
-                                    spacing: 8
-                                PToggle {
-                                    caption:view.t("Turbo completo","All settings")
-                                    checked:view.turbo.master === true
-                                    interactive: !view.occupied && typeof view.turbo.master === "boolean"
-                                    onChanged: view.request(nextValue ? "turbo_on" : "turbo_off")
+                                columnSpacing: 9
+                                rowSpacing: 7
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    spacing: 3
+                                    Text {
+                                        text: view.t("Ottimizzazione completa", "Apply all optimizations")
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        color: "#f1f3f8"
+                                        font.bold: true
+                                        font.pixelSize: 16
+                                        wrapMode: Text.WordWrap
+                                    }
+                                    Text {
+                                        text: view.t(
+                                            "Attiva insieme le cinque ottimizzazioni. Disattivando, ripristina le impostazioni originali salvate.",
+                                            "Enable all five optimizations together. Switching off restores the saved original settings.")
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        color: "#b5c6dc"
+                                        font.pixelSize: 11
+                                        wrapMode: Text.WordWrap
+                                    }
                                 }
-                                    Text { text:view.stateCaption(view.turbo.master); color:"#9eafc8"; font.pixelSize:11 }
+                                RowLayout {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 8
+                                    PToggle {
+                                        caption: view.t("Ottimizzazione completa", "Apply all optimizations")
+                                        checked: view.turbo.master === true
+                                        interactive: !view.occupied && typeof view.turbo.master === "boolean"
+                                        onChanged: view.request(nextValue ? "turbo_on" : "turbo_off")
+                                    }
+                                    Text {
+                                        text: view.stateCaption(view.turbo.master)
+                                        color: "#9eafc8"
+                                        font.pixelSize: 11
+                                    }
                                 }
                             }
                             Text {
@@ -1471,7 +1518,10 @@ Item {
                                        view.t("Nessuna modifica salvata", "No saved changes")) :
                                       view.t("Impostazioni salvate non disponibili · Aggiorna stato",
                                              "Saved settings unavailable · Refresh state")
-                                width:parent.width; wrapMode:Text.WordWrap; color:"#9eafc8"; font.pixelSize:11
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                color: "#9eafc8"
+                                font.pixelSize: 11
                             }
                             Column {
                                 width: parent.width

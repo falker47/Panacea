@@ -80,6 +80,10 @@ def main():
             return box(item.parentItem().parentItem().parentItem())
         tab = int(window.property("currentTab"))
         result = {"warnings": warnings}
+        brand_logo = next(i for i in visible if i.objectName() == "brandLogo")
+        brand_title = next(i for i in visible if i.objectName() == "brandWordmark")
+        brand_subtitle = next(i for i in visible if i.objectName() == "brandTagline")
+        result["brand"] = {"logo": box(brand_logo), "title": box(brand_title), "subtitle": box(brand_subtitle)}
         scrollbar = next((i for i in visible if i.objectName() == "pageScrollbar"), None)
         thumb = next((i for i in visible if i.objectName() == "pageScrollThumb"), None)
         result["scrollbar"] = box(scrollbar) if scrollbar else None
@@ -135,6 +139,13 @@ def main():
             ]
             badge = next(i for i in visible if i.objectName() == "updateStateBadge")
             result["update_badge"] = {"rect": box(badge), "color": badge.property("color").name()}
+            update_card = next(i for i in visible if i.objectName() == "windowsUpdateCard")
+            update_button = next(i for i in visible if i.objectName() == "updateOpenButton")
+            result["update_card_layout"] = {
+                "card": box(update_card), "title": box(update_labels[0]),
+                "badge": box(badge), "action": box(update_button),
+                "compact": bool(update_card.property("compact"))
+            }
             action_titles = (("File temporanei", "Punto di ripristino") if window.property("language") == "it"
                              else ("Temporary files", "Restore point"))
             result["dashboard_action_titles"] = [
@@ -198,9 +209,9 @@ def main():
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}
-            master = next(i for i in visible if i.property("caption") == "All settings")
+            master = next(i for i in visible if i.property("caption") == "Apply all optimizations")
             state = next(i for i in master.parentItem().childItems() if i.property("text") == "Unknown")
-            result["master_layout"] = {"title": box(text_item("All settings")), "toggle": box(master), "state": box(state)}
+            result["master_layout"] = {"title": box(text_item("Apply all optimizations")), "toggle": box(master), "state": box(state)}
         print(json.dumps(result), flush=True)
         maintenance._busy = False
         reader._busy = False

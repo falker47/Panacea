@@ -121,6 +121,14 @@ class MaintenanceContracts(unittest.TestCase):
             self.service.execute(token)
         self.assertEqual(self.events, [("command", "sfc /scannow")])
 
+    def test_turbo_master_executes_activation_and_exact_restore_with_separate_confirmations(self):
+        active = self.service.execute(self.confirm("turbo_on"))
+        self.assertEqual(active["status"], "completed")
+        self.assertEqual(self.events, [("turbo", True)])
+        restored = self.service.execute(self.confirm("turbo_off"))
+        self.assertEqual(restored["status"], "completed")
+        self.assertEqual(self.events, [("turbo", True), ("turbo", False)])
+
     def test_drive_is_revalidated_after_confirmation(self):
         with self.assertRaises(ValueError):
             self.service.prepare("drive_optimize", "C: & del *")

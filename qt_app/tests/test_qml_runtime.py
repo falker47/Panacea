@@ -35,6 +35,31 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                 self.assertEqual(len({r[1] for r in data["metrics"]}), 1)
                 self.assertEqual(data["horizontal_overflow"], [])
 
+    def test_brand_logo_and_copy_share_a_vertical_center(self):
+        for width, height in ((760, 480), (976, 672), (1366, 768)):
+            with self.subTest(width=width, height=height):
+                result = self.probe(width, height)["brand"]
+                logo, title, subtitle = result["logo"], result["title"], result["subtitle"]
+                logo_mid = logo[1] + logo[3] / 2
+                copy_mid = (title[1] + subtitle[1] + subtitle[3]) / 2
+                self.assertAlmostEqual(logo_mid, copy_mid, delta=10)
+                self.assertLessEqual(title[0] + title[2], 302)
+
+    def test_update_card_keeps_title_badge_and_action_in_order(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    layout = data["update_card_layout"]
+                    title, badge, action = layout["title"], layout["badge"], layout["action"]
+                    self.assertGreaterEqual(badge[1], title[1] + title[3] - 1)
+                    self.assertGreaterEqual(action[0], layout["card"][0])
+                    self.assertLessEqual(action[0] + action[2], layout["card"][0] + layout["card"][2] + 1)
+                    if layout["compact"]:
+                        self.assertGreaterEqual(action[1] + 1, badge[1] + badge[3])
+                    else:
+                        self.assertGreaterEqual(action[0], badge[0] + badge[2] - 1)
+
     def test_windows_update_caption_does_not_wrap_inside_words_at_high_scaling(self):
         for width, height, scale in ((781, 538, 1.25), (760, 512, 1.5)):
             for language in ("it", "en"):

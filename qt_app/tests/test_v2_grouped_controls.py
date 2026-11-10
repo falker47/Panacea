@@ -32,6 +32,24 @@ class V2GroupedControls(unittest.TestCase):
         self.assertIn('onPressed: view.request("restore_point")', page)
         self.assertIn('"drive_optimize", "chkdsk", "open_defrag", "battery_report"', app)
 
+    def test_windows_update_is_only_in_overview_not_disk_diagnostics(self):
+        page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")
+        disk = page.split('viewName: "disk"', 1)[1].split('id: turboAndStartupSection', 1)[0]
+        self.assertNotIn('action:"windows_update"', disk)
+        self.assertNotIn('action:"windows_optional"', disk)
+        self.assertIn('onPressed: view.request("windows_update")', page)
+        self.assertIn('action:"chkdsk"', disk)
+
+    def test_master_switch_explains_global_activation_and_original_restore(self):
+        page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")
+        turbo = page.split('id: turboAndStartupSection', 1)[1].split('id: resurrectionSection', 1)[0]
+        self.assertIn('objectName: "turboMasterCard"', turbo)
+        self.assertIn('view.t("Ottimizzazione completa", "Apply all optimizations")', turbo)
+        self.assertIn("cinque ottimizzazioni", turbo)
+        self.assertIn("ripristina le impostazioni originali", turbo)
+        self.assertIn('view.request(nextValue ? "turbo_on" : "turbo_off")', turbo)
+        self.assertIn('interactive: !view.occupied && typeof view.turbo.master === "boolean"', turbo)
+
     def test_turbo_and_disk_keep_original_compact_focus(self):
         page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")
         self.assertIn("id: turboMasterContent", page)

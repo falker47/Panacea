@@ -20,11 +20,17 @@ class V2MainChromeTests(unittest.TestCase):
     def test_brand_uses_available_sidebar_width_without_changing_navigation(self):
         shell = (ROOT / "qt_app/Main.qml").read_text(encoding="utf-8")
         self.assertIn('Layout.preferredWidth: shell.height < 620 ? 74 : 82', shell)
-        self.assertIn('font.pixelSize: shell.height < 620 ? 32 : 35', shell)
+        self.assertIn('font.pixelSize: shell.height < 620 ? 32 : 38', shell)
         self.assertIn('font.pixelSize: shell.height < 620 ? 11 : 12', shell)
         self.assertIn('Layout.preferredWidth: 302', shell)
         self.assertEqual(shell.count('icon: "dashboard"'), 1)
         self.assertEqual(shell.count('icon: "resurrect"'), 1)
+
+    def test_sidebar_brand_is_centered_without_overflow_at_compact_and_regular_sizes(self):
+        shell = (ROOT / "qt_app/Main.qml").read_text(encoding="utf-8")
+        for name in ("brandLogo", "brandWordmark", "brandTagline"):
+            self.assertIn('objectName: "' + name + '"', shell)
+        self.assertIn("Layout.alignment: Qt.AlignVCenter", shell)
 
     def test_update_and_language_controls_remain_keyboard_operable(self):
         shell = (ROOT / "qt_app/Main.qml").read_text(encoding="utf-8")

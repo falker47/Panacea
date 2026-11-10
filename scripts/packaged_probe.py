@@ -69,7 +69,7 @@ def main():
     samples = []
     for index in range(args.samples):
         start = time.perf_counter()
-        # Qt's native Window respects STARTF_USESHOWWINDOW/SW_HIDE; never hide
+        # Qt windows respect inherited hidden-startup flags; never hide
         # the launch we are measuring for actual Windows visibility.
         process = subprocess.Popen([str(executable), '--smoke-test'])
         ready = None

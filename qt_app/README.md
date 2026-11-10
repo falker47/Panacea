@@ -1,4 +1,4 @@
-# Panacea Qt — candidato QA, non una release
+# Panacea Qt — QA e candidato ufficiale 2.1.0
 
 Interfaccia PySide6/Qt Quick basata sugli stessi backend Python della V2.
 Il branch e la PR #7 restano separati da main.
@@ -17,7 +17,7 @@ La UI presenta conferme esplicite per le operazioni irreversibili, risultati e l
 
 ## Gate aperti
 
-- Updater e installer Qt NON integrati: i meccanismi stabili presuppongono la propria identità binaria, verifica SHA-256, provenienza, ACL, rollback e readiness.
+- La build ufficiale deve usare `Panacea.exe`, AppId e percorso installer stabili con verifica SHA-256, protezione ACL, readiness e rollback. La build QA `PanaceaQtCandidate.exe` non installa aggiornamenti. L'upgrade ufficiale richiede gate di packaging e prova 2.0.2→2.1.0 indipendenti.
 - Le funzioni sono cablate ma i test con fake e gli smoke della finestra non dimostrano un comportamento reale sicuro in Windows.
 - Manca QA isolata di elevazione UAC, servizi, pulizia, ripristino, cancellazione, timeout, visual/accessibilità e misure di prestazioni a parità funzionale.
 - Mai eseguire prove distruttive sul PC dell'utente per validare la build QA; mai fare merge né release finché non sono soddisfatti i gate.

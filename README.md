@@ -3,9 +3,9 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 
-Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
+Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a Qt Quick / PySide6 interface from 2.1.0. The original CustomTkinter source remains for comparison; the official executable uses Qt Quick. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.0.2 release notes](docs/releases/2.0.2.md) for the new interface, localization and performance improvements, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
+The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.1.0 release notes](docs/releases/2.1.0.md) for Qt migration and update details, the [2.0.2 release notes](docs/releases/2.0.2.md) for the new interface, localization and performance improvements, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
 
 See the [V2 validation report](docs/validation/v2-release-report.md) for the seven-section redesign, audits, screenshots, candidate checksum and outstanding release gates.
 The [functional polish report](docs/validation/v2-polish-report.md) records optional analysis, direct cleanup and visible operation output.
@@ -133,8 +133,10 @@ Requirements:
 git clone https://github.com/falker47/Panacea.git
 cd Panacea
 python -m pip install -r requirements.txt
-python main.py
+python qt_app/main.py
 ```
+
+The original CustomTkinter UI remains available via `python main.py` in source for visual comparisons. The official executable uses `qt_app/main.py`.
 
 ## Build the executable
 
@@ -142,7 +144,7 @@ python main.py
 scripts\build_exe.bat
 ```
 
-The generated executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies. Build outputs are not committed; distributable binaries belong in GitHub Releases.
+The Qt single-file executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies. Build outputs are not committed; distributable binaries belong in GitHub Releases.
 
 For an automated local build use `python scripts/build.py`. `Panacea.exe --smoke-test` opens and closes the GUI without maintenance or UAC elevation.
 

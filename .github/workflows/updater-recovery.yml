@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [helper, manual]
+        mode: [helper, manual, manual-custom]
     env:
       PANACEA_ALLOW_HOSTED_PROBE: 'true'
       PYTHONUTF8: '1'
@@ -34,6 +34,8 @@ jobs:
         run: |
           if ((git rev-parse HEAD) -cne $env:GITHUB_SHA) { throw 'Unexpected checkout' }
           git rev-parse HEAD
+      - name: Exercise published binaries in a fresh VM
+        run: python -m scripts.hosted_updater_recovery ${{ matrix.mode }}
       - name: Security fixtures, full suites and lint on exact HEAD
         if: matrix.mode == 'helper'
         shell: pwsh
@@ -43,8 +45,6 @@ jobs:
           python -m pytest -q tests
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m unittest discover -s qt_app/tests
-      - name: Exercise published binaries in a fresh VM
-        run: python -m scripts.hosted_updater_recovery ${{ matrix.mode }}
       - uses: actions/upload-artifact@v4
         if: always() && matrix.mode == 'helper'
         with:

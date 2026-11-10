@@ -37,8 +37,12 @@ download **PanaceaSetup.exe**. From its download folder:
 ```
 
 Continue only for `E60BC29B12B3E4016F891E1E231689B8D82D2C1F6C788A291EB869E1833B9509`.
-Run Setup normally, review the location and approve the standard Windows prompt.
-The installer uses the existing per-machine AppId. After installation the selected
+For the standard installation in `%ProgramFiles%\Panacea`, run Setup normally
+and approve the Windows prompt. The installer uses the original per-machine AppId
+but does **not** reuse a custom directory (`UsePreviousAppDir=no`). If the previous
+installer used a custom protected directory under Program Files, an administrator
+must explicitly pass that same verified path via Inno Setup's `/DIR=` option.
+Do not select a user-writable or portable directory for an elevated installation. After installation the selected
 `Panacea.exe` should match
 `684121592593afd16042fceab7b6027bf81718aab276fc024ae6d6bf5baf056c` and open
 as 2.1.0. This route does not require the old updater. For a portable copy,
@@ -49,18 +53,20 @@ Setup is a separate installation; it does not repair an arbitrary portable path.
 The **Published updater recovery** workflow tests these historical published bytes
 with a live unauthenticated request to `releases/latest`. It is expected to stop
 being applicable after latest moves past 2.1.0. Do not run the protected probes
-on a personal PC. The two jobs each install the pinned 2.0.2 Setup into a unique
-Program Files directory on a clean VM and check its installed EXE against the
+on a personal PC. Each job installs the pinned 2.0.2 Setup into an initially absent
+Program Files directory on a fresh VM and check its installed EXE against the
 official portable hash
 `e390d2f26f84e108c0e076d834f61927554a77175fe19c22108667f04ec1161f`.
 
-The helper job compares packaged 2.0.1 and 2.0.2 discovery with the live API,
-downloads using 2.0.2's packaged client, and invokes the real frozen 2.0.2 helper
-with a protected job while the original GUI stays open. The helper independently
-checks GitHub, verifies and swaps the image, and waits for Qt readiness.
-The probe supplies the job in place of clicking the confirmation dialog. The manual
-job runs the official 2.1.0 Setup over the previous installation, without setting
-a new destination, then checks the AppId, executable hash and packaged restart.
+The helper job compares packaged 2.0.1 and 2.0.2 discovery with the live API.
+It then clicks the uniquely matched **Install update** label in the real 2.0.2
+window and confirms only that process's **Install verified update** dialog. The
+label reference comes from the pinned English EXE on the Windows runner at 100%
+DPI. A different UI fails closed. Panacea itself downloads, verifies and starts
+the frozen helper; the probe observes the helper status, old GUI exit, installed
+SHA-256 and visible Qt window. It also checks that 2.1.0 no longer offers itself. The manual jobs run the official 2.1.0 Setup over the previous installation,
+using the default directory in one VM and an explicit protected custom directory
+in another. Both check the AppId, executable hash and packaged restart.
 The regular Windows integration jobs cover failed-launch rollback, readiness and
 bad digest rejection. Neither a runner nor a fixture establishes which binary or
 network response was present on the affected PC; interactive UAC and abrupt power

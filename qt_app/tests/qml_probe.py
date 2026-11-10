@@ -126,11 +126,11 @@ def main():
             result["confirmation_readable_height"] = copy.implicitHeight() <= copy.height() + 1
         if tab == 1 and len(sys.argv) > 4 and sys.argv[4] in (
                 "noisy-cleanup", "cleanup-step-two", "cleanup-partial", "full-cleanup-log"):
-            status_heading = next(i for i in visible if i.objectName() == "quickCleanupStatusHeading")
-            status_step = next(i for i in visible if i.objectName() == "quickCleanupStatusStep")
+            status_heading = next(i for i in items(window.contentItem()) if i.objectName() == "quickCleanupStatusHeading")
+            status_step = next(i for i in items(window.contentItem()) if i.objectName() == "quickCleanupStatusStep")
             section = next(i for i in items(window.contentItem()) if i.objectName() == "sectionLog_cleaning")
-            surface = next(i for i in visible if i.objectName() == "consoleSurface_cleaning")
-            console = next(i for i in visible if i.objectName() == "consoleText_cleaning")
+            surface = next(i for i in items(window.contentItem()) if i.objectName() == "consoleSurface_cleaning")
+            console = next(i for i in items(window.contentItem()) if i.objectName() == "consoleText_cleaning")
             font = console.property("font")
             result["cleanup_status"] = {
                 "heading": status_heading.property("text"),

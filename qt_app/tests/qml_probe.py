@@ -42,6 +42,22 @@ def main():
         maintenance._steps = [{"success": sys.argv[4] != "failed", "message": "Fixture only"}
                               for _ in range(maintenance._progress_done)]
         maintenance._remember_result()
+    if len(sys.argv) > 4 and sys.argv[4] in ("noisy-cleanup", "cleanup-step-two",
+                                              "cleanup-partial", "full-cleanup-log"):
+        scenario = sys.argv[4]
+        maintenance._last_action = "quick_cleanup"
+        maintenance._result_status = "partial" if scenario == "cleanup-partial" else "running"
+        maintenance._busy = scenario != "cleanup-partial"
+        maintenance._progress_done = 1 if scenario == "cleanup-step-two" else 0
+        maintenance._progress_total = 3
+        maintenance._section_logs["cleaning"] = (
+            "Scanning C:\\Windows\\Temp...\n"
+            "Deleted 50 files...\nDeleted 100 files...\nDeleted 150 files...\n"
+            "Access denied: protected item\n"
+            "Scanning C:\\Users\\Test\\AppData\\Local\\Temp...\n"
+            "Deleted 200 files...\nDeleted 250 files..."
+        )
+        maintenance._remember_result()
     if len(sys.argv) > 4 and sys.argv[4] == "confirmation":
         maintenance._pending = "invalid-fixture"
         maintenance._details = "Safety warning requiring explicit confirmation. " * 50
@@ -108,6 +124,26 @@ def main():
             copy = text_item(maintenance.details)
             result["confirmation_scrollable"] = copy.parentItem().property("contentHeight") is not None
             result["confirmation_readable_height"] = copy.implicitHeight() <= copy.height() + 1
+        if tab == 1 and len(sys.argv) > 4 and sys.argv[4] in (
+                "noisy-cleanup", "cleanup-step-two", "cleanup-partial", "full-cleanup-log"):
+            status_heading = next(i for i in visible if i.objectName() == "quickCleanupStatusHeading")
+            status_step = next(i for i in visible if i.objectName() == "quickCleanupStatusStep")
+            section = next(i for i in items(window.contentItem()) if i.objectName() == "sectionLog_cleaning")
+            surface = next(i for i in visible if i.objectName() == "consoleSurface_cleaning")
+            console = next(i for i in visible if i.objectName() == "consoleText_cleaning")
+            font = console.property("font")
+            result["cleanup_status"] = {
+                "heading": status_heading.property("text"),
+                "step": status_step.property("text"),
+            }
+            result["console"] = {
+                "expanded": bool(section.property("expanded")),
+                "background": surface.property("color").name(),
+                "font": font.family(),
+                "font_size": font.pixelSize(),
+                "show_full": bool(section.property("showFullOutput")),
+                "text": console.property("text"),
+            }
         if tab == 0 and len(sys.argv) > 4 and sys.argv[4] == "metric-refresh":
             initial = {i.objectName(): i for i in visible if i.objectName().startswith("metricCard_")}
             metrics._values["cpu"] = "41.7%"
@@ -217,6 +253,9 @@ def main():
         reader._busy = False
         app.quit()
     def arrange():
+        if len(sys.argv) > 4 and sys.argv[4] == "full-cleanup-log":
+            log = next(i for i in items(window.contentItem()) if i.objectName() == "sectionLog_cleaning")
+            log.setProperty("showFullOutput", True)
         if len(sys.argv) > 4 and sys.argv[4] == "drive-query-failed":
             reader._results["drives"] = {"available": False, "error": "Fixture query failed"}
             reader._drives = []

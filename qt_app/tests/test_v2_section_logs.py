@@ -15,7 +15,11 @@ class V2ActivityLogParity(unittest.TestCase):
         self.assertIn("sectionLog.expanded = !sectionLog.expanded", qml)
         self.assertIn("contentHeight: logText.implicitHeight", qml)
         self.assertIn("height: sectionLog.expanded ? 160 : 0", qml)
-        self.assertIn('text: sectionLog.expanded ? (maintenanceService.sectionLogs', qml)
+        self.assertIn('readonly property string rawOutput:', qml)
+        self.assertIn('sectionLog.showFullOutput ? sectionLog.rawOutput : view.compactConsoleLog(sectionLog.rawOutput)', qml)
+        self.assertIn('objectName: "consoleSurface_" + sectionLog.scope', qml)
+        self.assertIn('color: "#050505"', qml)
+        self.assertIn('objectName: "consoleFullToggle_" + sectionLog.scope', qml)
         self.assertNotIn("property bool logExpanded:", qml)
 
 

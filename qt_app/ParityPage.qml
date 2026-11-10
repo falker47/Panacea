@@ -112,6 +112,58 @@ Item {
                      cancelled:t("Annullato", "Cancelled"), unknown:t("Completamento da verificare", "Completion unverified")}
         return names[state] || state
     }
+    function quickCleanupHeading(state) {
+        var names = {
+            running: t("Pulizia rapida in esecuzione", "Quick cleanup in progress"),
+            completed: t("Pulizia rapida completata", "Quick cleanup completed"),
+            partial: t("Pulizia rapida parziale · verifica i dettagli", "Quick cleanup partial · review details"),
+            failed: t("Pulizia rapida non riuscita", "Quick cleanup failed"),
+            cancelled: t("Pulizia rapida annullata", "Quick cleanup cancelled"),
+            unknown: t("Esito della pulizia da verificare", "Cleanup outcome needs verification")
+        }
+        return names[state] || t("Stato della pulizia non disponibile", "Cleanup status unavailable")
+    }
+    function quickCleanupStep(done, total) {
+        if (total !== 3 || done >= 3)
+            return t("Finalizzazione · verifica gli esiti", "Finalizing · verifying results")
+        var names = [
+            t("File temporanei", "Temporary files"),
+            t("Cestino", "Recycle Bin"),
+            t("Pulizia componenti Windows (DISM)", "Windows component cleanup (DISM)")
+        ]
+        var index = Math.max(0, Math.min(2, done))
+        return t("Passaggio corrente: ", "Current step: ") + names[index] +
+               " (" + (index + 1) + t(" di ", " of ") + total + ")"
+    }
+    // Only coalesce consecutive, cumulative file counters. Keep paths, errors,
+    // commands and all other lines in their original order and wording.
+    function compactConsoleLog(raw) {
+        if (!raw) return ""
+        var lines = raw.replace(/\r/g, "").split("\n")
+        var out = []
+        var lastKind = ""
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i]
+            var match = /^(Deleted|Found) ([0-9]+) (eligible )?files\.\.\.$/.exec(line.trim())
+            if (match) {
+                var kind = match[1] + (match[3] || "")
+                var label = match[1] === "Deleted" ?
+                    t("File eliminati finora: ", "Files deleted so far: ") :
+                    t("File individuati finora: ", "Files found so far: ")
+                var rendered = label + match[2]
+                if (lastKind === kind && out.length > 0)
+                    out[out.length - 1] = rendered
+                else
+                    out.push(rendered)
+                lastKind = kind
+            } else {
+                out.push(line)
+                lastKind = ""
+            }
+        }
+        return out.join("\n").trim()
+    }
+
     function restartCaption() {
         var match = /^(\d+)d (\d+)h (\d+)m$/.exec(metricDetails.uptime || "")
         if (!match) return t("Ultimo riavvio · Non disponibile", "Last restart · Unavailable")
@@ -338,6 +390,11 @@ Item {
         property string scope: ""
         property bool operationWasRunning: false
         property bool readWasRunning: false
+        property bool showFullOutput: false
+        readonly property string rawOutput: (maintenanceService.sectionLogs[sectionLog.scope] || "") +
+            (maintenanceService.sectionLogs[sectionLog.scope] && readService.sectionLogs[sectionLog.scope] ? "
+" : "") +
+            (readService.sectionLogs[sectionLog.scope] || "")
         function revealOutput() {
             expanded = true
             Qt.callLater(function() {
@@ -384,36 +441,62 @@ Item {
                 caption: (sectionLog.expanded ? "− " : "+ ") + sectionLog.caption
                 onPressed: sectionLog.expanded = !sectionLog.expanded
             }
-            Flickable {
-                id: logViewport
+            Rectangle {
+                id: consoleSurface
+                objectName: "consoleSurface_" + sectionLog.scope
                 width: parent.width
                 height: sectionLog.expanded ? 160 : 0
                 visible: sectionLog.expanded
+                radius: 5
+                color: "#050505"
+                border.color: "#39414d"
+                border.width: 1
                 clip: true
-                contentWidth: width
-                contentHeight: logText.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
-                activeFocusOnTab: sectionLog.expanded
-                Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_PageDown) contentY = Math.max(0, Math.min(contentHeight - height, contentY + height))
-                    else if (event.key === Qt.Key_PageUp) contentY = Math.max(0, contentY - height)
-                    else if (event.key === Qt.Key_Home) contentY = 0
-                    else if (event.key === Qt.Key_End) contentY = Math.max(0, contentHeight - height)
-                    else return
-                    event.accepted = true
+                Flickable {
+                    id: logViewport
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    clip: true
+                    contentWidth: width
+                    contentHeight: logText.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    activeFocusOnTab: sectionLog.expanded
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_PageDown) contentY = Math.max(0, Math.min(contentHeight - height, contentY + height))
+                        else if (event.key === Qt.Key_PageUp) contentY = Math.max(0, contentY - height)
+                        else if (event.key === Qt.Key_Home) contentY = 0
+                        else if (event.key === Qt.Key_End) contentY = Math.max(0, contentHeight - height)
+                        else return
+                        event.accepted = true
+                    }
+                    TextEdit {
+                        id: logText
+                        objectName: "consoleText_" + sectionLog.scope
+                        width: logViewport.width
+                        text: sectionLog.expanded ?
+                              (sectionLog.showFullOutput ? sectionLog.rawOutput : view.compactConsoleLog(sectionLog.rawOutput)) : ""
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.WrapAnywhere
+                        textFormat: TextEdit.PlainText
+                        color: "#f1f1f1"
+                        selectionColor: "#324b78"
+                        font.family: "Consolas"
+                        font.pixelSize: 12
+                        lineHeight: 1.18
+                        lineHeightMode: TextEdit.ProportionalHeight
+                    }
                 }
-                TextEdit {
-                    id: logText
-                    width: logViewport.width
-                    text: sectionLog.expanded ? (maintenanceService.sectionLogs[sectionLog.scope] || "") + "\n" + (readService.sectionLogs[sectionLog.scope] || "") : ""
-                    readOnly: true
-                    selectByMouse: true
-                    wrapMode: TextEdit.WrapAnywhere
-                    textFormat: TextEdit.PlainText
-                    color: "#b7c9db"
-                    font.family: "Consolas"
-                    font.pixelSize: 11
-                }
+            }
+            PButton {
+                objectName: "consoleFullToggle_" + sectionLog.scope
+                width: parent.width
+                visible: sectionLog.expanded && sectionLog.rawOutput.length > 0
+                height: visible ? 26 : 0
+                caption: sectionLog.showFullOutput ?
+                         view.t("Mostra sintesi", "Show summary") :
+                         view.t("Mostra log completo", "Show full log")
+                onPressed: sectionLog.showFullOutput = !sectionLog.showFullOutput
             }
             PButton {
                 width: parent.width
@@ -1148,11 +1231,25 @@ Item {
                                 onTriggered: view.request("quick_cleanup")
                             }
                             Text {
+                                id: quickCleanupStatus
+                                objectName: "quickCleanupStatusHeading"
                                 visible: maintenanceService.lastAction === "quick_cleanup" &&
                                          maintenanceService.resultStatus.length > 0
                                 width: parent.width
-                                text: visible ? maintenanceService.resultStatus : ""
-                                color: "#9eafc8"
+                                text: visible ? view.quickCleanupHeading(maintenanceService.resultStatus) : ""
+                                color: maintenanceService.resultStatus === "failed" ? "#ee939a" :
+                                       maintenanceService.resultStatus === "completed" ? "#78c8a8" : "#f1f3f8"
+                                font.pixelSize: 13
+                                font.bold: true
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                objectName: "quickCleanupStatusStep"
+                                visible: quickCleanupStatus.visible && maintenanceService.busy
+                                width: parent.width
+                                text: visible ? view.quickCleanupStep(maintenanceService.progressDone,
+                                                                     maintenanceService.progressTotal) : ""
+                                color: "#b7c9db"
                                 font.pixelSize: 11
                                 wrapMode: Text.WordWrap
                             }

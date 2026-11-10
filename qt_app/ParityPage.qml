@@ -392,8 +392,7 @@ Item {
         property bool readWasRunning: false
         property bool showFullOutput: false
         readonly property string rawOutput: (maintenanceService.sectionLogs[sectionLog.scope] || "") +
-            (maintenanceService.sectionLogs[sectionLog.scope] && readService.sectionLogs[sectionLog.scope] ? "
-" : "") +
+            (maintenanceService.sectionLogs[sectionLog.scope] && readService.sectionLogs[sectionLog.scope] ? "\n" : "") +
             (readService.sectionLogs[sectionLog.scope] || "")
         function revealOutput() {
             expanded = true

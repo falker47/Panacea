@@ -40,5 +40,5 @@ def test_live_upgrade_probe_does_not_leave_process_running_on_timeout(tmp_path, 
         probe.launch_visible_legacy(target, popen=lambda *_a, **_k: process,
                                     visible=lambda _: None,
                                     monotonic=lambda: 31,
-                                    sleep=lambda _: None, timeout=30)
+                                    sleep=lambda _: None, timeout=0)
     assert stopped == [process]

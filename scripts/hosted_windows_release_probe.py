@@ -133,6 +133,34 @@ def _kill_only_child(process):
         process.wait(timeout=8)
 
 
+def launch_visible_legacy(target: Path, *, popen=None, visible=None,
+                          monotonic=time.monotonic, sleep=time.sleep, timeout=30.0):
+    """Keep the genuine 2.0.2 GUI running during this *disposable* Windows swap.
+
+    This helper is only called after require_disposable_runner() in main; never
+    use it on the owner's computer. No UI buttons or maintenance are invoked.
+    """
+    if visible is None:
+        from scripts.packaged_probe import usable_candidate_window
+        visible = usable_candidate_window
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    process = (popen or subprocess.Popen)(
+        [str(target)], cwd=str(target.parent), env=env,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = monotonic() + timeout
+        while monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError("Published v2.0.2 GUI exited before the live-upgrade probe.")
+            if visible(target) is not None:
+                return process
+            sleep(0.2)
+        raise RuntimeError("Published v2.0.2 GUI did not show a visible window before upgrade.")
+    except Exception:
+        _kill_only_child(process)
+        raise
+
+
 def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: str,
                            *, protected=False) -> dict:
     """Use actual v2.0.2 and V2 PE images; verify fail/rollback and real new boot ack."""
@@ -147,6 +175,7 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         target_dir.mkdir(parents=True)
     target = target_dir / "Panacea.exe"
     started = None
+    running_old = None
     try:
         if protected:
             with _open_exclusive(target, protected=True) as output:
@@ -174,6 +203,11 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         assert digest(target) == old_sha, "Rollback did not restore the real legacy image."
         assert not update_install.readiness_path(target).exists(), "Failed operation left an unacknowledged marker."
 
+        if protected:
+            # The actual 2.0.2 executable must still be running when the
+            # in-place swap starts; this is the in-app update scenario.
+            running_old = launch_visible_legacy(target)
+
         def launch(path, token):
             nonlocal started
             env = os.environ.copy()
@@ -187,6 +221,8 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         installed = update_install.install_verified(
             candidate, target, expected, launch, protected=protected)
         assert installed.success, installed.error
+        if running_old is not None and running_old.poll() is not None:
+            raise RuntimeError("Original 2.0.2 GUI exited during live upgrade before Qt was ready.")
         deadline = time.monotonic() + 55
         acknowledged = False
         while time.monotonic() < deadline:
@@ -202,9 +238,11 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         return {"path_mode": "protected" if protected else "portable-fixture",
                 "legacy_sha256": old_sha, "candidate_sha256": expected,
                 "invalid_digest_blocked": True, "launch_failure_rolled_back": True,
-                "real_qt_image_started": True, "readiness_acknowledged": True}
+                "real_qt_image_started": True, "readiness_acknowledged": True,
+                "old_v202_still_running_during_replacement": running_old is not None if protected else None}
     finally:
         _kill_only_child(started)
+        _kill_only_child(running_old)
         # Only remove the uniquely created test directory on this disposable runner.
         shutil.rmtree(target_dir, ignore_errors=True)
 

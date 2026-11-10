@@ -904,8 +904,8 @@ Item {
                             Text {
                                 objectName: "updateStatusCaption"
                                 anchors.fill: parent
-                                anchors.leftMargin: windowsUpdateCard.compact ? 5 : 8
-                                anchors.rightMargin: windowsUpdateCard.compact ? 5 : 8
+                                anchors.leftMargin: windowsUpdateCard.width < 205 ? 2 : windowsUpdateCard.compact ? 5 : 8
+                                anchors.rightMargin: windowsUpdateCard.width < 205 ? 2 : windowsUpdateCard.compact ? 5 : 8
                                 verticalAlignment: Text.AlignVCenter
                                 text: view.updateCaption()
                                 textFormat: Text.PlainText

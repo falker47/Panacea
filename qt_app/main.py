@@ -381,6 +381,17 @@ class MaintenanceBridge(QObject):
         self._service.close()
         self._workers.close()
 
+def _check_initial_release_when_idle(reader, maintenance, updater):
+    """One metadata check after startup reads finish; never download or install."""
+    if updater._closed:
+        return False
+    if reader.busy or maintenance.busy or updater.busy or updater.pending:
+        QTimer.singleShot(1000, lambda: _check_initial_release_when_idle(reader, maintenance, updater))
+        return False
+    updater.check()
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Panacea Qt UI migration QA")
     modes = parser.add_mutually_exclusive_group()
@@ -698,6 +709,7 @@ def main(argv=None):
                     app.exit(4)
             # Only acknowledge after QML has loaded and the Qt event loop started.
             QTimer.singleShot(250, acknowledge_update)
+        QTimer.singleShot(2000, lambda: _check_initial_release_when_idle(reader, maintenance, updater))
         QTimer.singleShot(0, metrics.start)
     _qa_trace("event loop entering")
     result = app.exec()

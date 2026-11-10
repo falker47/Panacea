@@ -28,7 +28,10 @@ class ResurrectionVisualParityTests(unittest.TestCase):
         self.assertIn("progressSteps[modelData].message", qml)
         self.assertIn('progressSteps[modelData].success === true ? "#78c8a8" : "#ee939a"', qml)
         self.assertIn("view.stepCaption(modelData)", qml)
-        self.assertEqual(qml.count('help: view.t('), 9)
+        guided_model = qml.split("id: stepGrid", 1)[1].split("id: guidedStep", 1)[0]
+        self.assertEqual(guided_model.count("help:"), 9)
+        self.assertIn('title: view.language === "it" ? "Cache e temporanei"', guided_model)
+        self.assertIn('help: view.language === "it" ?', guided_model)
         self.assertIn('operations: [1, 2]', qml)
         self.assertEqual(qml.count('operations: ['), 9)
         self.assertIn('readonly property int backendIndex: modelData', qml)

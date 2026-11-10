@@ -156,6 +156,24 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         self.assertEqual(len(data["phase_states"]), 10)
         self.assertEqual(data["phase_indices"], list(range(10)))
 
+    def test_merged_guided_card_uses_the_live_locale_and_keeps_compact_height(self):
+        for language, title in (("it", "Cache e temporanei"), ("en", "Cache + temp files")):
+            with self.subTest(language=language):
+                data = self.probe(976, 672, 4, language=language)
+                card = data["merged_card"]
+                self.assertEqual(card["title"], title)
+                self.assertEqual(card["backend_indices"], [1, 2])
+                self.assertTrue(card["summary_visible"])
+                self.assertEqual(card["visible_phase_count"], 0)
+                self.assertLessEqual(card["height"], card["first_card_height"] + 35)
+
+    def test_expanded_merged_guided_card_exposes_both_backend_states(self):
+        data = self.probe(976, 672, 4, "expanded", "it")
+        card = data["merged_card"]
+        self.assertFalse(card["summary_visible"])
+        self.assertEqual(card["visible_phase_count"], 2)
+        self.assertEqual(data["phase_indices"], list(range(10)))
+
     def test_stopped_sequence_marks_unattempted_phases_as_not_run(self):
         for state, count in (("cancelled", 8), ("failed", 9)):
             with self.subTest(state=state):

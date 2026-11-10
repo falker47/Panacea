@@ -1627,7 +1627,7 @@ Item {
                 Repeater {
                     model: [
                     { operations: [0], title: view.t("Punto di ripristino", "Restore point"), help: view.t("Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati non saranno recuperabili.", "Safety · Verify a new Windows restore point. Deleted files cannot be recovered.") },
-                    { operations: [1, 2], title: view.t("Cache e file temporanei", "Caches and temporary files"), help: view.t("Pulizia · Rimuove prima la cache dei browser, poi i file temporanei idonei; i file protetti vengono ignorati. Sono due operazioni separate.", "Cleanup · Remove browser caches first, then eligible temporary files; protected items are skipped. These are two separate operations.") },
+                    { operations: [1, 2], title: view.language === "it" ? "Cache e temporanei" : "Cache + temp files", help: view.language === "it" ? "Pulizia · Prima cache dei browser, poi file temporanei idonei; i file protetti restano esclusi. Due operazioni distinte." : "Cleanup · Browser caches first, then eligible temporary files; protected files are excluded. Two separate operations." },
                     { operations: [3], title: view.t("Cestino", "Recycle Bin"), help: view.t("Pulizia · Elimina definitivamente tutti gli elementi del Cestino.", "Cleanup · Permanently delete all items in the Recycle Bin.") },
                     { operations: [4], title: view.t("Cache DNS", "DNS cache"), help: view.t("Rete · Aggiorna le risoluzioni dei nomi di dominio memorizzate localmente.", "Network · Refresh locally cached domain-name lookups.") },
                     { operations: [5], title: view.t("Reset di rete", "Network reset"), help: view.t("Rete · Reimposta Winsock; potrebbe essere necessario riavviare.", "Network · Reset Winsock; a restart may be needed.") },
@@ -1671,6 +1671,7 @@ Item {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     Text {
+                                        objectName: "guidedTitle_" + index
                                         text: guidedStep.titleCopy
                                         Layout.fillWidth: true
                                         color: "#f1f3f8"
@@ -1678,10 +1679,24 @@ Item {
                                         font.bold: true
                                         wrapMode: Text.WordWrap
                                     }
+                                    Text {
+                                        objectName: "mergedGuidedSummary"
+                                        visible: guidedStep.operationIndices.length > 1 && !guidedStep.expanded
+                                        text: {
+                                            var first = view.stepCaption(guidedStep.operationIndices[0])
+                                            var second = view.stepCaption(guidedStep.operationIndices[1])
+                                            return first === second ? first : first + " · " + second
+                                        }
+                                        Layout.fillWidth: true
+                                        color: "#9eafc8"
+                                        font.pixelSize: 10
+                                        wrapMode: Text.WordWrap
+                                    }
                                     Repeater {
                                         model: guidedStep.operationIndices
                                         Text {
                                             objectName: "resurrection_phase_" + modelData
+                                            visible: guidedStep.operationIndices.length === 1 || guidedStep.expanded
                                             readonly property int backendIndex: modelData
                                             readonly property string phaseStatus: view.stepCaption(modelData)
                                             text: guidedStep.operationIndices.length > 1 ?

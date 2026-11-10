@@ -151,6 +151,18 @@ def main():
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]
+            merged = steps[1]
+            merged_title = next(i for i in items(merged) if i.objectName() == "guidedTitle_1")
+            merged_summary = next(i for i in items(merged) if i.objectName() == "mergedGuidedSummary")
+            merged_phases = [i for i in items(merged) if i.objectName().startswith("resurrection_phase_")]
+            result["merged_card"] = {
+                "title": merged_title.property("text"),
+                "height": round(merged.height(), 2),
+                "first_card_height": round(steps[0].height(), 2),
+                "summary_visible": merged_summary.isVisible(),
+                "visible_phase_count": sum(i.isVisible() for i in merged_phases),
+                "backend_indices": sorted(i.property("backendIndex") for i in merged_phases)
+            }
             phases = [item for step in steps for item in items(step)
                       if item.objectName().startswith("resurrection_phase_")]
             result["phase_states"] = [item.property("phaseStatus") for item in phases]

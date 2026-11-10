@@ -1403,6 +1403,12 @@ def test_narrow_italian_headers_and_turbo_switches_reflow_at_150_percent(monkeyp
             app.frame_resurrect, panacea_ui.ctk.CTkLabel)
             if label.cget('text') == 'Manutenzione guidata')
         assert title.cget('wraplength') > 0
-        assert title.cget('height') > 36
+        # This shorter Italian title can fit on a large native desktop. Assert
+        # actual text containment, rather than requiring an unnecessary second line.
+        rendered = title._label
+        measured = int(rendered.tk.call('font', 'measure', rendered.cget('font'),
+                                        '-displayof', rendered, title.cget('text')))
+        wrap_pixels = title.cget('wraplength') * title._get_widget_scaling()
+        assert measured <= wrap_pixels + 1 or title.cget('height') > 36
     finally:
         _destroy_real_app(app)

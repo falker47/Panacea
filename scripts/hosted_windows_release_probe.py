@@ -133,9 +133,48 @@ def _kill_only_child(process):
         process.wait(timeout=8)
 
 
+def launch_visible_legacy(target: Path, *, popen=None, visible=None,
+                          monotonic=time.monotonic, sleep=time.sleep, timeout=30.0):
+    """Keep the genuine 2.0.2 GUI running during this *disposable* Windows swap.
+
+    This helper is only called after require_disposable_runner() in main; never
+    use it on the owner's computer. No UI buttons or maintenance are invoked.
+    """
+    if visible is None:
+        from scripts.packaged_probe import usable_candidate_window
+        visible = usable_candidate_window
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    process = (popen or subprocess.Popen)(
+        [str(target)], cwd=str(target.parent), env=env,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = monotonic() + timeout
+        while monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError("Published v2.0.2 GUI exited before the live-upgrade probe.")
+            if visible(target) is not None:
+                return process
+            sleep(0.2)
+        raise RuntimeError("Published v2.0.2 GUI did not show a visible window before upgrade.")
+    except Exception:
+        _kill_only_child(process)
+        raise
+
+
+def verified_upgrade_ready(target, result, digest, size, *, protected):
+    """Use the actual updater readiness contract, not backup deletion as a proxy.
+
+    An acknowledged new Qt image is ready even while the still-running old
+    Windows image holds a mapped file handle to its recovery backup.
+    """
+    if protected:
+        return update_install._operation_ready(target, result, digest, size)
+    return not result.backup.exists() and not update_install.readiness_path(target).exists()
+
+
 def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: str,
                            *, protected=False) -> dict:
-    """Use actual v1.47 and V2 PE images; verify fail/rollback and real new boot ack."""
+    """Use actual v2.0.2 and V2 PE images; verify fail/rollback and real new boot ack."""
     if protected:
         from modules.update_install import _assert_admin_directory, _create_admin_workspace, _open_exclusive
         program_files = Path(os.environ["ProgramFiles"])
@@ -147,6 +186,7 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         target_dir.mkdir(parents=True)
     target = target_dir / "Panacea.exe"
     started = None
+    running_old = None
     try:
         if protected:
             with _open_exclusive(target, protected=True) as output:
@@ -174,6 +214,11 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         assert digest(target) == old_sha, "Rollback did not restore the real legacy image."
         assert not update_install.readiness_path(target).exists(), "Failed operation left an unacknowledged marker."
 
+        if protected:
+            # The actual 2.0.2 executable must still be running when the
+            # in-place swap starts; this is the in-app update scenario.
+            running_old = launch_visible_legacy(target)
+
         def launch(path, token):
             nonlocal started
             env = os.environ.copy()
@@ -187,24 +232,52 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         installed = update_install.install_verified(
             candidate, target, expected, launch, protected=protected)
         assert installed.success, installed.error
+        if running_old is not None and running_old.poll() is not None:
+            raise RuntimeError("Original 2.0.2 GUI exited during live upgrade before Qt was ready.")
         deadline = time.monotonic() + 55
         acknowledged = False
         while time.monotonic() < deadline:
-            if not installed.backup.exists() and not update_install.readiness_path(target).exists():
+            if verified_upgrade_ready(target, installed, expected,
+                                      candidate.stat().st_size, protected=protected):
                 acknowledged = True
                 break
             if started.poll() is not None:
                 break
             time.sleep(0.4)
-        assert acknowledged, "New packaged image did not acknowledge its startup before timeout."
+        if not acknowledged:
+            marker = update_install.readiness_path(target)
+            marker_ready = None
+            if marker.is_file():
+                try:
+                    marker_ready = json.loads(marker.read_text(encoding="utf-8")).get("ready")
+                except (OSError, ValueError):
+                    marker_ready = "unreadable"
+            raise RuntimeError("Qt startup readiness was not verified: "
+                               f"marker_ready={marker_ready!r}, backup_exists={installed.backup.exists()}, "
+                               f"new_process_exit={started.poll() if started else None}, "
+                               f"old_process_exit={running_old.poll() if running_old else None}")
         assert digest(target) == expected
         assert installed.readiness_token
+        if protected:
+            # The actual production UI quits the old app after verified Qt
+            # readiness. Emulate that only on this disposable runner and prove
+            # the protected recovery backup can then be safely finalized.
+            _kill_only_child(running_old)
+            running_old = None
+            if not update_install.finalize_ready(
+                    target, token=installed.readiness_token, protected=True):
+                raise RuntimeError("Protected old-image backup could not finalize after old GUI exit.")
+            if installed.backup.exists() or update_install.readiness_path(target).exists():
+                raise RuntimeError("Verified update left a backup or readiness marker after old GUI exit.")
         return {"path_mode": "protected" if protected else "portable-fixture",
                 "legacy_sha256": old_sha, "candidate_sha256": expected,
                 "invalid_digest_blocked": True, "launch_failure_rolled_back": True,
-                "real_v2_image_started": True, "readiness_acknowledged": True}
+                "real_qt_image_started": True, "readiness_acknowledged": True,
+                "old_v202_running_during_replacement": protected,
+                "backup_finalized_after_old_exit": protected if protected else None}
     finally:
         _kill_only_child(started)
+        _kill_only_child(running_old)
         # Only remove the uniquely created test directory on this disposable runner.
         shutil.rmtree(target_dir, ignore_errors=True)
 
@@ -219,9 +292,9 @@ def main() -> int:
     base = require_disposable_runner()
     expected = parse_checksum(args.checksum.read_bytes())
     report = {"environment": "github-hosted-disposable-windows",
-              "test_only": True, "source": "exact CI artifact and public v1.47 binary",
+              "test_only": True, "source": "exact CI artifact and public v2.0.2 binary",
               "candidate_sha256": expected, "cases": {}, "unverified": [
-                  "Legacy in-app v1.47 updater using live next-release metadata",
+                  "Legacy in-app v2.0.2 updater using live next-release metadata",
                   "End-to-end automatic helper re-fetch from an unpublished future release",
                   "Interactive UAC consent and refusal (hosted-runner UAC disabled)",
                   "System DPI changes, full Turbo, Resurrection and OS repairs",

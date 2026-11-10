@@ -28,11 +28,14 @@ jobs:
       - name: Unit and integration tests (fixtures only)
         run: python -m pytest -q tests
 
+      - name: Qt Quick runtime and QML contracts (inert fixtures)
+        run: python -m unittest discover -s qt_app/tests -p "test_*.py" -v
+
       - name: Compile sources
-        run: python -m compileall -q main.py panacea_ui.py version.py modules
+        run: python -m compileall -q main.py panacea_ui.py version.py modules qt_app
 
       - name: Import smoke test
-        run: python -c "import panacea_ui, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
+        run: python -c "import panacea_ui, qt_app.main, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
 
       - name: Profile read-only GUI performance across independent processes
         shell: pwsh
@@ -52,6 +55,12 @@ jobs:
 
       - name: Build executable
         run: python scripts/build.py
+
+      - name: Verify frozen Qt backend imports
+        shell: pwsh
+        run: |
+          python -c "import subprocess; subprocess.run(['dist/Panacea.exe', '--smoke-backend-imports'], check=True, timeout=90)"
+          if ($LASTEXITCODE -ne 0) { throw 'Qt production backend imports failed' }
 
       - name: Verify packaged executable
         shell: powershell
@@ -141,7 +150,7 @@ jobs:
   windows-isolated-integration:
     name: Disposable Windows image/cleanup integration
     # Never exercise privileged Windows probes for untrusted fork contributions.
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: windows-smoke
     runs-on: windows-latest
     timeout-minutes: 20
@@ -166,13 +175,15 @@ jobs:
           name: Panacea-Windows-candidate
           path: build/hosted-probe/new
 
-      - name: Retrieve official v1.47 executable only into isolated runner fixture
+      - name: Retrieve official v2.0.2 EXE and checksum into isolated runner fixture
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Force -Path build/hosted-probe/legacy | Out-Null
-          gh release download v1.47 --repo falker47/Panacea --pattern Panacea.exe --dir build/hosted-probe/legacy
+          gh release download v2.0.2 --repo falker47/Panacea --pattern Panacea.exe --pattern Panacea.exe.sha256 --dir build/hosted-probe/legacy
+          python -c "from pathlib import Path; from modules.updater import parse_checksum,verify_file; p=Path('build/hosted-probe/legacy'); f=p/'Panacea.exe'; verify_file(f, parse_checksum((p/'Panacea.exe.sha256').read_bytes()), f.stat().st_size)"
+          if ($LASTEXITCODE -ne 0) { throw 'Official v2.0.2 checksum mismatch' }
 
       - name: Guarded native fixture cleanup and packaged V1-to-V2 replacement
         shell: pwsh
@@ -190,7 +201,7 @@ jobs:
   windows-installer-integration:
     name: Protected installer / update / uninstall
     needs: windows-smoke
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:

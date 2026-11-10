@@ -1,0 +1,301 @@
+"""Behavioral geometry checks against actual QML, independent of source spelling."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import unittest
+
+PROBE = Path(__file__).with_name("qml_probe.py")
+
+
+class DashboardRuntimeGeometry(unittest.TestCase):
+    def probe(self, width, height, tab=0, scenario="default", language="en", scale=1):
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software", QT_SCALE_FACTOR=str(scale))
+        result = subprocess.run([sys.executable, str(PROBE), str(width), str(height), str(tab), scenario, language],
+                                env=env, capture_output=True, text=True, timeout=45, check=False)
+        if result.returncode:
+            self.fail(f"QML probe exited {result.returncode}; stdout={result.stdout[-2000:]!r}; stderr={result.stderr[-4000:]!r}")
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(data["warnings"], [])
+        return data
+
+    def test_legacy_columns_fit_the_observed_compact_window(self):
+        data = self.probe(976, 672)
+        self.assertEqual(data["windows"][1], data["updates"][1], "Windows Update wrapped below Windows")
+        self.assertEqual(len({r[1] for r in data["metrics"]}), 1, "Disk wrapped below CPU/RAM")
+        for rect in data["metrics"]:
+            self.assertLessEqual(rect[0] + rect[2], 976)
+
+    def test_legacy_dashboard_grid_survives_scaled_logical_viewports(self):
+        for width in (760, 781, 911):
+            with self.subTest(width=width):
+                data = self.probe(width, 512)
+                self.assertEqual(data["windows"][1], data["updates"][1])
+                self.assertEqual(len({r[1] for r in data["metrics"]}), 1)
+                self.assertEqual(data["horizontal_overflow"], [])
+
+    def test_brand_logo_and_copy_share_a_vertical_center(self):
+        for width, height in ((760, 480), (976, 672), (1366, 768)):
+            with self.subTest(width=width, height=height):
+                result = self.probe(width, height)["brand"]
+                logo, title, subtitle = result["logo"], result["title"], result["subtitle"]
+                logo_mid = logo[1] + logo[3] / 2
+                copy_mid = (title[1] + subtitle[1] + subtitle[3]) / 2
+                self.assertAlmostEqual(logo_mid, copy_mid, delta=10)
+                self.assertLessEqual(title[0] + title[2], 302)
+
+    def test_update_card_keeps_title_badge_and_action_in_order(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    layout = data["update_card_layout"]
+                    title, badge, action = layout["title"], layout["badge"], layout["action"]
+                    self.assertGreaterEqual(badge[1], title[1] + title[3] - 1)
+                    self.assertGreaterEqual(action[0], layout["card"][0])
+                    self.assertLessEqual(action[0] + action[2], layout["card"][0] + layout["card"][2] + 1)
+                    if layout["compact"]:
+                        self.assertGreaterEqual(action[1] + 1, badge[1] + badge[3])
+                    else:
+                        self.assertGreaterEqual(action[0], badge[0] + badge[2] - 1)
+
+    def test_windows_update_caption_does_not_wrap_inside_words_at_high_scaling(self):
+        for width, height, scale in ((781, 538, 1.25), (760, 512, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    labels = data["update_caption_lines"]
+                    self.assertEqual(len(labels), 2)
+                    self.assertEqual(labels[0]["text"], "Windows Update")
+                    for label in labels:
+                        self.assertEqual(label["lines"], 1, label)
+
+    def test_dashboard_system_version_not_truncated_at_simulated_high_dpi(self):
+        for width, height, scale in ((760, 480, 1.5), (781, 538, 1.25), (976, 672, 1)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, height=height, scale=scale, language=language):
+                    title = self.probe(width, height, language=language, scale=scale)["system_title"]
+                    self.assertEqual(title["text"], "Windows 11")
+                    self.assertFalse(title["truncated"], title)
+                    self.assertGreaterEqual(title["width"] + 1, title["implicit_width"], title)
+
+    def test_windows_update_title_remains_readable_in_compact_scaled_layouts(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    title = data["update_caption_lines"][0]
+                    self.assertEqual(title["text"], "Windows Update")
+                    self.assertFalse(title["truncated"], title)
+                    self.assertGreaterEqual(title["visible_width"] + 1, title["implicit_width"], title)
+
+    def test_windows_update_badge_remains_legible_on_scaled_compact_views(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, language=language, scale=scale):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    badge = data["update_badge"]
+                    status = data["update_caption_lines"][1]
+                    self.assertGreater(badge["rect"][2], 55)
+                    self.assertFalse(status["truncated"], status)
+                    self.assertGreaterEqual(status["visible_width"] + 1, status["implicit_width"], status)
+
+    def test_compact_dashboard_action_titles_keep_readable_width(self):
+        for width, height, scale in ((781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, scale=scale, language=language):
+                    titles = self.probe(width, height, language=language, scale=scale)["dashboard_action_titles"]
+                    self.assertEqual(len(titles), 2)
+                    for label in titles:
+                        self.assertGreaterEqual(label["width"], 65, label)
+                        self.assertLessEqual(label["lines"], 3, label)
+
+    def test_guided_steps_follow_the_legacy_responsive_columns(self):
+        for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
+            with self.subTest(width=width):
+                steps = self.probe(width, 768, 4)["steps"]
+                self.assertEqual(len(steps), 9)
+                self.assertEqual(len({r[0] for r in steps}), columns)
+                self.assertLess(steps[0][0], steps[1][0]) if columns > 1 else None
+
+    def test_expanded_secondary_surfaces_remain_inside_compact_viewports(self):
+        for width in (760, 976):
+            for tab in (1, 2, 3, 4):
+                with self.subTest(width=width, tab=tab):
+                    data = self.probe(width, 672, tab, "expanded", "it")
+                    self.assertEqual(data["horizontal_overflow"], [])
+
+    def test_resurrection_start_button_fills_narrow_action_row_like_stable_v2(self):
+        for width, height, scale in ((760, 480, 1.5), (781, 538, 1.25)):
+            with self.subTest(width=width, scale=scale):
+                sizes = self.probe(width, height, 4, language="it", scale=scale)["guided_action_widths"]
+                self.assertAlmostEqual(sizes["start"], sizes["container"], delta=1, msg=sizes)
+        wide = self.probe(976, 672, 4)["guided_action_widths"]
+        self.assertAlmostEqual(wide["start"], 168, delta=1)
+
+    def test_guided_warning_fits_its_panel_at_minimum_width(self):
+        data = self.probe(760, 480, 4)
+        self.assertLessEqual(data["warning_content_height"], data["warning_panel_height"])
+
+    def test_group_reflow_uses_the_legacy_scroller_width(self):
+        cleaning = self.probe(976, 672, 1)["panels"]
+        tools = self.probe(976, 672, 2)["panels"]
+        self.assertEqual(cleaning[0][1], cleaning[1][1], "Cleanup and Apps should fit together")
+        self.assertLess(tools[0][1], tools[1][1], "Tools and Disk should stack at this viewport")
+
+    def test_long_confirmation_remains_readable_in_a_compact_window(self):
+        data = self.probe(760, 480, 0, "confirmation")
+        self.assertTrue(data["confirmation_scrollable"] or data["confirmation_readable_height"])
+
+    def test_turbo_options_are_balanced_across_the_two_panels(self):
+        wide = self.probe(1020, 680, 3)["turbo_distribution"]
+        self.assertEqual((wide["primary"]["count"], wide["secondary"]["count"]), (2, 3))
+        self.assertLess(wide["primary"]["rect"][0], wide["secondary"]["rect"][0])
+        narrow = self.probe(760, 672, 3)["turbo_distribution"]
+        self.assertEqual(narrow["primary"]["count"] + narrow["secondary"]["count"], 5)
+        self.assertLess(narrow["primary"]["rect"][1], narrow["secondary"]["rect"][1])
+
+    def test_narrow_turbo_toggle_sits_below_the_description(self):
+        row = self.probe(760, 672, 3)["turbo_layout"]
+        self.assertGreater(row["toggle"][1], row["title"][1] + row["title"][3])
+
+    def test_group_heading_stays_visible_when_scrolling_to_disk(self):
+        header = self.probe(976, 672, 2, "scrolled")["group_heading"]
+        self.assertGreaterEqual(header[1], 0)
+
+    def test_drive_menu_does_not_reflow_the_optimization_panel(self):
+        closed = self.probe(976, 672, 2)["drive_card_height"]
+        opened = self.probe(976, 672, 2, "drive-choices")["drive_card_height"]
+        self.assertEqual(opened, closed)
+
+    def test_master_switch_matches_legacy_order_and_compact_stacking(self):
+        wide = self.probe(976, 672, 3)["master_layout"]
+        self.assertLess(wide["toggle"][0], wide["state"][0])
+        narrow = self.probe(760, 672, 3)["master_layout"]
+        self.assertGreaterEqual(narrow["toggle"][1], narrow["title"][1] + narrow["title"][3])
+
+    def test_nine_visible_guided_cards_keep_all_ten_backend_phase_statuses(self):
+        data = self.probe(976, 672, 4)
+        self.assertEqual(len(data["steps"]), 9)
+        self.assertEqual(len(data["phase_states"]), 10)
+        self.assertEqual(data["phase_indices"], list(range(10)))
+
+    def test_merged_guided_card_uses_the_live_locale_and_keeps_compact_height(self):
+        for language, title in (("it", "Cache e temporanei"), ("en", "Cache + temp files")):
+            with self.subTest(language=language):
+                data = self.probe(976, 672, 4, language=language)
+                card = data["merged_card"]
+                self.assertEqual(card["title"], title)
+                self.assertEqual(card["backend_indices"], [1, 2])
+                self.assertTrue(card["summary_visible"])
+                self.assertEqual(card["visible_phase_count"], 0)
+                self.assertLessEqual(card["height"], card["first_card_height"] + 35)
+
+    def test_expanded_merged_guided_card_exposes_both_backend_states(self):
+        data = self.probe(976, 672, 4, "expanded", "it")
+        card = data["merged_card"]
+        self.assertFalse(card["summary_visible"])
+        self.assertEqual(card["visible_phase_count"], 2)
+        self.assertEqual(data["phase_indices"], list(range(10)))
+
+    def test_stopped_sequence_marks_unattempted_phases_as_not_run(self):
+        for state, count in (("cancelled", 8), ("failed", 9)):
+            with self.subTest(state=state):
+                labels = self.probe(976, 672, 4, state)["phase_states"]
+                self.assertEqual(labels.count("Not run"), count)
+                self.assertNotIn("Not started", labels)
+
+    def test_long_view_exposes_a_scroll_thumb_that_tracks_the_page(self):
+        top = self.probe(976, 672, 2)
+        scrolled = self.probe(976, 672, 2, "scrolled")
+        self.assertIsNotNone(top["scrollbar"])
+        self.assertLess(top["scroll_thumb"][3], top["scrollbar"][3])
+        self.assertGreater(scrolled["scroll_thumb"][1], top["scroll_thumb"][1])
+
+    def test_metric_graphs_and_disk_bar_survive_live_snapshots(self):
+        # Recreating Repeater delegates on a 3-second sample flashes the plot and restarts bar animation.
+        refreshed = self.probe(976, 672, 0, "metric-refresh")
+        self.assertTrue(refreshed["metric_cards_preserved"])
+
+    def test_graph_height_matches_the_native_fifty_pixel_canvas_at_150_percent(self):
+        heights = self.probe(911, 512, scale=1.5)["graph_height_pixels"]
+        self.assertEqual(len(heights), 2)
+        for height in heights:
+            self.assertAlmostEqual(height, 50, delta=1)
+
+    def test_many_drives_use_the_legacy_eight_row_popup(self):
+        data = self.probe(976, 672, 2, "many-drives")
+        self.assertLessEqual(data["drive_popup_height"], 8 * 24 + 8)
+
+    def test_quick_cleanup_explains_action_and_live_step_in_both_languages(self):
+        for language, heading, step in (
+            ("it", "Pulizia rapida in esecuzione", "File temporanei (1 di 3)"),
+            ("en", "Quick cleanup in progress", "Temporary files (1 of 3)"),
+        ):
+            with self.subTest(language=language):
+                data = self.probe(976, 672, 1, "noisy-cleanup", language)
+                self.assertEqual(data["cleanup_status"]["heading"], heading)
+                self.assertIn(step, data["cleanup_status"]["step"])
+
+        step_two = self.probe(976, 672, 1, "cleanup-step-two", "it")
+        self.assertIn("Cestino (2 di 3)", step_two["cleanup_status"]["step"])
+
+    def test_quick_cleanup_uses_specific_result_copy_instead_of_raw_codes(self):
+        state = self.probe(976, 672, 1, "cleanup-partial", "it")
+        self.assertIn("parziale", state["cleanup_status"]["heading"].lower())
+        self.assertNotEqual(state["cleanup_status"]["heading"], "partial")
+
+    def test_log_console_looks_like_cmd_and_summarizes_only_repeated_counters(self):
+        log = self.probe(976, 672, 1, "noisy-cleanup", "it")["console"]
+        self.assertTrue(log["expanded"])
+        self.assertEqual(log["background"], "#050505")
+        self.assertEqual(log["font"], "Consolas")
+        self.assertGreaterEqual(log["font_size"], 12)
+        self.assertIn("File eliminati finora: 150", log["text"])
+        self.assertIn("File eliminati finora: 250", log["text"])
+        self.assertEqual(log["text"].count("File eliminati finora:"), 2)
+        self.assertIn("Access denied: protected item", log["text"])
+        self.assertIn("Scanning C:\\Windows\\Temp...", log["text"])
+        self.assertNotIn("Deleted 50 files...", log["text"])
+        self.assertNotIn("panacea-clean.exe", log["text"])
+
+    def test_full_log_restores_original_updates_and_errors_without_mutation(self):
+        log = self.probe(976, 672, 1, "full-cleanup-log", "it")["console"]
+        self.assertTrue(log["show_full"])
+        self.assertIn("Deleted 50 files...", log["text"])
+        self.assertIn("Deleted 100 files...", log["text"])
+        self.assertIn("Access denied: protected item", log["text"])
+        self.assertNotIn("File eliminati finora:", log["text"])
+
+    def test_operation_start_reveals_its_output_like_the_legacy_controller(self):
+        log = self.probe(976, 672, 2, "operation-running")["tools_log"]
+        self.assertTrue(log["expanded"])
+        self.assertGreaterEqual(log["rect"][1], 85)
+        self.assertLess(log["rect"][1], 150)
+
+    def test_reading_drive_metadata_does_not_open_the_operation_log(self):
+        self.assertFalse(self.probe(976, 672, 2, "drive-refresh")["disk_log"]["expanded"])
+
+    def test_first_visit_during_analysis_opens_the_live_output(self):
+        self.assertTrue(self.probe(976, 672, 1, "preview-first-visit")["cleaning_log"]["expanded"])
+
+    def test_drive_popup_closes_when_focus_leaves_it(self):
+        self.assertFalse(self.probe(976, 672, 2, "drive-focus-out")["drive_popup_visible"])
+
+    def test_body_buttons_use_the_original_hover_colors(self):
+        for tab, expected in ((0, "#304561"), (1, "#957745")):
+            with self.subTest(tab=tab):
+                self.assertEqual(self.probe(976, 672, tab, "hover-action")["action_color"], expected)
+
+    def test_disabled_button_retains_the_original_panel_color(self):
+        self.assertEqual(self.probe(976, 672, 0, "disabled-action")["action_color"], "#1b2b44")
+
+    def test_failed_drive_query_clears_selection_and_explains_the_unavailable_state(self):
+        data = self.probe(976, 672, 2, "drive-query-failed")
+        self.assertEqual(data["selected_drive"], "")
+        self.assertTrue(data["drive_error_visible"])
+
+
+if __name__ == "__main__":
+    unittest.main()

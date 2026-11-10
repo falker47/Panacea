@@ -3,11 +3,11 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
 
-Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a CustomTkinter interface. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
+Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a Qt Quick / PySide6 interface from 2.1.0. The legacy CustomTkinter 2.0.2 UI remains in source for reference, while the official executable uses Qt Quick. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.0.2 release notes](docs/releases/2.0.2.md) for the current interface, localization and performance improvements, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
+The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.1.0 release notes](docs/releases/2.1.0.md) for the new Qt interface and upgrade procedure, the [2.0.2 release notes](docs/releases/2.0.2.md) for the preceding Tk interface, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
 
-The current V2.0.2 interface groups features into five primary areas: **Overview**, **Space & Cleanup**, **Diagnostics & Repair**, **Performance & Startup**, and **Guided Maintenance**. The categories below describe capabilities rather than reproducing the navigation labels.
+The Qt 2.1.0 interface groups features into five primary areas: **Overview**, **Space & Cleanup**, **Diagnostics & Repair**, **Performance & Startup**, and **Guided Maintenance**. The categories below describe capabilities rather than reproducing the navigation labels.
 
 Earlier validation evidence remains available: the [V2 validation report](docs/validation/v2-release-report.md) covers the original seven-section V2.0.0 candidate, while the [functional polish report](docs/validation/v2-polish-report.md) and [Round 2 visual polish report](docs/validation/v2-round2-report.md) document subsequent refinements. These are historical candidate reports, not proof that every operation was tested on the final published version.
 
@@ -145,7 +145,7 @@ The published Windows binaries are not Authenticode-signed. SHA-256 verification
 
 The installer does not touch existing portable V1 executables. Older v1.47 users should close the app and install V2 manually, not use the unverified legacy in-app Install banner.
 
-The corrected V2 updater can offer checksum-verified, user-confirmed in-place updates for protected installations. Users of installed v2.0.0/v2.0.1 should upgrade to v2.0.2 with Setup because the older binaries may reject canonical GitHub release URLs on their case-sensitive repository checks.
+The corrected updater offers checksum-verified, user-confirmed in-place updates for protected installations. Installed Panacea 2.0.2 can offer the published Qt 2.1.0 as an update; the original protected executable remains recoverable until the new Qt UI acknowledges startup. Installed 2.0.0/2.0.1 should upgrade with Setup because those older binaries may reject canonical GitHub release URLs on case-sensitive checks.
 
 Desktop/Downloads copies deliberately cannot perform elevated in-place replacement. Portable copies remain supported through manual updates: download `Panacea.exe` and its matching `Panacea.exe.sha256` from the official release, verify the checksum, close the application and replace the portable executable.
 
@@ -187,8 +187,10 @@ Requirements:
 git clone https://github.com/falker47/Panacea.git
 cd Panacea
 python -m pip install -r requirements.txt
-python main.py
+python qt_app/main.py
 ```
+
+The original CustomTkinter UI is still accessible in source with `python main.py` for reference; the official frozen `Panacea.exe` is built from `qt_app/main.py`.
 
 Normal startup requests Windows elevation when necessary. Source execution is intended for development and does not install the application or enable automatic replacement of the Python interpreter.
 
@@ -198,7 +200,7 @@ Normal startup requests Windows elevation when necessary. Source execution is in
 scripts\build_exe.bat
 ```
 
-The generated executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies.
+The Qt single-file executable is written to `dist\Panacea.exe`, with `dist\Panacea.exe.sha256` and Windows version metadata derived from `version.py`. The build uses the checked-in `Panacea.spec` and pinned dependencies.
 
 New build outputs under `dist/` are ignored by Git. However, the repository still contains a previously tracked `dist/Panacea.exe`. That repository copy is not identical to the published v2.0.2 release asset and must not be treated as the current distributable binary.
 
@@ -220,11 +222,11 @@ python -m ruff check .
 
 The ordinary test suite uses controlled fixtures and mocks rather than performing destructive maintenance on the user's computer.
 
-Separate GitHub Actions integration jobs can exercise scoped native cleanup, installer operations, updating, rollback and uninstall on disposable Windows runners. These jobs are restricted to qualifying same-repository pull requests and are **skipped for ordinary pushes to `main`**. A successful main-branch smoke job must not be reported as proof that those separate integration jobs ran.
+Separate GitHub Actions integration jobs can exercise scoped native cleanup, installer operations, updating, rollback and uninstall on disposable Windows runners. These jobs run for qualifying same-repository pull requests and trusted main-branch pushes. Publishing v2.1.0 requires all three Windows CI jobs (GUI, isolated filesystem/update, protected installer/rollback) to succeed on the exact main commit. A skipped or pending job is not proof of validation.
 
 The **Prepare Windows release** workflow accepts an immutable reviewed commit SHA and an exact tag matching `version.py`. It executes its checks and attaches `Panacea.exe`, `PanaceaSetup.exe` and their checksums to a **draft** GitHub Release.
 
-Stable publication requires its own approval and applicable release gates. See the [release notes](docs/releases/2.0.0.md) and [validation evidence](docs/validation).
+Stable publication of Qt 2.1.0 is gated on the reviewed main commit and the three successful native Windows CI jobs, with independently verified release-asset SHA-256 digests. See the [2.1.0 release notes](docs/releases/2.1.0.md) and [validation evidence](docs/validation).
 
 CI success, packaged smoke tests and disposable-runner results are not substitutes for manual testing of elevated Windows maintenance operations, real-world updates, interruption recovery and rollback on representative Windows 10/11 systems.
 

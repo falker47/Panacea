@@ -21,6 +21,7 @@ venv/
 env/
 ENV/
 .venv/
+.venv-qt/
 Lib/
 # Keep project scripts tracked on case-insensitive Windows filesystems.
 Include/

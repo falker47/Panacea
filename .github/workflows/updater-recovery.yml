@@ -1,0 +1,53 @@
+name: Published updater recovery
+
+# Historical live check: keep out of routine PR gates once latest advances.
+on:
+  push:
+    branches: [codex/updater-recovery]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [helper, manual]
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify checked-out commit
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -cne $env:GITHUB_SHA) { throw 'Unexpected checkout' }
+          git rev-parse HEAD
+      - name: Security fixtures, full suites and lint on exact HEAD
+        if: matrix.mode == 'helper'
+        shell: pwsh
+        run: |
+          python -m ruff check .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pytest -q tests
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m unittest discover -s qt_app/tests
+      - name: Exercise published binaries in a fresh VM
+        run: python -m scripts.hosted_updater_recovery ${{ matrix.mode }}
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.mode == 'helper'
+        with:
+          name: published-updater-windows
+          path: build/recovery
+          if-no-files-found: warn

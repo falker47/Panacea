@@ -15,7 +15,7 @@ class V2GraphRenderingContracts(unittest.TestCase):
         self.assertIn("i < 60 - length ? 0", page)
         self.assertIn("level <= 75; level += 25", page)
         self.assertIn('goldFill ? "#3b342b" : "#24364c"', page)
-        self.assertIn('goldFill: modelData.id === "ram"', page)
+        self.assertIn('goldFill: metricCard.metricId === "ram"', page)
 
 
 if __name__ == "__main__":

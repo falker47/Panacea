@@ -75,7 +75,7 @@ class QtVisualParityContracts(unittest.TestCase):
         self.assertIn("function diskCapacityText()", page)
         self.assertIn("function powerCaption()", page)
         self.assertIn("function restartCaption()", page)
-        self.assertIn("modelData.extra ||", page)
+        self.assertIn("metricCard.metricExtra ||", page)
         self.assertIn("progressColor: view.diskAccent()", page)
         self.assertIn("metrics._history", app)
         self.assertIn('"visual_fixture": True', app)

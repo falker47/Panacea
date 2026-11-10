@@ -135,7 +135,7 @@ def _kill_only_child(process):
 
 def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: str,
                            *, protected=False) -> dict:
-    """Use actual v1.47 and V2 PE images; verify fail/rollback and real new boot ack."""
+    """Use actual v2.0.2 and V2 PE images; verify fail/rollback and real new boot ack."""
     if protected:
         from modules.update_install import _assert_admin_directory, _create_admin_workspace, _open_exclusive
         program_files = Path(os.environ["ProgramFiles"])
@@ -202,7 +202,7 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         return {"path_mode": "protected" if protected else "portable-fixture",
                 "legacy_sha256": old_sha, "candidate_sha256": expected,
                 "invalid_digest_blocked": True, "launch_failure_rolled_back": True,
-                "real_v2_image_started": True, "readiness_acknowledged": True}
+                "real_qt_image_started": True, "readiness_acknowledged": True}
     finally:
         _kill_only_child(started)
         # Only remove the uniquely created test directory on this disposable runner.
@@ -219,9 +219,9 @@ def main() -> int:
     base = require_disposable_runner()
     expected = parse_checksum(args.checksum.read_bytes())
     report = {"environment": "github-hosted-disposable-windows",
-              "test_only": True, "source": "exact CI artifact and public v1.47 binary",
+              "test_only": True, "source": "exact CI artifact and public v2.0.2 binary",
               "candidate_sha256": expected, "cases": {}, "unverified": [
-                  "Legacy in-app v1.47 updater using live next-release metadata",
+                  "Legacy in-app v2.0.2 updater using live next-release metadata",
                   "End-to-end automatic helper re-fetch from an unpublished future release",
                   "Interactive UAC consent and refusal (hosted-runner UAC disabled)",
                   "System DPI changes, full Turbo, Resurrection and OS repairs",

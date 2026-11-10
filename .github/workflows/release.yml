@@ -43,14 +43,17 @@ jobs:
         run: python scripts/release_tools.py --tag "$env:RELEASE_TAG"
       - run: python -m ruff check .
       - run: python -m pytest -q tests
-      - run: python -m compileall -q main.py panacea_ui.py version.py modules scripts
-      - run: python -c "import panacea_ui, modules.updater, modules.update_install"
+      - run: python -m unittest discover -s qt_app/tests -p "test_*.py" -v
+      - run: python -m compileall -q main.py panacea_ui.py version.py modules qt_app scripts
+      - run: python -c "import qt_app.main, modules.updater, modules.update_install"
       - run: python scripts/build.py
-      - name: Verify version and safe packaged startup
+      - name: Verify Qt version and packaged backend and startup
         shell: pwsh
         run: |
           $version = python scripts/release_tools.py
           if ((Get-Item 'dist\Panacea.exe').VersionInfo.ProductVersion -ne $version) { throw 'Binary version mismatch' }
+          python -c "import subprocess; subprocess.run(['dist/Panacea.exe', '--smoke-backend-imports'], check=True, timeout=90)"
+          if ($LASTEXITCODE -ne 0) { throw 'Qt frozen backend imports failed' }
           $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged smoke failed: $($process.ExitCode)" }

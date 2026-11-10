@@ -145,6 +145,11 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         self.assertLess(top["scroll_thumb"][3], top["scrollbar"][3])
         self.assertGreater(scrolled["scroll_thumb"][1], top["scroll_thumb"][1])
 
+    def test_metric_graphs_and_disk_bar_survive_live_snapshots(self):
+        # Recreating Repeater delegates on a 3-second sample flashes the plot and restarts bar animation.
+        refreshed = self.probe(976, 672, 0, "metric-refresh")
+        self.assertTrue(refreshed["metric_cards_preserved"])
+
     def test_graph_height_matches_the_native_fifty_pixel_canvas_at_150_percent(self):
         heights = self.probe(911, 512, scale=1.5)["graph_height_pixels"]
         self.assertEqual(len(heights), 2)

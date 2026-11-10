@@ -104,6 +104,18 @@ def main():
             copy = text_item(maintenance.details)
             result["confirmation_scrollable"] = copy.parentItem().property("contentHeight") is not None
             result["confirmation_readable_height"] = copy.implicitHeight() <= copy.height() + 1
+        if tab == 0 and len(sys.argv) > 4 and sys.argv[4] == "metric-refresh":
+            initial = {i.objectName(): i for i in visible if i.objectName().startswith("metricCard_")}
+            metrics._values["cpu"] = "41.7%"
+            metrics._history["cpu"] = [10.0, 20.0, 41.7]
+            metrics.changed.emit()
+            app.processEvents()
+            after = {i.objectName(): i for i in items(window.contentItem()) if i.objectName().startswith("metricCard_")}
+            result["metric_cards_preserved"] = (
+                set(initial) == {"metricCard_cpu", "metricCard_ram", "metricCard_disk"}
+                and set(after) == set(initial)
+                and all(initial[key] is after[key] for key in initial)
+            )
         if tab == 0:
             metric_titles = ("CPU", "Memoria (RAM)", "Unità di sistema") if window.property("language") == "it" else ("CPU", "Memory (RAM)", "System drive")
             result.update(windows=card("Windows 11"), updates=card("Windows Update"),

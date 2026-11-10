@@ -35,7 +35,8 @@ class UpdateBridge(QObject):
         self._closed = False
         self._job = None
         self._poll_again = False
-        self._status = "Check for official stable updates. QA builds cannot install them."
+        self._status = ("Controlla gli aggiornamenti ufficiali di Panacea." if self._flow.install_eligible
+                        else "Check for official stable updates. QA builds cannot install them.")
         self._version = ""
         self._percent = 0
 

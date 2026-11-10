@@ -9,7 +9,7 @@ Window {
     minimumWidth: 760
     minimumHeight: 480
     visible: true
-    title: "Panacea 2.0.2 · Qt QA"
+    title: "Panacea " + updateService.currentVersion + (updateService.eligible ? "" : " · Qt QA")
     color: "#0b1525"
 
     property string language: applicationLanguage
@@ -242,7 +242,7 @@ Window {
                         elide: Text.ElideRight
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://github.com/falker47") }
                     }
-                    Text { text: "v2.0.2 QA"; color: "#9eafc8"; font.pixelSize: 10 }
+                    Text { text: "v" + updateService.currentVersion + (updateService.eligible ? "" : " QA"); color: "#9eafc8"; font.pixelSize: 10 }
                 }
             }
         }
@@ -342,6 +342,7 @@ Window {
                         }
                         Text {
                             text: "QA"
+                                visible: !updateService.eligible
                             color: "#e4c579"
                             font.pixelSize: 10
                             font.bold: true

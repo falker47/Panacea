@@ -90,7 +90,7 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         for width, columns in ((976, 3), (1366, 3), (1920, 5), (760, 1)):
             with self.subTest(width=width):
                 steps = self.probe(width, 768, 4)["steps"]
-                self.assertEqual(len(steps), 10)
+                self.assertEqual(len(steps), 9)
                 self.assertEqual(len({r[0] for r in steps}), columns)
                 self.assertLess(steps[0][0], steps[1][0]) if columns > 1 else None
 
@@ -149,6 +149,12 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         self.assertLess(wide["toggle"][0], wide["state"][0])
         narrow = self.probe(760, 672, 3)["master_layout"]
         self.assertGreaterEqual(narrow["toggle"][1], narrow["title"][1] + narrow["title"][3])
+
+    def test_nine_visible_guided_cards_keep_all_ten_backend_phase_statuses(self):
+        data = self.probe(976, 672, 4)
+        self.assertEqual(len(data["steps"]), 9)
+        self.assertEqual(len(data["phase_states"]), 10)
+        self.assertEqual(data["phase_indices"], list(range(10)))
 
     def test_stopped_sequence_marks_unattempted_phases_as_not_run(self):
         for state, count in (("cancelled", 8), ("failed", 9)):

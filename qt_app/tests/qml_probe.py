@@ -151,8 +151,10 @@ def main():
             steps = sorted((i for i in visible if i.objectName().startswith("resurrection_step_")),
                            key=lambda i: int(i.objectName().rsplit("_", 1)[-1]))
             result["steps"] = [box(i) for i in steps]
-            result["phase_states"] = [i.property("text") for step in steps for i in items(step)
-                                      if i.property("text") in ("Completed", "Failed", "Not started", "Not run")]
+            phases = [item for step in steps for item in items(step)
+                      if item.objectName().startswith("resurrection_phase_")]
+            result["phase_states"] = [item.property("phaseStatus") for item in phases]
+            result["phase_indices"] = sorted(item.property("backendIndex") for item in phases)
             panel = next(i for i in visible if i.objectName() == "resurrectionSafety")
             descendants = list(items(panel))
             result["warning_content_height"] = max(box(i)[1] + box(i)[3] for i in descendants) - box(panel)[1]

@@ -48,8 +48,8 @@ class V2VisualIdentityTests(unittest.TestCase):
                           win.pixelColor(15, 15).blue(),
                           win.pixelColor(15, 15).alpha()),
                          make_windows_icon(size=96).getpixel((15, 15)))
-        self.assertIn('modelData.icon + "/detail"', page)
-        self.assertIn('visible: modelData.id === "disk"', page)
+        self.assertIn('metricCard.metricIcon + "/detail"', page)
+        self.assertIn('visible: metricCard.metricId === "disk"', page)
         self.assertIn('source: "image://panacea-nav/scan/detail"', page)
         self.assertIn('source: "image://panacea-nav/restore/detail"', page)
         self.assertTrue(provider.requestImage("../secrets/detail", QSize(), QSize()).isNull())

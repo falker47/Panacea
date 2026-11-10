@@ -1547,7 +1547,7 @@ Item {
             width:parent.width; spacing:12
             PGroupHeader {
                 caption: view.t("Manutenzione guidata", "Guided Maintenance"); iconName: "resurrect"
-                subtitle: view.t("10 fasi · Punto di ripristino verificato obbligatorio", "10 steps · Verified restore point required")
+                subtitle: view.t("9 passaggi · 10 operazioni · Punto di ripristino obbligatorio", "9 steps · 10 operations · Restore point required")
             }
             Rectangle {
                 width:parent.width; height:resurrectionHero.implicitHeight + 28; radius:8; color:"#142138"; border.color:"#2e415c"
@@ -1558,7 +1558,7 @@ Item {
                         text:resurrectionResult.status ? view.statusCaption(resurrectionResult.status) : view.t("Pronto · Nessuna fase eseguita","Ready · No steps run")
                         color:"#f1f3f8"; font.pixelSize:16; font.bold:true
                     }
-                    Text { text:(resurrectionResult.done || 0) + " / 10 " + view.t("fasi","steps"); color:"#e4c579"; font.pixelSize:12 }
+                    Text { text:(resurrectionResult.done || 0) + " / 10 " + view.t("operazioni · 9 passaggi", "operations · 9 steps"); color:"#e4c579"; font.pixelSize:12 }
                     PProgress { width:parent.width; height:11; fraction:(resurrectionResult.done || 0) / 10 }
                     Flow {
                         id: resurrectionActions
@@ -1626,21 +1626,23 @@ Item {
                 readonly property int columns: parent.width >= 1180 ? 5 : parent.width >= 610 ? 3 : parent.width >= 430 ? 2 : 1
                 Repeater {
                     model: [
-                    { title: view.t("Punto di ripristino", "Restore point"), help: view.t("Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati non saranno recuperabili.", "Safety · Verify a new Windows restore point. Deleted files cannot be recovered.") },
-                    { title: view.t("Cache browser", "Browser caches"), help: view.t("Pulizia · Rimuove i dati temporanei della cache dei browser.", "Cleanup · Remove temporary browser cache data.") },
-                    { title: view.t("File temporanei", "Temporary files"), help: view.t("Pulizia · Elimina i file temporanei idonei; quelli protetti vengono ignorati.", "Cleanup · Remove eligible temporary files; protected items are skipped.") },
-                    { title: view.t("Cestino", "Recycle Bin"), help: view.t("Pulizia · Elimina definitivamente tutti gli elementi del Cestino.", "Cleanup · Permanently delete all items in the Recycle Bin.") },
-                    { title: view.t("Cache DNS", "DNS cache"), help: view.t("Rete · Aggiorna le risoluzioni dei nomi di dominio memorizzate localmente.", "Network · Refresh locally cached domain-name lookups.") },
-                    { title: view.t("Reset di rete", "Network reset"), help: view.t("Rete · Reimposta Winsock; potrebbe essere necessario riavviare.", "Network · Reset Winsock; a restart may be needed.") },
-                    { title: view.t("Ottimizzazione unità", "Drive optimization"), help: view.t("Disco · Lascia che Windows utilizzi il metodo di ottimizzazione adatto all'unità.", "Disk · Let Windows use the optimization appropriate for the drive.") },
-                    { title: view.t("Scansione disco", "Disk health scan"), help: view.t("Disco · Analizza il file system per individuare errori con CHKDSK online.", "Disk · Scan the file system for errors using online CHKDSK.") },
-                    { title: view.t("Integrità immagine", "Windows image health"), help: view.t("Riparazione · Verifica la presenza di corruzione registrata nell'immagine Windows.", "Repair · Check recorded corruption in the Windows component image.") },
-                    { title: view.t("Scansione file sistema", "System file scan"), help: view.t("Riparazione · Analizza e ripara i file di sistema protetti con SFC.", "Repair · Scan and repair protected Windows files using SFC.") }
+                    { operations: [0], title: view.t("Punto di ripristino", "Restore point"), help: view.t("Sicurezza · Verifica un nuovo punto di ripristino Windows. I file eliminati non saranno recuperabili.", "Safety · Verify a new Windows restore point. Deleted files cannot be recovered.") },
+                    { operations: [1, 2], title: view.t("Cache e file temporanei", "Caches and temporary files"), help: view.t("Pulizia · Rimuove prima la cache dei browser, poi i file temporanei idonei; i file protetti vengono ignorati. Sono due operazioni separate.", "Cleanup · Remove browser caches first, then eligible temporary files; protected items are skipped. These are two separate operations.") },
+                    { operations: [3], title: view.t("Cestino", "Recycle Bin"), help: view.t("Pulizia · Elimina definitivamente tutti gli elementi del Cestino.", "Cleanup · Permanently delete all items in the Recycle Bin.") },
+                    { operations: [4], title: view.t("Cache DNS", "DNS cache"), help: view.t("Rete · Aggiorna le risoluzioni dei nomi di dominio memorizzate localmente.", "Network · Refresh locally cached domain-name lookups.") },
+                    { operations: [5], title: view.t("Reset di rete", "Network reset"), help: view.t("Rete · Reimposta Winsock; potrebbe essere necessario riavviare.", "Network · Reset Winsock; a restart may be needed.") },
+                    { operations: [6], title: view.t("Ottimizzazione unità", "Drive optimization"), help: view.t("Disco · Lascia che Windows utilizzi il metodo di ottimizzazione adatto all'unità.", "Disk · Let Windows use the optimization appropriate for the drive.") },
+                    { operations: [7], title: view.t("Scansione disco", "Disk health scan"), help: view.t("Disco · Analizza il file system per individuare errori con CHKDSK online.", "Disk · Scan the file system for errors using online CHKDSK.") },
+                    { operations: [8], title: view.t("Integrità immagine", "Windows image health"), help: view.t("Riparazione · Verifica la presenza di corruzione registrata nell'immagine Windows.", "Repair · Check recorded corruption in the Windows component image.") },
+                    { operations: [9], title: view.t("Scansione file sistema", "System file scan"), help: view.t("Riparazione · Analizza e ripara i file di sistema protetti con SFC.", "Repair · Scan and repair protected Windows files using SFC.") }
                     ]
                     Rectangle {
                         id: guidedStep
                         objectName: "resurrection_step_" + index
                         property bool expanded: false
+                        readonly property var operationIndices: modelData.operations
+                        readonly property string titleCopy: modelData.title
+                        readonly property string helpCopy: modelData.help
                         width: (stepGrid.width - (stepGrid.columns - 1) * stepGrid.spacing) / stepGrid.columns
                         height: Math.max(54, guidedContent.implicitHeight + 18)
                         radius: 8
@@ -1669,22 +1671,31 @@ Item {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     Text {
-                                        text: view.stepDisplay(index, modelData.title)
+                                        text: guidedStep.titleCopy
                                         Layout.fillWidth: true
                                         color: "#f1f3f8"
                                         font.pixelSize: 12
                                         font.bold: true
                                         wrapMode: Text.WordWrap
                                     }
-                                    Text {
-                                        text: view.stepCaption(index)
-                                        Layout.fillWidth: true
-                                        color: progressSteps.length > index ?
-                                               (progressSteps[index].success === true ? "#78c8a8" : "#ee939a") :
-                                               (maintenanceService.busy &&
-                                                maintenanceService.lastAction === "resurrection" &&
-                                                resurrectionResult.done === index ? "#e4b66d" : "#9eafc8")
-                                        font.pixelSize: 10
+                                    Repeater {
+                                        model: guidedStep.operationIndices
+                                        Text {
+                                            objectName: "resurrection_phase_" + modelData
+                                            readonly property int backendIndex: modelData
+                                            readonly property string phaseStatus: view.stepCaption(modelData)
+                                            text: guidedStep.operationIndices.length > 1 ?
+                                                  (modelData === 1 ? view.t("Cache browser", "Browser cache") : view.t("File temporanei", "Temp files")) + ": " + phaseStatus :
+                                                  phaseStatus
+                                            Layout.fillWidth: true
+                                            color: progressSteps.length > modelData ?
+                                                   (progressSteps[modelData].success === true ? "#78c8a8" : "#ee939a") :
+                                                   (maintenanceService.busy &&
+                                                    maintenanceService.lastAction === "resurrection" &&
+                                                    resurrectionResult.done === modelData ? "#e4b66d" : "#9eafc8")
+                                            font.pixelSize: 10
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
                                 Rectangle {
@@ -1697,7 +1708,7 @@ Item {
                                     activeFocusOnTab: true
                                     Accessible.role: Accessible.Button
                                     Accessible.name: view.t("Dettagli fase ", "Step details ") + (index + 1)
-                                    Accessible.description: modelData.help
+                                    Accessible.description: guidedStep.helpCopy
                                     function activate() { guidedStep.expanded = !guidedStep.expanded }
                                     Keys.onReturnPressed: activate()
                                     Keys.onSpacePressed: activate()
@@ -1719,18 +1730,24 @@ Item {
                                 id: stepExplanation
                                 width: parent.width
                                 visible: guidedStep.expanded
-                                text: modelData.help
+                                text: guidedStep.helpCopy
                                 color: "#9eafc8"
                                 font.pixelSize: 11
                                 wrapMode: Text.WordWrap
                             }
-                            Text {
-                                width: parent.width
-                                visible: guidedStep.expanded && progressSteps.length > index
-                                text: progressSteps.length > index ? (progressSteps[index].message || "") : ""
-                                color: "#f1f3f8"
-                                font.pixelSize: 11
-                                wrapMode: Text.WordWrap
+                            Repeater {
+                                model: guidedStep.operationIndices
+                                Text {
+                                    width: parent.width
+                                    visible: guidedStep.expanded && progressSteps.length > modelData
+                                    text: progressSteps.length > modelData ?
+                                          (guidedStep.operationIndices.length > 1 ?
+                                           (modelData === 1 ? view.t("Cache browser", "Browser cache") : view.t("File temporanei", "Temp files")) + ": " : "") +
+                                          (progressSteps[modelData].message || "") : ""
+                                    color: "#f1f3f8"
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WordWrap
+                                }
                             }
                         }
                     }

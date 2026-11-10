@@ -228,6 +228,46 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         data = self.probe(976, 672, 2, "many-drives")
         self.assertLessEqual(data["drive_popup_height"], 8 * 24 + 8)
 
+    def test_quick_cleanup_explains_action_and_live_step_in_both_languages(self):
+        for language, heading, step in (
+            ("it", "Pulizia rapida in esecuzione", "File temporanei (1 di 3)"),
+            ("en", "Quick cleanup in progress", "Temporary files (1 of 3)"),
+        ):
+            with self.subTest(language=language):
+                data = self.probe(976, 672, 1, "noisy-cleanup", language)
+                self.assertEqual(data["cleanup_status"]["heading"], heading)
+                self.assertIn(step, data["cleanup_status"]["step"])
+
+        step_two = self.probe(976, 672, 1, "cleanup-step-two", "it")
+        self.assertIn("Cestino (2 di 3)", step_two["cleanup_status"]["step"])
+
+    def test_quick_cleanup_uses_specific_result_copy_instead_of_raw_codes(self):
+        state = self.probe(976, 672, 1, "cleanup-partial", "it")
+        self.assertIn("parziale", state["cleanup_status"]["heading"].lower())
+        self.assertNotEqual(state["cleanup_status"]["heading"], "partial")
+
+    def test_log_console_looks_like_cmd_and_summarizes_only_repeated_counters(self):
+        log = self.probe(976, 672, 1, "noisy-cleanup", "it")["console"]
+        self.assertTrue(log["expanded"])
+        self.assertEqual(log["background"], "#050505")
+        self.assertEqual(log["font"], "Consolas")
+        self.assertGreaterEqual(log["font_size"], 12)
+        self.assertIn("File eliminati finora: 150", log["text"])
+        self.assertIn("File eliminati finora: 250", log["text"])
+        self.assertEqual(log["text"].count("File eliminati finora:"), 2)
+        self.assertIn("Access denied: protected item", log["text"])
+        self.assertIn("Scanning C:\\Windows\\Temp...", log["text"])
+        self.assertNotIn("Deleted 50 files...", log["text"])
+        self.assertNotIn("panacea-clean.exe", log["text"])
+
+    def test_full_log_restores_original_updates_and_errors_without_mutation(self):
+        log = self.probe(976, 672, 1, "full-cleanup-log", "it")["console"]
+        self.assertTrue(log["show_full"])
+        self.assertIn("Deleted 50 files...", log["text"])
+        self.assertIn("Deleted 100 files...", log["text"])
+        self.assertIn("Access denied: protected item", log["text"])
+        self.assertNotIn("File eliminati finora:", log["text"])
+
     def test_operation_start_reveals_its_output_like_the_legacy_controller(self):
         log = self.probe(976, 672, 2, "operation-running")["tools_log"]
         self.assertTrue(log["expanded"])

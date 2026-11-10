@@ -161,6 +161,17 @@ def launch_visible_legacy(target: Path, *, popen=None, visible=None,
         raise
 
 
+def verified_upgrade_ready(target, result, digest, size, *, protected):
+    """Use the actual updater readiness contract, not backup deletion as a proxy.
+
+    An acknowledged new Qt image is ready even while the still-running old
+    Windows image holds a mapped file handle to its recovery backup.
+    """
+    if protected:
+        return update_install._operation_ready(target, result, digest, size)
+    return not result.backup.exists() and not update_install.readiness_path(target).exists()
+
+
 def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: str,
                            *, protected=False) -> dict:
     """Use actual v2.0.2 and V2 PE images; verify fail/rollback and real new boot ack."""
@@ -226,20 +237,44 @@ def real_image_replacement(root: Path, candidate: Path, legacy: Path, expected: 
         deadline = time.monotonic() + 55
         acknowledged = False
         while time.monotonic() < deadline:
-            if not installed.backup.exists() and not update_install.readiness_path(target).exists():
+            if verified_upgrade_ready(target, installed, expected,
+                                      candidate.stat().st_size, protected=protected):
                 acknowledged = True
                 break
             if started.poll() is not None:
                 break
             time.sleep(0.4)
-        assert acknowledged, "New packaged image did not acknowledge its startup before timeout."
+        if not acknowledged:
+            marker = update_install.readiness_path(target)
+            marker_ready = None
+            if marker.is_file():
+                try:
+                    marker_ready = json.loads(marker.read_text(encoding="utf-8")).get("ready")
+                except (OSError, ValueError):
+                    marker_ready = "unreadable"
+            raise RuntimeError("Qt startup readiness was not verified: "
+                               f"marker_ready={marker_ready!r}, backup_exists={installed.backup.exists()}, "
+                               f"new_process_exit={started.poll() if started else None}, "
+                               f"old_process_exit={running_old.poll() if running_old else None}")
         assert digest(target) == expected
         assert installed.readiness_token
+        if protected:
+            # The actual production UI quits the old app after verified Qt
+            # readiness. Emulate that only on this disposable runner and prove
+            # the protected recovery backup can then be safely finalized.
+            _kill_only_child(running_old)
+            running_old = None
+            if not update_install.finalize_ready(
+                    target, token=installed.readiness_token, protected=True):
+                raise RuntimeError("Protected old-image backup could not finalize after old GUI exit.")
+            if installed.backup.exists() or update_install.readiness_path(target).exists():
+                raise RuntimeError("Verified update left a backup or readiness marker after old GUI exit.")
         return {"path_mode": "protected" if protected else "portable-fixture",
                 "legacy_sha256": old_sha, "candidate_sha256": expected,
                 "invalid_digest_blocked": True, "launch_failure_rolled_back": True,
                 "real_qt_image_started": True, "readiness_acknowledged": True,
-                "old_v202_still_running_during_replacement": running_old is not None if protected else None}
+                "old_v202_running_during_replacement": protected,
+                "backup_finalized_after_old_exit": protected if protected else None}
     finally:
         _kill_only_child(started)
         _kill_only_child(running_old)

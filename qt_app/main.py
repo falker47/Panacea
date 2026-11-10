@@ -41,8 +41,8 @@ _qa_trace("Qt imports complete")
 
 _ACTION_SCOPES = {
     **dict.fromkeys(("temp_clean", "browser_clean", "recycle_empty", "component_cleanup", "quick_cleanup", "open_cleanmgr"), "cleaning"),
-    **dict.fromkeys(("sfc", "dism_check", "dism_restore", "dns_flush", "winsock_reset", "restore_point", "battery_report"), "tools"),
-    **dict.fromkeys(("drive_optimize", "chkdsk", "open_defrag"), "disk"),
+    **dict.fromkeys(("sfc", "dism_check", "dism_restore", "dns_flush", "winsock_reset", "restore_point"), "tools"),
+    **dict.fromkeys(("drive_optimize", "chkdsk", "open_defrag", "battery_report"), "disk"),
     "resurrection": "resurrect",
 }
 

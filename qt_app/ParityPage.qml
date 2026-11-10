@@ -1192,8 +1192,6 @@ Item {
                             PRow { collapseWidth:225; buttonWidth:91; heading:view.t("Ripristina Winsock","Reset Winsock"); hint:view.t("Può interrompere le connessioni e richiedere un riavvio.","May interrupt connections and require a restart."); action:"winsock_reset"; buttonText:view.t("Ripristina","Reset"); interactive:!view.occupied; onInvoke:view.request(action,drive) }
                         }
                     }
-                    PShortcut { caption: view.t("Crea punto di ripristino", "Create restore point"); iconName: "restore"; interactive: !view.occupied; onTriggered: view.request("restore_point") }
-                    PShortcut { caption: view.t("Rapporto batteria", "Battery report"); iconName: "battery-report"; interactive: !view.occupied; onTriggered: view.request("battery_report") }
                     PSectionLog { scope: "tools"; caption: view.t("Output comandi", "Command output") }
                 }
                 PPanel {
@@ -1345,6 +1343,7 @@ Item {
                             onTriggered:view.request("open_defrag")
                         }
                     }
+                    PShortcut { caption: view.t("Rapporto batteria", "Battery report"); iconName: "battery-report"; interactive: !view.occupied; onTriggered: view.request("battery_report") }
                     PButton {
                         caption: view.showExtraDriveTools ?
                                  view.t("Nascondi strumenti aggiuntivi", "Hide extra tools") :

@@ -13,12 +13,24 @@ class V2GroupedControls(unittest.TestCase):
         self.assertIn("component PShortcut: Rectangle", page)
         self.assertIn("Keys.onReturnPressed: activate()", page)
         self.assertIn("Keys.onSpacePressed: activate()", page)
-        for key in ("apps_settings", "appwiz", "startup_settings",
-                    "restore_point", "battery_report"):
+        for key in ("apps_settings", "appwiz", "startup_settings", "battery_report"):
             self.assertIn('onTriggered: view.request("' + key + '")', page)
+        self.assertIn('onPressed: view.request("restore_point")', page)
         self.assertIn("property bool showIndividualCleaning: false", page)
         self.assertIn("component PSectionLog: Rectangle", page)
         self.assertIn("sectionLog.expanded = !sectionLog.expanded", page)
+
+    def test_battery_report_is_in_disk_panel_with_its_log_and_restore_is_not_duplicated(self):
+        page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")
+        app = (ROOT / "qt_app/main.py").read_text(encoding="utf-8")
+        tools = page.split('viewName: "tools"', 1)[1].split('viewName: "disk"', 1)[0]
+        disk = page.split('viewName: "disk"', 1)[1].split('id: turboAndStartupSection', 1)[0]
+        self.assertNotIn('view.request("restore_point")', tools)
+        self.assertNotIn('view.request("battery_report")', tools)
+        self.assertIn('onTriggered: view.request("battery_report")', disk)
+        self.assertIn('PSectionLog { scope: "disk"', disk)
+        self.assertIn('onPressed: view.request("restore_point")', page)
+        self.assertIn('"drive_optimize", "chkdsk", "open_defrag", "battery_report"', app)
 
     def test_turbo_and_disk_keep_original_compact_focus(self):
         page = (ROOT / "qt_app/ParityPage.qml").read_text(encoding="utf-8")

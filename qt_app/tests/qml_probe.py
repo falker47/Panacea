@@ -125,14 +125,16 @@ def main():
                                       "truncated": bool(system_title.property("truncated")),
                                       "width": round(system_title.width(), 2),
                                       "implicit_width": round(system_title.implicitWidth(), 2)}
-            update_title = text_item("Windows Update")
+            update_labels = [next(i for i in visible if i.objectName() == name)
+                             for name in ("updateHeaderTitle", "updateStatusCaption")]
             result["update_caption_lines"] = [
                 {"text": item.property("text"), "lines": int(item.property("lineCount")),
                  "truncated": bool(item.property("truncated")),
                  "visible_width": round(item.width(), 2), "implicit_width": round(item.implicitWidth(), 2)}
-                for item in update_title.parentItem().childItems()
-                if item.isVisible() and isinstance(item.property("text"), str)
+                for item in update_labels
             ]
+            badge = next(i for i in visible if i.objectName() == "updateStateBadge")
+            result["update_badge"] = {"rect": box(badge), "color": badge.property("color").name()}
             action_titles = (("File temporanei", "Punto di ripristino") if window.property("language") == "it"
                              else ("Temporary files", "Restore point"))
             result["dashboard_action_titles"] = [

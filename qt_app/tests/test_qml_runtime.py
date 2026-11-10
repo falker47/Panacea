@@ -65,6 +65,17 @@ class DashboardRuntimeGeometry(unittest.TestCase):
                     self.assertFalse(title["truncated"], title)
                     self.assertGreaterEqual(title["visible_width"] + 1, title["implicit_width"], title)
 
+    def test_windows_update_badge_remains_legible_on_scaled_compact_views(self):
+        for width, height, scale in ((976, 672, 1), (781, 538, 1.25), (760, 480, 1.5)):
+            for language in ("it", "en"):
+                with self.subTest(width=width, language=language, scale=scale):
+                    data = self.probe(width, height, language=language, scale=scale)
+                    badge = data["update_badge"]
+                    status = data["update_caption_lines"][1]
+                    self.assertGreater(badge["rect"][2], 55)
+                    self.assertFalse(status["truncated"], status)
+                    self.assertGreaterEqual(status["visible_width"] + 1, status["implicit_width"], status)
+
     def test_compact_dashboard_action_titles_keep_readable_width(self):
         for width, height, scale in ((781, 538, 1.25), (760, 480, 1.5)):
             for language in ("it", "en"):

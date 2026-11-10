@@ -94,8 +94,8 @@ Window {
                         sourceSize.width: 148
                         sourceSize.height: 148
                         fillMode: Image.PreserveAspectFit
-                        Layout.preferredWidth: 74
-                        Layout.preferredHeight: 74
+                        Layout.preferredWidth: shell.height < 620 ? 74 : 82
+                        Layout.preferredHeight: shell.height < 620 ? 74 : 82
                         Accessible.role: Accessible.Graphic
                         Accessible.name: "Panacea"
                     }
@@ -105,14 +105,14 @@ Window {
                         Text {
                             text: "Panacea"
                             font.family: "Segoe UI"
-                            font.pixelSize: 32
+                            font.pixelSize: shell.height < 620 ? 32 : 35
                             font.bold: true
                             color: "#f1f3f8"
                         }
                         Text {
                             text: "SYSTEM MAINTENANCE"
                             font.family: "Segoe UI Semibold"
-                            font.pixelSize: 11
+                            font.pixelSize: shell.height < 620 ? 11 : 12
                             font.bold: true
                             color: "#e4c579"
                         }

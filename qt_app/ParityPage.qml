@@ -851,8 +851,13 @@ Item {
                     id: windowsUpdateCard
                     objectName: "windowsUpdateCard"
                     width: summaryFlow.paired ? (summaryFlow.width - 8) / 2 : summaryFlow.width
-                    height: summaryFlow.cardHeight; radius: 8; color: "#1b2b44"; border.width: 0
+                    height: summaryFlow.cardHeight; radius: 8; color: "#1b2b44"
+                    border.width: 1
+                    border.color: hasRecommendedUpdates ? "#765f33" : "#2e415c"
                     readonly property bool compact: width < 260
+                    readonly property bool hasRecommendedUpdates: !!(view.snapshots.windows_updates &&
+                        view.snapshots.windows_updates.verified &&
+                        (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0))
                     GridLayout {
                         anchors.fill: parent; anchors.margins: 12
                         columns: 3
@@ -872,6 +877,7 @@ Item {
                             smooth: true
                         }
                         Text {
+                            objectName: "updateHeaderTitle"
                             text: "Windows Update"
                             Layout.row: 0
                             Layout.column: 1
@@ -883,18 +889,32 @@ Item {
                             color: "#f1f3f8"; font.bold: true
                             font.pixelSize: windowsUpdateCard.compact ? 14 : 16
                         }
-                        Text {
-                            text: view.updateCaption()
+                        Rectangle {
+                            id: updateStateBadge
+                            objectName: "updateStateBadge"
                             Layout.row: 1
                             Layout.column: windowsUpdateCard.compact ? 0 : 1
                             Layout.columnSpan: windowsUpdateCard.compact ? 2 : 1
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            wrapMode: Text.NoWrap
-                            elide: Text.ElideRight
-                            color: view.snapshots.windows_updates && view.snapshots.windows_updates.verified ?
-                                   (view.snapshots.windows_updates.recommended + view.snapshots.windows_updates.optional > 0 ? "#e4b66d" : "#78c8a8") : "#9eafc8"
-                            font.pixelSize: windowsUpdateCard.compact ? 11 : 12
+                            Layout.preferredHeight: 25
+                            radius: 5
+                            color: windowsUpdateCard.hasRecommendedUpdates ? "#3d3429" :
+                                   view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#1d3a39" : "#263a56"
+                            Text {
+                                objectName: "updateStatusCaption"
+                                anchors.fill: parent
+                                anchors.leftMargin: windowsUpdateCard.compact ? 5 : 8
+                                anchors.rightMargin: windowsUpdateCard.compact ? 5 : 8
+                                verticalAlignment: Text.AlignVCenter
+                                text: view.updateCaption()
+                                textFormat: Text.PlainText
+                                wrapMode: Text.NoWrap
+                                elide: Text.ElideRight
+                                color: windowsUpdateCard.hasRecommendedUpdates ? "#e4c579" :
+                                       view.snapshots.windows_updates && view.snapshots.windows_updates.verified ? "#78c8a8" : "#9eafc8"
+                                font.pixelSize: windowsUpdateCard.compact ? 11 : 12
+                            }
                         }
                         PButton {
                             caption: view.t("Apri", "View")

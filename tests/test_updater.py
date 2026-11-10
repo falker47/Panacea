@@ -270,6 +270,21 @@ def test_installed_v2_offers_published_v202(installed):
     assert updater.UpdateClient(REPO, "2.0.2", opener=fake_opener(candidate)).check() is None
 
 
+def test_installed_v202_discovers_v210_and_downloads_only_checked_release(tmp_path):
+    candidate = manifest()
+    candidate["tag_name"] = "v2.1.0"
+    candidate["html_url"] = f"https://github.com/{REPO}/releases/tag/v2.1.0"
+    for asset in candidate["assets"]:
+        asset["browser_download_url"] = asset["browser_download_url"].replace(TAG, "v2.1.0")
+    client = updater.UpdateClient(REPO, "2.0.2", opener=fake_opener(candidate))
+    offered = client.check()
+    assert offered.version == "2.1.0"
+    assert offered.exe_url.endswith("/v2.1.0/Panacea.exe")
+    assert offered.sha256_url.endswith("/v2.1.0/Panacea.exe.sha256")
+    assert client.download(offered, tmp_path).read_bytes() == pe_bytes()
+    assert updater.UpdateClient(REPO, "2.1.0", opener=fake_opener(candidate)).check() is None
+
+
 def test_real_repo_alias_accepts_canonical_github_release_and_verified_download(tmp_path):
     # Published GitHub URLs retain "Panacea" even when the local configuration
     # uses "panacea". Only the repository spelling may differ in case.

@@ -881,12 +881,20 @@ Item {
                 columns: 3
                 readonly property real cardMinimumHeight: (viewport.height < 520 ? 196 : 183) + Math.round(view.dashboardStretch * .41)
                 Repeater {
-                    model: [
-                        { id: "cpu", icon: "cpu", title: "CPU", value: liveMetrics.cpu, series: liveMetrics.cpuHistory, accent: "#76b6e2", detail: view.hardware.cpu_name || "—" },
-                        { id: "ram", icon: "memory", title: view.t("Memoria (RAM)", "Memory (RAM)"), value: liveMetrics.ram, series: liveMetrics.ramHistory, accent: "#e4c579", detail: view.ramCapacityText(), extra: view.hardware.ram_info || "" },
-                        { id: "disk", icon: "drive", title: view.t("Unità di sistema", "System drive"), value: liveMetrics.disk, series: liveMetrics.diskHistory, accent: view.diskAccent(), detail: view.diskCapacityText(), extra: view.hardware.disk_model || "" }
-                    ]
+                    // Stable model: keep the Canvas and progress bar delegates alive on metric refresh.
+                    model: ["cpu", "ram", "disk"]
                     Rectangle {
+                        id: metricCard
+                        objectName: "metricCard_" + metricId
+                        readonly property string metricId: modelData
+                        readonly property string metricIcon: metricId === "ram" ? "memory" : metricId === "disk" ? "drive" : "cpu"
+                        readonly property string metricTitle: metricId === "ram" ? view.t("Memoria (RAM)", "Memory (RAM)")
+                                                          : metricId === "disk" ? view.t("Unità di sistema", "System drive") : "CPU"
+                        readonly property string metricValue: metricId === "ram" ? liveMetrics.ram : metricId === "disk" ? liveMetrics.disk : liveMetrics.cpu
+                        readonly property var metricSeries: metricId === "ram" ? liveMetrics.ramHistory : metricId === "disk" ? liveMetrics.diskHistory : liveMetrics.cpuHistory
+                        readonly property color metricAccent: metricId === "ram" ? "#e4c579" : metricId === "disk" ? view.diskAccent() : "#76b6e2"
+                        readonly property string metricDetail: metricId === "ram" ? view.ramCapacityText() : metricId === "disk" ? view.diskCapacityText() : (view.hardware.cpu_name || "—")
+                        readonly property string metricExtra: metricId === "ram" ? (view.hardware.ram_info || "") : metricId === "disk" ? (view.hardware.disk_model || "") : ""
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumWidth: 0
@@ -900,7 +908,7 @@ Item {
                                 width: parent.width
                                 spacing: 6
                                 Image {
-                                    source: "image://panacea-nav/" + modelData.icon + "/detail"
+                                    source: "image://panacea-nav/" + metricCard.metricIcon + "/detail"
                                     sourceSize.width: 96
                                     sourceSize.height: 96
                                     width: 22; height: 22
@@ -908,45 +916,45 @@ Item {
                                     smooth: true
                                 }
                                 Text {
-                                    text: modelData.title
+                                    text: metricCard.metricTitle
                                     width: parent.width - 28
                                     wrapMode: Text.WordWrap
                                     color: "#f1f3f8"; font.bold: true; font.pixelSize: 13
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-                            Text { text: /%$/.test(modelData.value) ? modelData.value : "—"; color: modelData.id === "disk" ? view.diskAccent() : modelData.id === "ram" && parseFloat(modelData.value) >= 90 ? "#e4b66d" : "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
+                            Text { text: /%$/.test(metricCard.metricValue) ? metricCard.metricValue : "—"; color: metricCard.metricId === "disk" ? view.diskAccent() : metricCard.metricId === "ram" && parseFloat(metricCard.metricValue) >= 90 ? "#e4b66d" : "#f1f3f8"; font.bold: true; font.pixelSize: 25 }
                             PMiniGraph {
-                                objectName: "metric_graph_" + modelData.id
-                                visible: modelData.id !== "disk"
+                                objectName: "metric_graph_" + metricCard.metricId
+                                visible: metricCard.metricId !== "disk"
                                 width: parent.width
                                 height: visible ? 50 / pixelRatio : 0
-                                points: modelData.series
-                                lineColor: modelData.accent
-                                goldFill: modelData.id === "ram"
+                                points: metricCard.metricSeries
+                                lineColor: metricCard.metricAccent
+                                goldFill: metricCard.metricId === "ram"
                             }
                             PProgress {
-                                visible: modelData.id === "disk"
+                                visible: metricCard.metricId === "disk"
                                 width: parent.width
                                 height: visible ? 12 : 0
                                 progressColor: view.diskAccent()
-                                fraction: modelData.id === "disk" ?
-                                          Math.max(0, Math.min(1, (parseFloat(modelData.value) || 0) / 100)) : 0
+                                fraction: metricCard.metricId === "disk" ?
+                                          Math.max(0, Math.min(1, (parseFloat(metricCard.metricValue) || 0) / 100)) : 0
                             }
                             Text {
-                                text: modelData.detail
+                                text: metricCard.metricDetail
                                 textFormat: Text.PlainText
                                 width: parent.width; color: "#9eafc8"; font.pixelSize: 12
                                 wrapMode: Text.WordWrap
                             }
                             Text {
-                                visible: modelData.id === "disk"
+                                visible: metricCard.metricId === "disk"
                                 text: visible ? view.diskStateText() : ""
                                 width: parent.width; color: view.diskAccent(); font.pixelSize: 11
                                 wrapMode: Text.WordWrap
                             }
                             Text {
-                                text: modelData.extra || ""
+                                text: metricCard.metricExtra || ""
                                 textFormat: Text.PlainText
                                 width: parent.width
                                 color: "#9eafc8"

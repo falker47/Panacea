@@ -50,6 +50,12 @@ class QtProductionReleaseContracts(unittest.TestCase):
         self.assertIn("PANACEA_ALLOW_HOSTED_PROBE", workflow)
         self.assertIn("hosted_installer_probe.py", workflow)
 
+    def test_native_qt_window_probe_must_not_force_hidden_startup(self):
+        harness = (ROOT / "scripts/packaged_probe.py").read_text(encoding="utf-8")
+        self.assertNotIn("STARTF_USESHOWWINDOW", harness)
+        self.assertIn("subprocess.Popen([str(executable), '--smoke-test'])", harness)
+        self.assertIn("usable_candidate_window(executable)", harness)
+
     def test_release_notes_and_manual_draft_workflow_exist(self):
         notes = ROOT / "docs/releases/2.1.0.md"
         self.assertTrue(notes.is_file())

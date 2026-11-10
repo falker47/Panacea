@@ -20,6 +20,10 @@ class V2ActivityLogParity(unittest.TestCase):
         self.assertIn('objectName: "consoleSurface_" + sectionLog.scope', qml)
         self.assertIn('color: "#050505"', qml)
         self.assertIn('objectName: "consoleFullToggle_" + sectionLog.scope', qml)
+        # TextEdit (unlike Text) has no lineHeight / lineHeightMode properties.
+        log = qml.split("component PSectionLog:", 1)[1].split("component PRow:", 1)[0]
+        self.assertNotIn("lineHeight:", log)
+        self.assertNotIn("lineHeightMode:", log)
         self.assertNotIn("property bool logExpanded:", qml)
 
 

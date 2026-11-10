@@ -482,8 +482,6 @@ Item {
                         selectionColor: "#324b78"
                         font.family: "Consolas"
                         font.pixelSize: 12
-                        lineHeight: 1.18
-                        lineHeightMode: TextEdit.ProportionalHeight
                     }
                 }
             }

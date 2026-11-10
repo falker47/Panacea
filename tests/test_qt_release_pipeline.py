@@ -56,6 +56,27 @@ class QtProductionReleaseContracts(unittest.TestCase):
         self.assertIn("subprocess.Popen([str(executable), '--smoke-test'])", harness)
         self.assertIn("usable_candidate_window(executable)", harness)
 
+    def test_approved_release_publishes_only_on_exact_successful_main_ci(self):
+        workflow = (ROOT / ".github/workflows/publish-approved-v210.yml")
+        self.assertTrue(workflow.is_file())
+        publisher = workflow.read_text(encoding="utf-8")
+        self.assertIn('workflows: ["CI"]', publisher)
+        self.assertIn("branches: [main]", publisher)
+        self.assertIn("github.event.workflow_run.event == 'push'", publisher)
+        self.assertIn("github.event.workflow_run.head_sha", publisher)
+        self.assertIn("CI_RUN_ID", publisher)
+        self.assertIn("gh api", publisher)
+        self.assertIn("Disposable Windows image/cleanup integration", publisher)
+        self.assertIn("Protected installer / update / uninstall", publisher)
+        self.assertIn("Panacea-Windows-candidate", publisher)
+        self.assertIn("sha256sum --check", publisher)
+        self.assertIn("Panacea.exe", publisher)
+        self.assertIn("PanaceaSetup.exe", publisher)
+        self.assertIn("v2.1.0", publisher)
+        self.assertIn("--latest", publisher)
+        self.assertIn("gh release download", publisher)
+        self.assertIn("docs/releases/2.1.0.md", publisher)
+
     def test_release_notes_and_manual_draft_workflow_exist(self):
         notes = ROOT / "docs/releases/2.1.0.md"
         self.assertTrue(notes.is_file())

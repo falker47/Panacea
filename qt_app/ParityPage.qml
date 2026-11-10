@@ -536,6 +536,48 @@ Item {
         }
     }
 
+    component PTurboOptions: Rectangle {
+        id: turboOptionPanel
+        property var entries: []
+        readonly property int optionCount: entries.length
+        width: parent.width
+        height: turboOptionRows.implicitHeight
+        radius: 8; color: "#142138"; border.color: "#2e415c"
+        Column {
+            id: turboOptionRows
+            width: parent.width
+            Repeater {
+                model: turboOptionPanel.entries
+                Rectangle {
+                    width: parent.width
+                    height: Math.max(width < 390 ? 110 : 52, turboRow.implicitHeight + 16)
+                    color: "transparent"
+                    GridLayout {
+                        id: turboRow
+                        anchors.fill: parent; anchors.margins: 8
+                        columns: parent.width < 390 ? 1 : 2
+                        rowSpacing: 6; columnSpacing: 10
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 3
+                            Text { text: modelData.name; color: "#f1f3f8"; font.pixelSize: 13; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                            Text { text: modelData.hint; color: "#9eafc8"; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            PToggle {
+                                caption: modelData.name
+                                checked: !!view.turbo.states && view.turbo.states[modelData.key] === true
+                                interactive: !view.occupied && !!view.turbo.states && typeof view.turbo.states[modelData.key] === "boolean"
+                                onChanged: view.request(nextValue ? modelData.on : modelData.off)
+                            }
+                            Text { text: view.stateCaption(view.turbo.states ? view.turbo.states[modelData.key] : null); font.pixelSize: 11; color: "#9eafc8" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     component PProgress: Rectangle {
         id: progress
         property real fraction: 0
@@ -1429,48 +1471,12 @@ Item {
                             }
                         }
                     }
-                    Rectangle {
-                        width: parent.width; height: turboOptions.implicitHeight
-                        radius: 8; color: "#142138"; border.color: "#2e415c"
-                        Column {
-                            id: turboOptions
-                            width: parent.width
-                    Repeater {
-                        model:[
+                    PTurboOptions {
+                        objectName: "primaryTurboOptions"
+                        entries: [
                             {key:"power", name:view.t("Prestazioni elevate","High performance"), hint:view.t("Aumenta consumi, calore e uso della batteria.","More power use, heat and battery drain."), on:"power_on", off:"power_off"},
-                            {key:"visual",name:view.t("Effetti visivi","Visual effects preset"), hint:view.t("Regola le animazioni di Windows.","Adjust Windows animations."),on:"visual_on",off:"visual_off"},
-                            {key:"sysmain",name:view.t("Sospendi SysMain","Pause SysMain"),hint:view.t("Ferma il precaricamento delle app.","Stops app preloading."),on:"sysmain_on",off:"sysmain_off"},
-                            {key:"wsearch",name:view.t("Sospendi Windows Search","Pause Windows Search"),hint:view.t("Ferma l’indicizzazione in background.","Stops background indexing."),on:"wsearch_on",off:"wsearch_off"},
-                            {key:"spooler",name:view.t("Sospendi spooler di stampa","Pause Print Spooler"),hint:view.t("La stampa non è disponibile durante la sospensione.","Printing is unavailable while active."),on:"spooler_on",off:"spooler_off"}
+                            {key:"visual",name:view.t("Effetti visivi","Visual effects preset"), hint:view.t("Regola le animazioni di Windows.","Adjust Windows animations."),on:"visual_on",off:"visual_off"}
                         ]
-                        Rectangle {
-                            width: parent.width
-                            height: Math.max(width < 390 ? 110 : 52, turboRow.implicitHeight + 16)
-                            color: "transparent"
-                            GridLayout {
-                                id: turboRow
-                                anchors.fill:parent; anchors.margins:8
-                                columns: parent.width < 390 ? 1 : 2
-                                rowSpacing: 6; columnSpacing: 10
-                                ColumnLayout {
-                                    Layout.fillWidth:true; Layout.minimumWidth:0; spacing:3
-                                    Text { text:modelData.name; color:"#f1f3f8"; font.pixelSize:13; font.bold:true; Layout.fillWidth:true; wrapMode:Text.WordWrap }
-                                    Text { text:modelData.hint; color:"#9eafc8"; font.pixelSize:11; Layout.fillWidth:true; wrapMode:Text.WordWrap }
-                                }
-                                RowLayout {
-                                    spacing: 8
-                                PToggle {
-                                    caption:modelData.name
-                                    checked: !!view.turbo.states && view.turbo.states[modelData.key] === true
-                                    interactive: !view.occupied && !!view.turbo.states && typeof view.turbo.states[modelData.key] === "boolean"
-                                    onChanged: view.request(nextValue ? modelData.on : modelData.off)
-                                }
-                                Text { text:view.stateCaption(view.turbo.states ? view.turbo.states[modelData.key] : null); font.pixelSize:11; color:"#9eafc8" }
-                                }
-                            }
-                        }
-                    }
-                        }
                     }
                     Text {
                         visible: !view.turbo.states
@@ -1501,6 +1507,14 @@ Item {
                             width: parent.width - 28
                             PShortcut { caption: view.t("Impostazioni di avvio", "Startup settings"); iconName: "turbo"; interactive: !view.occupied; onTriggered: view.request("startup_settings") }
                         }
+                    }
+                    PTurboOptions {
+                        objectName: "secondaryTurboOptions"
+                        entries: [
+                            {key:"sysmain",name:view.t("Sospendi SysMain","Pause SysMain"),hint:view.t("Ferma il precaricamento delle app.","Stops app preloading."),on:"sysmain_on",off:"sysmain_off"},
+                            {key:"wsearch",name:view.t("Sospendi Windows Search","Pause Windows Search"),hint:view.t("Ferma l’indicizzazione in background.","Stops background indexing."),on:"wsearch_on",off:"wsearch_off"},
+                            {key:"spooler",name:view.t("Sospendi spooler di stampa","Pause Print Spooler"),hint:view.t("La stampa non è disponibile durante la sospensione.","Printing is unavailable while active."),on:"spooler_on",off:"spooler_off"}
+                        ]
                     }
                 }
             }

@@ -172,6 +172,13 @@ def main():
                 page = next(i for i in visible if i.objectName() == "parityPage_2")
                 result["selected_drive"] = page.property("selectedDrive")
                 result["drive_error_visible"] = any(i.property("text") == "Drive information unavailable: Fixture query failed" for i in visible)
+        if tab == 3:
+            primary_options = next(i for i in visible if i.objectName() == "primaryTurboOptions")
+            secondary_options = next(i for i in visible if i.objectName() == "secondaryTurboOptions")
+            result["turbo_distribution"] = {
+                "primary": {"rect": box(primary_options), "count": primary_options.property("optionCount")},
+                "secondary": {"rect": box(secondary_options), "count": secondary_options.property("optionCount")}
+            }
         if tab == 3 and window.property("language") == "en":
             toggle = next(i for i in visible if i.property("caption") == "High performance")
             result["turbo_layout"] = {"title": box(text_item("High performance")), "toggle": box(toggle)}

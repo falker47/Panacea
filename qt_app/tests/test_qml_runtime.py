@@ -112,6 +112,14 @@ class DashboardRuntimeGeometry(unittest.TestCase):
         data = self.probe(760, 480, 0, "confirmation")
         self.assertTrue(data["confirmation_scrollable"] or data["confirmation_readable_height"])
 
+    def test_turbo_options_are_balanced_across_the_two_panels(self):
+        wide = self.probe(1020, 680, 3)["turbo_distribution"]
+        self.assertEqual((wide["primary"]["count"], wide["secondary"]["count"]), (2, 3))
+        self.assertLess(wide["primary"]["rect"][0], wide["secondary"]["rect"][0])
+        narrow = self.probe(760, 672, 3)["turbo_distribution"]
+        self.assertEqual(narrow["primary"]["count"] + narrow["secondary"]["count"], 5)
+        self.assertLess(narrow["primary"]["rect"][1], narrow["secondary"]["rect"][1])
+
     def test_narrow_turbo_toggle_sits_below_the_description(self):
         row = self.probe(760, 672, 3)["turbo_layout"]
         self.assertGreater(row["toggle"][1], row["title"][1] + row["title"][3])

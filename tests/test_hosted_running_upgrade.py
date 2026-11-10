@@ -42,3 +42,32 @@ def test_live_upgrade_probe_does_not_leave_process_running_on_timeout(tmp_path, 
                                     monotonic=lambda: 31,
                                     sleep=lambda _: None, timeout=0)
     assert stopped == [process]
+
+
+def test_durable_ready_marker_counts_as_success_while_old_executable_is_locked(tmp_path, monkeypatch):
+    # The old running Windows image can keep its backup locked even after
+    # the new Qt application has durably acknowledged the update.
+    from types import SimpleNamespace
+    from modules import update_install
+    target = tmp_path / "Panacea.exe"
+    backup = tmp_path / "old-backup.exe"
+    backup.write_bytes(b"old-image-mapped")
+    result = SimpleNamespace(backup=backup, readiness_token="a" * 64)
+    calls = []
+    monkeypatch.setattr(update_install, "_operation_ready",
+                        lambda target, result, digest, size: calls.append((target, result, digest, size)) or True)
+    assert probe.verified_upgrade_ready(target, result, "b" * 64, 200, protected=True)
+    assert backup.exists()
+    assert calls == [(target, result, "b" * 64, 200)]
+
+
+def test_portable_upgrade_probe_still_requires_finalized_backup_and_marker(tmp_path):
+    from types import SimpleNamespace
+    from modules import update_install
+    target = tmp_path / "Panacea.exe"
+    backup = tmp_path / "Panacea.exe.old"
+    backup.write_bytes(b"keep")
+    result = SimpleNamespace(backup=backup)
+    assert not probe.verified_upgrade_ready(target, result, "c" * 64, 200, protected=False)
+    backup.unlink()
+    assert probe.verified_upgrade_ready(target, result, "c" * 64, 200, protected=False)

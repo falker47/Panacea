@@ -31,12 +31,14 @@ not previously installed programs.
    install/upgrade, verification failures, and rollback. Verify required
    checks on the exact commit SHA. The synthetic future-version unit test
    only covers version/URL/checksum handling, NOT a real unpublished upgrade.
-3. Before declaring the next rollout complete, use a disposable Windows VM
-   with the previous official stable installed. Drive a real in-app upgrade
-   from its GUI using LIVE public GitHub metadata and the newly published
-   assets. Verify consent, exact installed SHA-256, readiness, restart,
-   no repeat offer, original AppId, and tested failure/rollback paths.
-   Preserve logs and screenshots. The historical v2.0.2 -> v2.1.0 example:
+3. Before declaring the next rollout complete, use disposable Windows VMs
+   with BOTH (a) the oldest still-supported in-app updater (currently the
+   published installed v2.0.2) and (b) the immediately previous stable
+   installed. Drive actual in-app upgrades from those GUIs using LIVE public
+   GitHub metadata and the newly published release assets. Verify consent,
+   exact installed SHA-256, readiness, restart, no repeated offer, original
+   AppId, and tested failure/rollback paths. Preserve logs and screenshots.
+   The historical v2.0.2 -> v2.1.0 example:
    https://github.com/falker47/Panacea/pull/9
 4. Check published releases/latest and both ZEROfilez download links after
    publication, including asset bytes against corresponding checksum files.

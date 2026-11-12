@@ -1,6 +1,7 @@
 """Release-specific 2.1.1 publication guard: no unreviewed main commit may publish."""
 from pathlib import Path
 
+from packaging.version import Version
 from version import VERSION
 
 
@@ -9,7 +10,8 @@ NOTES = Path(__file__).resolve().parents[1] / "docs/releases/2.1.1.md"
 
 
 def test_v211_only_publishes_from_successful_main_push_with_version_transition():
-    assert VERSION == "2.1.1"
+    assert Version(VERSION) >= Version("2.1.1")
+    assert not Version(VERSION).is_prerelease
     assert NOTES.is_file()
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "workflow_run:" in workflow

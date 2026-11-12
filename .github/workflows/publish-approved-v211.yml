@@ -1,0 +1,144 @@
+name: Publish approved Panacea v2.1.1
+
+# Only a trusted main push whose exact CI run passes ALL three Windows jobs
+# can promote the already-verified official Qt binary, installer and checksums.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-v2-1-1:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: panacea-approved-v2-1-1-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      CI_RUN_ID: ${{ github.event.workflow_run.id }}
+      RELEASE_TAG: v2.1.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require current main, exact version and all native Windows CI gates
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GH_REPO/branches/main" --jq .commit.sha)" = "$SOURCE_SHA"
+          if test "$(python -c 'from version import VERSION; print(VERSION)')" != "2.1.1"; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -s docs/releases/2.1.1.md
+          # Only the reviewed main merge that first bumps 2.1.0 -> 2.1.1
+          # can publish this one release. Later main commits remain harmless.
+          previous_version="$(git show "$SOURCE_SHA^:version.py" | sed -n 's/^VERSION = "\(.*\)"$/\1/p')"
+          if test "$previous_version" != "2.1.0"; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          jobs="$(gh api "repos/$GH_REPO/actions/runs/$CI_RUN_ID/jobs?per_page=100" --paginate --jq '.jobs[] | [.name, .conclusion] | @tsv')"
+          test "$(printf '%s\n' "$jobs" | awk 'NF' | wc -l)" -eq 3
+          for required in "windows-smoke" "Disposable Windows image/cleanup integration" "Protected installer / update / uninstall"; do
+            count="$(printf '%s\n' "$jobs" | awk -F '\t' -v required="$required" '$1 == required && $2 == "success" {count++} END {print count+0}')"
+            if test "$count" -ne 1; then
+              printf 'Missing successful native CI gate: %s\n%s\n' "$required" "$jobs"
+              exit 1
+            fi
+          done
+          if test -n "$(printf '%s\n' "$jobs" | awk -F '\t' '$2 != "success" {print}')"; then
+            echo "Some CI jobs did not succeed; refusing production publication."
+            exit 1
+          fi
+
+          # Re-running the same approved main CI must be idempotent, never
+          # replace a previously published release or another commit's tag.
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '
+              select(.draft == false and .prerelease == false
+                and ([.assets[].name] | sort) ==
+                  (["Panacea.exe", "Panacea.exe.sha256",
+                    "PanaceaSetup.exe", "PanaceaSetup.exe.sha256"] | sort))
+                | .html_url' > existing-release.txt
+            test -s existing-release.txt
+            object_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.sha)"
+            object_type="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.type)"
+            if test "$object_type" = tag; then
+              object_sha="$(gh api "repos/$GH_REPO/git/tags/$object_sha" --jq .object.sha)"
+            fi
+            test "$object_sha" = "$SOURCE_SHA"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+              echo "Unreviewed v2.1.1 tag exists; refusing to overwrite."
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download EXACT approved CI release assets and verify SHA-256
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$CI_RUN_ID" --repo "$GH_REPO" --name Panacea-Windows-candidate --dir release-assets
+          for file in Panacea.exe Panacea.exe.sha256 PanaceaSetup.exe PanaceaSetup.exe.sha256; do
+            test -s "release-assets/$file"
+          done
+          test "$(find release-assets -maxdepth 1 -type f | wc -l)" -eq 4
+          (cd release-assets && sha256sum --check Panacea.exe.sha256 && sha256sum --check PanaceaSetup.exe.sha256)
+
+      - name: Publish official stable Panacea v2.1.1
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GH_REPO" --target "$SOURCE_SHA" --latest \
+            --title "Panacea v2.1.1" --notes-file docs/releases/2.1.1.md \
+            release-assets/Panacea.exe release-assets/Panacea.exe.sha256 \
+            release-assets/PanaceaSetup.exe release-assets/PanaceaSetup.exe.sha256
+
+      - name: Verify exact published bytes and latest download discovery
+        if: steps.gate.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '
+            select(.draft == false and .prerelease == false
+              and .tag_name == "v2.1.1"
+              and ([.assets[].name] | sort) ==
+                (["Panacea.exe", "Panacea.exe.sha256",
+                  "PanaceaSetup.exe", "PanaceaSetup.exe.sha256"] | sort))
+              | .html_url' | tee published-release-url.txt
+          test -s published-release-url.txt
+          test "$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)" = "$RELEASE_TAG"
+          object_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.sha)"
+          object_type="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.type)"
+          if test "$object_type" = tag; then
+            object_sha="$(gh api "repos/$GH_REPO/git/tags/$object_sha" --jq .object.sha)"
+          fi
+          test "$object_sha" = "$SOURCE_SHA"
+          mkdir -p verify-assets
+          gh release download "$RELEASE_TAG" --repo "$GH_REPO" --dir verify-assets \
+            --pattern "Panacea.exe" --pattern "Panacea.exe.sha256" \
+            --pattern "PanaceaSetup.exe" --pattern "PanaceaSetup.exe.sha256"
+          for file in Panacea.exe Panacea.exe.sha256 PanaceaSetup.exe PanaceaSetup.exe.sha256; do
+            cmp "release-assets/$file" "verify-assets/$file"
+          done
+          (cd verify-assets && sha256sum --check Panacea.exe.sha256 && sha256sum --check PanaceaSetup.exe.sha256)

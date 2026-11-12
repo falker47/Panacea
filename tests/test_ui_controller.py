@@ -971,7 +971,7 @@ def test_tk_journal_is_open_before_cleanup_and_closed_after_verified_result():
     work.assert_called_once()
     assert guard.started == 1
     assert guard.finished == 1
-    assert not app._maintenance_uncertain if hasattr(app, '_maintenance_uncertain') else True
+    assert not app.__dict__.get('_maintenance_uncertain', False)
 
 
 def test_tk_denied_journal_never_runs_windows_cleanup():

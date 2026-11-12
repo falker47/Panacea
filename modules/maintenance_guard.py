@@ -142,7 +142,8 @@ class MaintenanceGuard:
                     boot_id = data['boot_id']
                     if boot_id is not None:
                         _boot_token(boot_id)
-                    if entry.name != _record_name(boot_id) and not (allow_completed and entry.name == 'completed.json' and boot_id is not None):
+                    if entry.name != _record_name(boot_id) and not (allow_completed and entry.name == 'completed.json'
+                                                                and boot_id is not None):
                         raise ValueError('Maintenance guard identity does not match its record')
                     records[entry.name] = boot_id
             _validate_guards(guards)
@@ -191,7 +192,7 @@ class MaintenanceGuard:
 
         A caught/uncertain exception or a failed persistence operation leaves
         the session record for the next launch. Only resolve() on an ordinary,
-        verified terminal outcome permits deleting the exact owned record.
+        verified terminal outcome permits atomically completing the owned record.
         """
         with _maintenance_mutex(timeout_ms):
             if self.is_blocked():
@@ -238,10 +239,13 @@ class MaintenanceGuard:
 
 
 class _MaintenanceJournal(MaintenanceGuard):
-    """Independent pre-operation records; an EMPTY journal directory is valid.
+    """Pre-execution records plus atomic successful-completion evidence.
 
-    A valid old-boot record is recoverable after BootId increases; a corrupt or
-    unknown-boot record never auto-clears. The caller holds the named mutex.
+    An empty directory means interrupted initialization and fails closed.
+    A completed.json record is valid only after the owned pending record is
+    atomically renamed following a verified terminal outcome. Old-boot pending
+    records become nonblocking only after a provably greater Windows BootId.
+    The caller holds the shared named mutex throughout every mutation.
     """
 
     def is_blocked(self):

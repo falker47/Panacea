@@ -35,6 +35,7 @@ class UpdateBridge(QObject):
         self._closed = False
         self._job = None
         self._poll_again = False
+        self._poll_failures = 0
         self._status = ("Controlla gli aggiornamenti ufficiali di Panacea." if self._flow.install_eligible
                         else "Check for official stable updates. QA builds cannot install them.")
         self._version = ""
@@ -202,6 +203,7 @@ class UpdateBridge(QObject):
         self._poll_again = False
 
         def got(result):
+            self._poll_failures = 0
             state = result.get("status", "failed")
             self._status = "Updater: " + str(result.get("message") or state)
             if state == "ready":
@@ -224,9 +226,23 @@ class UpdateBridge(QObject):
 
         if not self._workers.start(
             "poll-protected-update", self._job.poll, group="update-poll",
-            on_success=got, on_error=self._failed, on_done=after,
+            on_success=got, on_error=self._poll_unavailable, on_done=after,
         ):
-            self._failed(RuntimeError("Could not poll protected installer status."))
+            self._poll_unavailable(RuntimeError("Protected installer polling is already in progress."))
+
+    def _poll_unavailable(self, error):
+        # The helper may already be replacing the executable. A transient
+        # read/worker failure is not a verified install failure: retain the job
+        # and keep maintenance/update entry points excluded while monitoring.
+        if self._closed or self._job is None or not self._installing:
+            return
+        self._poll_failures = min(self._poll_failures + 1, 5)
+        self._status = (
+            f"Updater status temporarily unavailable: {error}. "
+            "The running helper is still being monitored; no new update may start."
+        )
+        self.changed.emit()
+        QTimer.singleShot(min(5000, 650 * 2 ** (self._poll_failures - 1)), self._poll)
 
     def _failed(self, error):
         self._busy = False
@@ -234,7 +250,7 @@ class UpdateBridge(QObject):
         self._installing = False
         self._job = None
         self._pending = False
-        self._status = f"Update unsuccessful: {error}. The existing application remains installed; verify updater status."
+        self._status = f"Update unsuccessful: {error}. Verify updater status and recovery before retrying."
         self.changed.emit()
 
     def stop(self):

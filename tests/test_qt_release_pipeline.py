@@ -2,6 +2,9 @@
 from pathlib import Path
 import unittest
 
+from packaging.version import Version
+from version import VERSION
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -10,7 +13,8 @@ class QtProductionReleaseContracts(unittest.TestCase):
         version = (ROOT / "version.py").read_text(encoding="utf-8")
         spec = (ROOT / "Panacea.spec").read_text(encoding="utf-8")
         dependencies = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-        self.assertIn('VERSION = "2.1.0"', version)
+        self.assertIn(f'VERSION = "{VERSION}"', version)
+        self.assertGreaterEqual(Version(VERSION), Version("2.1.0"))
         self.assertIn("['qt_app/main.py']", spec)
         for path in ("qt_app/Main.qml", "qt_app/ParityPage.qml",
                      "assets/panacea_icon.ico", "assets/panacea_icon.png"):

@@ -1490,7 +1490,7 @@ class PanaceaApp(ctk.CTk):
     def _request_operation(self, name, work, on_success=None, on_done=None, *, output=None, on_error=None, journal=True):
         if self.__dict__.get('_maintenance_uncertain'):
             guard = self.__dict__.get('maintenance_guard')
-            message = guard.last_error if guard is not None else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.'
+            message = (guard.last_error if guard is not None and guard.last_error else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.')
             self._show_toast('Command state unknown', message, 'warning')
             return False
         if self._update_installing or self._update_downloading or self.workers.busy():

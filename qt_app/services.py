@@ -50,23 +50,37 @@ class ReadService:
         self._factories = dict(factories or {})
         self._instances = {}
         self._lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
         self._closed = False
 
     def _manager(self, name):
-        if self._closed:
-            raise RuntimeError("Qt read service has been closed")
-        if name not in self._instances:
-            factory = self._factories.get(name)
-            self._instances[name] = (factory() if factory else _default_factory(name))
-        return self._instances[name]
+        # collect serializes construction and use, but close must never wait for
+        # either. Publish under a separate lock so it cannot miss a new monitor.
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("Qt read service has been closed")
+            if name in self._instances:
+                return self._instances[name]
+        factory = self._factories.get(name)
+        manager = factory() if factory else _default_factory(name)
+        with self._lifecycle_lock:
+            if not self._closed:
+                self._instances[name] = manager
+                return manager
+        # A factory may finish after close returned. Do not start a query or
+        # leave its newly constructed monitor alive beyond service shutdown.
+        if name == "monitor":
+            manager.close()
+        raise RuntimeError("Qt read service has been closed")
 
     def collect(self, action):
         """Return JSON-compatible data; reject any unrecognized/unsafe command."""
         if action not in READ_ACTIONS:
             raise ValueError("Unknown or side-effecting action is not permitted")
         with self._lock:
-            if self._closed:
-                raise RuntimeError("Qt read service has been closed")
+            with self._lifecycle_lock:
+                if self._closed:
+                    raise RuntimeError("Qt read service has been closed")
             return self._collect_locked(action)
 
     def _collect_locked(self, action):
@@ -140,10 +154,10 @@ class ReadService:
         raise AssertionError("Allowlist dispatch contract is incomplete")
 
     def close(self):
-        with self._lock:
+        with self._lifecycle_lock:
             if self._closed:
                 return
             self._closed = True
             monitor = self._instances.get("monitor")
-            if monitor is not None:
-                monitor.close()
+        if monitor is not None:
+            monitor.close()

@@ -1487,7 +1487,7 @@ class PanaceaApp(ctk.CTk):
         if 'btn_optimize_drive' in self.__dict__:
             self._drive_selected()
 
-    def _request_operation(self, name, work, on_success=None, on_done=None, *, output=None, on_error=None):
+    def _request_operation(self, name, work, on_success=None, on_done=None, *, output=None, on_error=None, journal=True):
         if self.__dict__.get('_maintenance_uncertain'):
             guard = self.__dict__.get('maintenance_guard')
             message = guard.last_error if guard is not None else 'Restart Windows before running more maintenance. A timed-out command may have left a Windows helper running.'
@@ -1521,17 +1521,30 @@ class PanaceaApp(ctk.CTk):
         def completion_unknown():
             return any(getattr(manager, 'completion_unknown', False) is True for manager in (self.cmd_runner, self.disk_opt))
         def guarded_work():
-            try:
-                return work()
-            finally:
-                guard = self.__dict__.get('maintenance_guard')
-                if completion_unknown() and guard is not None:
+            if not journal:
+                return work()  # Explicit read-only analysis; not a Windows mutation.
+            guard = self.__dict__.get('maintenance_guard')
+            if guard is None:
+                raise RuntimeError('Maintenance recovery guard is unavailable')
+            with guard.operation() as permit:
+                try:
+                    result = work()
+                except BaseException:
+                    if completion_unknown():
+                        guard.mark_unknown()  # Keep the unfinished journal as well.
+                    raise
+                if completion_unknown():
                     guard.mark_unknown()
+                else:
+                    permit.resolve()
+                return result
         def show_uncertainty():
-            if completion_unknown():
+            guard = self.__dict__.get('maintenance_guard')
+            blocked = guard is not None and guard.is_blocked()
+            if completion_unknown() or blocked:
                 self._maintenance_uncertain = True
-                guard = self.__dict__.get('maintenance_guard')
-                message = guard.last_error if guard is not None else 'Command completion unknown · Restart Windows before further maintenance'
+                message = (guard.last_error if guard is not None and guard.last_error else
+                           'Command completion unknown · Restart Windows before further maintenance')
                 self.operation_label.configure(text=f'Stopped · {message}', text_color=COL_WARNING)
         def delivered(result):
             if completion_unknown():
@@ -1751,7 +1764,7 @@ class PanaceaApp(ctk.CTk):
             self._show_temp_result(count, size, self.cleanup_mgr.last_result, preview=True)
         started = self._request_operation(
             'Temporary file analysis', lambda: self.cleanup_mgr.preview_temp_files(progress_callback=self.log_msg), show,
-            output='clean_log', on_error=lambda exc: self._show_temp_failure(exc, before, preview=True))
+            output='clean_log', on_error=lambda exc: self._show_temp_failure(exc, before, preview=True), journal=False)
         if started is False:
             self._set_preview_status(previous)
 
@@ -2021,7 +2034,7 @@ class PanaceaApp(ctk.CTk):
                 os.startfile(str(result))
             except OSError as exc:
                 self._show_toast('Report saved', f'{result}\nCould not open the report: {exc}', 'warning')
-        self._request_operation('Battery report', report, saved, output='tools_log')
+        self._request_operation('Battery report', report, saved, output='tools_log', journal=False)
 
     def run_create_restore(self):
         if self._confirm('Create restore point', 'Create and verify a new Windows restore point?\nSystem protection must already be enabled. This may take a minute.', parent=self):

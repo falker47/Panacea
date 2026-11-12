@@ -262,3 +262,25 @@ def test_force_terminated_process_leaves_recoverable_prelaunch_record(tmp_path):
     assert result.returncode == 0, result.stderr
     assert guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
     assert not guard.MaintenanceGuard(path, lambda: BOOT_B).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_empty_journal_directory_after_failed_creation_blocks_reopen(tmp_path):
+    path = tmp_path / 'guard'
+    (tmp_path / 'maintenance-journal').mkdir()
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    assert subject.is_blocked()
+    assert 'journal' in subject.last_error.lower()
+    with pytest.raises(RuntimeError):
+        with subject.operation():
+            raise AssertionError('unreachable mutation')
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_completed_journal_proves_directory_is_not_an_interrupted_write(tmp_path):
+    path = tmp_path / 'guard'
+    with guard.MaintenanceGuard(path, lambda: BOOT_A).operation() as permit:
+        permit.resolve()
+    names = [p.name for p in (tmp_path / 'maintenance-journal').iterdir()]
+    assert names == ['completed.json']
+    assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()

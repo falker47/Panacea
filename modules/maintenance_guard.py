@@ -287,7 +287,7 @@ class _MaintenanceJournal(MaintenanceGuard):
         name = _record_name(boot_id)
         path = self.state_path / name
         with self._storage_directory() as guards:
-            with _windows_handle(path, delete=True) as (kernel, handle, info):
+            with _windows_handle(path, delete=True, read_for_delete=True) as (kernel, handle, info):
                 if info.links != 1 or info.attributes & 0x10:
                     raise ValueError('Unsafe maintenance journal record')
                 data = json.loads(read_bytes(kernel, handle, 1024).decode('utf-8'))

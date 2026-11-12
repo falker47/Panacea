@@ -230,11 +230,13 @@ def test_failed_journal_write_prevents_any_mutation_and_blocks_reopen(tmp_path, 
 @pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
 def test_second_process_cannot_mutate_while_first_holds_maintenance_mutex(tmp_path):
     path = tmp_path / 'guard'
-    script = ("import sys; from modules.maintenance_guard import MaintenanceGuard; "
-              "g=MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101'); "
-              "with g.operation(timeout_ms=100) as permit: permit.resolve()")
-    # Use an exec wrapper so the compound 'with' statement is valid.
-    script = script.replace("with g.operation", "\\nwith g.operation").replace("; with", "\\nwith")
+    script = (
+        "import sys\n"
+        "from modules.maintenance_guard import MaintenanceGuard\n"
+        "g = MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101')\n"
+        "with g.operation(timeout_ms=100) as permit:\n"
+        "    permit.resolve()\n"
+    )
     with guard.MaintenanceGuard(path, lambda: BOOT_A).operation() as permit:
         result = subprocess.run([sys.executable, '-c', script, str(path)],
                                 capture_output=True, text=True, timeout=10,
@@ -247,10 +249,13 @@ def test_second_process_cannot_mutate_while_first_holds_maintenance_mutex(tmp_pa
 @pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
 def test_force_terminated_process_leaves_recoverable_prelaunch_record(tmp_path):
     path = tmp_path / 'guard'
-    script = ("import os, sys; from modules.maintenance_guard import MaintenanceGuard; "
-              "g=MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101'); "
-              "with g.operation(): os._exit(0)")
-    script = script.replace("with g.operation", "\\nwith g.operation").replace("; with", "\\nwith")
+    script = (
+        "import os, sys\n"
+        "from modules.maintenance_guard import MaintenanceGuard\n"
+        "g = MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101')\n"
+        "with g.operation():\n"
+        "    os._exit(0)\n"
+    )
     result = subprocess.run([sys.executable, '-c', script, str(path)],
                             capture_output=True, text=True, timeout=10,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

@@ -1,0 +1,64 @@
+name: Panacea v2.1.1 real in-app upgrade acceptance
+
+# This QA is separate from immutable release v2.1.1. It operates exclusively
+# on disposable hosted Windows images, never on an owner's installed machine.
+on:
+  push:
+    branches: [qa/v211-live-inapp-upgrades-20261112]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: panacea-v211-real-inapp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actual-old-gui-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      matrix:
+        old_version: ["2.0.2", "2.1.0"]
+    env:
+      GITHUB_ACTIONS: 'true'
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+      PYTHONUTF8: '1'
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Acquire exact historical 2.0.2 GUI test fixture without merging PR 9
+        uses: actions/checkout@v4
+        with:
+          ref: b4c0fc289f86135fe41802b02171343fb03b767a
+          path: build/recovery-reference
+          persist-credentials: false
+      - name: Verify pinned historical test-only source
+        shell: pwsh
+        run: |
+          if ((git -C build/recovery-reference rev-parse HEAD).Trim() -cne "b4c0fc289f86135fe41802b02171343fb03b767a") { throw "Historical test reference SHA mismatch" }
+          if (-not (Test-Path build/recovery-reference/tests/fixtures/v202_install_update.png)) { throw "Missing frozen 2.0.2 GUI reference" }
+          if (-not (Test-Path build/recovery-reference/scripts/hosted_updater_recovery.py)) { throw "Missing historical test helper" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install read-only QA tools (not product dependencies)
+        run: |
+          python -m pip install -r requirements-dev.txt pywinauto==0.6.9
+      - name: Drive the real old GUI to install v2.1.1 after explicit confirmation
+        shell: pwsh
+        run: |
+          python -m scripts.v211_inapp_upgrade_acceptance --old-version ${{ matrix.old_version }} --report build/v211-inapp/upgrade-${{ matrix.old_version }}.json
+          if ($LASTEXITCODE -ne 0) { throw "Real old GUI upgrade failed, see evidence report" }
+      - name: Retain complete evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panacea-v211-real-inapp-${{ matrix.old_version }}
+          path: build/v211-inapp/**
+          if-no-files-found: warn

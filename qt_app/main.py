@@ -77,6 +77,7 @@ class ReadBridge(QObject):
         self._workers = WorkerController(self._dispatcher)
         self._last = "Seleziona una verifica in sola lettura."
         self._busy = False
+        self._pending_reads = []
         self._closed = False
         self._maintenance = None
         self._updater = None
@@ -88,6 +89,7 @@ class ReadBridge(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(30)
         self._timer.timeout.connect(self._dispatcher.drain)
+        self._timer.timeout.connect(self._drain_reads)
         self._timer.start()
 
     @Property(str, notify=changed)
@@ -120,14 +122,34 @@ class ReadBridge(QObject):
 
     @Slot(str)
     def request(self, action):
-        if (self._closed or action not in READ_ACTIONS or self._busy
-                or (self._maintenance is not None and self._maintenance.busy)
-                or (self._updater is not None and self._updater.busy)):
+        if self._closed or action not in READ_ACTIONS:
             return
+        # At most one pending request per allowlisted action. Page navigation
+        # during a slow read or mutation must not silently lose its refresh.
+        if self._busy and self._last_action == action:
+            return
+        if action not in self._pending_reads:
+            self._pending_reads.append(action)
+        self._drain_reads()
+
+    def invalidate(self, action):
+        self._results = {**self._results, action: {"available": False, "refreshing": True}}
+        self.changed.emit()
+
+    def _drain_reads(self):
+        if (self._closed or not self._pending_reads or self._busy
+                or (self._maintenance is not None and (
+                    self._maintenance.busy or getattr(self._maintenance, "awaitingConfirmation", False)))
+                or (self._updater is not None and (
+                    self._updater.busy or getattr(self._updater, "pending", False)))):
+            return
+        action = self._pending_reads.pop(0)
         self._busy = True
         self._state = "running"
         self._last_action = action
         self._last = "Verifica in corso, nessuna operazione di manutenzione."
+        if action == "turbo_status":
+            self.invalidate(action)
         self.changed.emit()
         def successful(value):
             self._results = {**self._results, action: value}
@@ -151,19 +173,24 @@ class ReadBridge(QObject):
             self.changed.emit()
         def done():
             self._busy = False
-            self.changed.emit()
             if (action == "hardware" and getattr(self, "_automatic_updates", False)
                     and not self._closed):
                 self._automatic_updates = False
-                QTimer.singleShot(0, lambda: self.request("windows_updates"))
+                self.request("windows_updates")
+            self._drain_reads()
+            self.changed.emit()
         accepted = self._workers.start(
             action, lambda: self._service.collect(action),
             group="read", on_success=successful, on_error=failed, on_done=done)
         if not accepted:
+            failed(RuntimeError("Read worker unavailable"))
             done()
 
     def stop(self):
+        if self._closed:
+            return
         self._closed = True
+        self._pending_reads.clear()
         self._timer.stop()
         self._workers.close()
         from threading import Thread
@@ -307,6 +334,9 @@ class MaintenanceBridge(QObject):
         self._progress_total = 10 if self._last_action == "resurrection" else (3 if self._last_action == "quick_cleanup" else 0)
         self._steps = []
         self._output = "Manutenzione in corso. Non chiudere il programma."
+        from qt_app.maintenance import TURBO
+        if self._last_action in TURBO and self._reader is not None:
+            self._reader.invalidate("turbo_status")
         self._remember_result()
         self.changed.emit()
 
@@ -345,12 +375,11 @@ class MaintenanceBridge(QObject):
             self._busy = False
             self.changed.emit()
 
-            # Reflect the measured state after an acknowledged change, as V2 does.
-            # Failed/unknown/cancelled completion never implies a successful toggle.
-            from qt_app.maintenance import TURBO
+            # A failed setter may follow a successful one. Keep the attempt's
+            # outcome and independently remeasure machine state and originals.
             if (self._last_action in TURBO and self._reader is not None
-                    and self._result_status in ("completed", "partial") and not self._closed):
-                QTimer.singleShot(0, lambda: self._reader.request("turbo_status"))
+                    and not self._closed):
+                self._reader.request("turbo_status")
 
         accepted = self._workers.start(
             "maintenance", lambda: self._service.execute(nonce, log=log, progress=progress),

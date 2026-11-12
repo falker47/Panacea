@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 
 from modules.cleanup import _guard_path, _validate_guards, _validate_handle, _windows_handle
-from modules.protected_files import relative_handle, read_bytes, write_bytes, dispose
+from modules.protected_files import relative_handle, read_bytes, write_bytes, rename_same_parent
 
 
 def _boot_token(value):
@@ -123,7 +123,7 @@ class MaintenanceGuard:
             _validate_guards(guards)
             yield guards
 
-    def _read_records(self, guards):
+    def _read_records(self, guards, *, allow_completed=False):
         records = {}
         try:
             with os.scandir(self.state_path) as entries:
@@ -142,7 +142,7 @@ class MaintenanceGuard:
                     boot_id = data['boot_id']
                     if boot_id is not None:
                         _boot_token(boot_id)
-                    if entry.name != _record_name(boot_id):
+                    if entry.name != _record_name(boot_id) and not (allow_completed and entry.name == 'completed.json' and boot_id is not None):
                         raise ValueError('Maintenance guard identity does not match its record')
                     records[entry.name] = boot_id
             _validate_guards(guards)
@@ -249,15 +249,16 @@ class _MaintenanceJournal(MaintenanceGuard):
         try:
             try:
                 with self._storage_directory() as guards:
-                    records = self._read_records(guards)
+                    records = self._read_records(guards, allow_completed=True)
             except FileNotFoundError:
                 return False
             if not records:
-                return False
+                raise ValueError('Maintenance journal initialization is unverified (empty directory)')
             if None in records.values():
                 raise ValueError('Maintenance journal has an unknown Windows boot identity')
+            pending = {name: boot for name, boot in records.items() if name != 'completed.json'}
             current = int(_boot_token(self._boot_identity()).split(':')[1])
-            if any(current <= int(old.split(':')[1]) for old in records.values()):
+            if any(current <= int(old.split(':')[1]) for old in pending.values()):
                 self.last_error = 'Unfinished maintenance was detected. Restart Windows before running maintenance again.'
                 return True
             return False
@@ -269,7 +270,7 @@ class _MaintenanceJournal(MaintenanceGuard):
         boot_id = _boot_token(self._boot_identity())
         name = _record_name(boot_id)
         with self._storage_directory(create=True) as guards:
-            if name in self._read_records(guards):
+            if name in self._read_records(guards, allow_completed=True):
                 raise RuntimeError('An unfinished maintenance operation is recorded for this Windows boot')
             # FILE_CREATE, handle-bound writing and FlushFileBuffers prevent
             # side effects until the durable record has been read back.
@@ -278,7 +279,7 @@ class _MaintenanceJournal(MaintenanceGuard):
                 write_bytes(kernel, handle, json.dumps({'version': 1, 'boot_id': boot_id}).encode('utf-8'))
                 _validate_handle(kernel, handle, self.state_path / name)
                 _validate_guards(guards)
-            if self._read_records(guards).get(name) != boot_id:
+            if self._read_records(guards, allow_completed=True).get(name) != boot_id:
                 raise OSError('Maintenance journal could not be verified before mutation')
         return boot_id
 
@@ -287,6 +288,11 @@ class _MaintenanceJournal(MaintenanceGuard):
         name = _record_name(boot_id)
         path = self.state_path / name
         with self._storage_directory() as guards:
+            records = self._read_records(guards, allow_completed=True)
+            if records.get(name) != boot_id:
+                raise ValueError('Active maintenance journal is missing or altered')
+            # Atomic same-directory rename is the completed transaction record.
+            # A failed rename leaves the active record in place and blocks reuse.
             with _windows_handle(path, delete=True, read_for_delete=True) as (kernel, handle, info):
                 if info.links != 1 or info.attributes & 0x10:
                     raise ValueError('Unsafe maintenance journal record')
@@ -295,8 +301,8 @@ class _MaintenanceJournal(MaintenanceGuard):
                     raise ValueError('Maintenance journal identity changed')
                 _validate_handle(kernel, handle, path)
                 _validate_guards(guards)
-                dispose(kernel, handle)
-            _validate_guards(guards)
-        if os.path.lexists(path):
-            raise OSError('Completed maintenance journal could not be removed')
+                rename_same_parent(handle, 'completed.json')
+                _validate_guards(guards)
+            if self._read_records(guards, allow_completed=True).get('completed.json') != boot_id:
+                raise OSError('Completed maintenance journal could not be verified')
 

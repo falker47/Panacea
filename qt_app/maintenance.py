@@ -284,7 +284,11 @@ class MaintenanceService:
         raise AssertionError("Maintenance action allowlist incomplete")
 
     def execute(self, nonce, *, log=None, progress=None):
-        """Call only in a worker after the user accepts the QML confirmation."""
+        """Execute only with explicit consent, an exclusive lease and a journal.
+
+        The protected journal is flushed before dispatch; a crash, exception
+        or uncertain timeout leaves a durable record to block the next launch.
+        """
         with self._lock:
             if self._pending is None or not secrets.compare_digest(str(nonce), self._pending[0]):
                 raise ValueError("Missing or expired explicit confirmation")
@@ -299,23 +303,36 @@ class MaintenanceService:
                 raise RuntimeError("Windows-only maintenance is unavailable on this platform")
             if action not in OPEN_ACTIONS and not self._is_admin():
                 raise PermissionError("Administrator privileges are required")
-            guard = self._manager("guard")
-            if action not in OPEN_ACTIONS and guard.is_blocked():
-                raise RuntimeError(guard.last_error or "MaintenanceGuard blocks further changes")
-            value = self._dispatch(action, drive, log or (lambda msg: None), progress)
-            if isinstance(value, dict) and "status" in value:
-                result = value
-            else:
+
+            def invoke():
+                value = self._dispatch(action, drive, log or (lambda msg: None), progress)
+                if isinstance(value, dict) and "status" in value:
+                    return value
                 success, message = _strict_pair(value)
-                result = {"status": "completed" if success else "failed",
-                          "success": success, "message": str(message)}
-            if self._completion_unknown():
-                result.update(status="unknown", success=False,
-                              message="Command completion unverified. Restart Windows before maintenance.")
-            return result
+                return {"status": "completed" if success else "failed",
+                        "success": success, "message": str(message)}
+
+            if action in OPEN_ACTIONS:
+                # Opening a Windows UI is not a Panacea-managed mutation. That
+                # utility's lifetime is outside the maintenance worker lease.
+                return invoke()
+            guard = self._manager("guard")
+            with guard.operation() as permit:
+                try:
+                    result = invoke()
+                except BaseException:
+                    if self._completion_unknown():
+                        guard.mark_unknown()  # Do not discard the journal on failure.
+                    raise
+                if self._completion_unknown():
+                    saved = guard.mark_unknown()
+                    result.update(status="unknown", success=False,
+                                  message="Command completion unverified. Restart Windows before maintenance.")
+                    if not saved:
+                        result["message"] += " " + guard.last_error
+                else:
+                    permit.resolve()  # The context removes only this completed session record.
+                return result
         finally:
-            if self._completion_unknown():
-                # The write is attempted even if the operation raised.
-                self._manager("guard").mark_unknown()
             with self._lock:
                 self._active = False

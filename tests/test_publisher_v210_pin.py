@@ -5,7 +5,6 @@ The published v2.1.0 tag is intentionally pinned to its original reviewed SHA.
 """
 from pathlib import Path
 
-from version import VERSION
 
 
 APPROVED_SHA = "b751940b11f2b31fd54284aa63fc123ac047a577"
@@ -14,7 +13,8 @@ WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/publish-appr
 
 def test_v210_publisher_only_runs_for_original_approved_main_commit():
     source = WORKFLOW.read_text(encoding="utf-8")
-    assert VERSION == "2.1.0"
+    assert "RELEASE_TAG: v2.1.0" in source
+    assert "SOURCE_SHA" in source
     assert "workflow_run:" in source
     assert "    workflows: [\"CI\"]" in source
     assert "    branches: [main]" in source

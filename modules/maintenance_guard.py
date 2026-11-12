@@ -4,6 +4,8 @@ Immutable records avoid replacing a stronger unknown-boot marker during concurre
 writes. An interrupted write intentionally leaves a record that fails closed.
 """
 from contextlib import contextmanager, ExitStack
+import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
@@ -11,7 +13,7 @@ from pathlib import Path
 import re
 
 from modules.cleanup import _guard_path, _validate_guards, _validate_handle, _windows_handle
-from modules.protected_files import relative_handle, read_bytes, write_bytes
+from modules.protected_files import relative_handle, read_bytes, write_bytes, dispose
 
 
 def _boot_token(value):
@@ -40,6 +42,54 @@ def windows_boot_identity():
 def _record_name(boot_id):
     return ('boot-' + hashlib.sha256(boot_id.encode('ascii')).hexdigest() + '.json'
             if boot_id is not None else 'unknown.json')
+
+
+
+@contextmanager
+def _maintenance_mutex(timeout_ms):
+    """One machine-wide Windows lease shared by Tk and Qt maintenance gateways.
+
+    A killed process releases the kernel mutex; the durable journal, not the
+    abandoned mutex alone, decides whether another operation is safe.
+    """
+    if os.name != 'nt':
+        raise OSError('Windows maintenance process locking is unavailable')
+    if type(timeout_ms) is not int or not 0 <= timeout_ms <= 0xffffffff:
+        raise ValueError('Invalid maintenance lock timeout')
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.CreateMutexW.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+    kernel.ReleaseMutex.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateMutexW(None, False, 'Global\\PanaceaMaintenanceV2')
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    acquired = False
+    try:
+        state = kernel.WaitForSingleObject(handle, timeout_ms)
+        if state == 0x102:
+            raise TimeoutError('Maintenance process lock is busy; another Panacea instance is running maintenance.')
+        if state not in (0, 0x80):
+            raise ctypes.WinError(ctypes.get_last_error())
+        acquired = True
+        yield
+    finally:
+        if acquired:
+            kernel.ReleaseMutex(handle)
+        kernel.CloseHandle(handle)
+
+
+class _OperationPermit:
+    """Only a normally returned and verified command may resolve its journal."""
+
+    def __init__(self):
+        self.resolved = False
+
+    def resolve(self):
+        self.resolved = True
 
 
 class MaintenanceGuard:
@@ -101,8 +151,12 @@ class MaintenanceGuard:
             # A missing or replaced record is not proof of an absent guard directory.
             raise ValueError(f'Maintenance guard records cannot be verified: {exc}') from exc
 
+    def _journal(self):
+        path = self.state_path.parent / 'maintenance-journal' if self.state_path is not None else None
+        return _MaintenanceJournal(path, self._boot_identity)
+
     def is_blocked(self):
-        """Read without creating storage; any unverifiable existing record blocks."""
+        """Read old timeout records and pre-execution journals without writes."""
         if self._blocked:
             return True
         self.last_error = ''
@@ -111,20 +165,47 @@ class MaintenanceGuard:
                 with self._storage_directory() as guards:
                     records = self._read_records(guards)
             except FileNotFoundError:
-                return False
-            if not records:
-                raise ValueError('The maintenance guard write was interrupted before its record was saved')
-            if None in records.values():
-                raise ValueError('The original Windows boot is unknown; maintenance completion cannot be verified')
-            current_boot = _boot_token(self._boot_identity())
-            current_counter = int(current_boot.split(':')[1])
-            if any(current_counter <= int(record.split(':')[1]) for record in records.values()):
-                self.last_error = 'Maintenance completion is unverified. Restart Windows before running maintenance again.'
+                records = None
+            if records is not None:
+                if not records:
+                    raise ValueError('The maintenance guard write was interrupted before its record was saved')
+                if None in records.values():
+                    raise ValueError('The original Windows boot is unknown; maintenance completion cannot be verified')
+                current_boot = _boot_token(self._boot_identity())
+                current_counter = int(current_boot.split(':')[1])
+                if any(current_counter <= int(record.split(':')[1]) for record in records.values()):
+                    self.last_error = 'Maintenance completion is unverified. Restart Windows before running maintenance again.'
+                    return True
+            journal = self._journal()
+            if journal.is_blocked():
+                self.last_error = journal.last_error
                 return True
             return False
         except Exception as exc:
             self.last_error = f'Maintenance remains blocked: {exc}'
             return True
+
+    @contextmanager
+    def operation(self, timeout_ms=30000):
+        """Require an exclusive process lease and a flushed journal BEFORE work.
+
+        A caught/uncertain exception or a failed persistence operation leaves
+        the session record for the next launch. Only resolve() on an ordinary,
+        verified terminal outcome permits deleting the exact owned record.
+        """
+        with _maintenance_mutex(timeout_ms):
+            if self.is_blocked():
+                raise RuntimeError(self.last_error or 'Maintenance remains blocked')
+            journal = self._journal()
+            boot_id = journal.begin()
+            permit = _OperationPermit()
+            try:
+                yield permit
+            except BaseException:
+                raise
+            else:
+                if permit.resolved:
+                    journal.complete(boot_id)
 
     def mark_unknown(self):
         """Persist a timeout marker; False reports save failure, never clears a block."""
@@ -154,3 +235,68 @@ class MaintenanceGuard:
         except Exception as exc:
             self.last_error = f'Maintenance remains blocked; could not save the recovery guard: {exc}'
             return False
+
+
+class _MaintenanceJournal(MaintenanceGuard):
+    """Independent pre-operation records; an EMPTY journal directory is valid.
+
+    A valid old-boot record is recoverable after BootId increases; a corrupt or
+    unknown-boot record never auto-clears. The caller holds the named mutex.
+    """
+
+    def is_blocked(self):
+        self.last_error = ''
+        try:
+            try:
+                with self._storage_directory() as guards:
+                    records = self._read_records(guards)
+            except FileNotFoundError:
+                return False
+            if not records:
+                return False
+            if None in records.values():
+                raise ValueError('Maintenance journal has an unknown Windows boot identity')
+            current = int(_boot_token(self._boot_identity()).split(':')[1])
+            if any(current <= int(old.split(':')[1]) for old in records.values()):
+                self.last_error = 'Unfinished maintenance was detected. Restart Windows before running maintenance again.'
+                return True
+            return False
+        except Exception as exc:
+            self.last_error = f'Unverified maintenance journal: {exc}'
+            return True
+
+    def begin(self):
+        boot_id = _boot_token(self._boot_identity())
+        name = _record_name(boot_id)
+        with self._storage_directory(create=True) as guards:
+            if name in self._read_records(guards):
+                raise RuntimeError('An unfinished maintenance operation is recorded for this Windows boot')
+            # FILE_CREATE, handle-bound writing and FlushFileBuffers prevent
+            # side effects until the durable record has been read back.
+            with relative_handle(guards[-1], name) as (kernel, handle, _):
+                _validate_guards(guards)
+                write_bytes(kernel, handle, json.dumps({'version': 1, 'boot_id': boot_id}).encode('utf-8'))
+                _validate_handle(kernel, handle, self.state_path / name)
+                _validate_guards(guards)
+            if self._read_records(guards).get(name) != boot_id:
+                raise OSError('Maintenance journal could not be verified before mutation')
+        return boot_id
+
+    def complete(self, boot_id):
+        boot_id = _boot_token(boot_id)
+        name = _record_name(boot_id)
+        path = self.state_path / name
+        with self._storage_directory() as guards:
+            with _windows_handle(path, delete=True) as (kernel, handle, info):
+                if info.links != 1 or info.attributes & 0x10:
+                    raise ValueError('Unsafe maintenance journal record')
+                data = json.loads(read_bytes(kernel, handle, 1024).decode('utf-8'))
+                if data != {'version': 1, 'boot_id': boot_id}:
+                    raise ValueError('Maintenance journal identity changed')
+                _validate_handle(kernel, handle, path)
+                _validate_guards(guards)
+                dispose(kernel, handle)
+            _validate_guards(guards)
+        if os.path.lexists(path):
+            raise OSError('Completed maintenance journal could not be removed')
+

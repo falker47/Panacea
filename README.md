@@ -5,7 +5,7 @@
 
 Panacea is a Windows desktop utility that groups common maintenance, repair and performance controls behind a Qt Quick / PySide6 interface from 2.1.0. The legacy CustomTkinter 2.0.2 UI remains in source for reference, while the official executable uses Qt Quick. It uses native Windows tools and APIs rather than replacing them with a custom system engine.
 
-The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.1.0 release notes](docs/releases/2.1.0.md) for the new Qt interface and upgrade procedure, the [2.0.2 release notes](docs/releases/2.0.2.md) for the preceding Tk interface, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
+The latest published stable version is listed in [GitHub Releases](https://github.com/falker47/Panacea/releases/latest). See the [2.1.1 release notes](docs/releases/2.1.1.md) for Qt updater reliability fixes, the [2.1.0 release notes](docs/releases/2.1.0.md) for the original Qt interface and upgrade procedure, the [2.0.2 release notes](docs/releases/2.0.2.md) for the preceding Tk interface, and the [2.0.1 release notes](docs/releases/2.0.1.md) for earlier changes. CI artifacts and draft releases do not imply stable publication.
 
 The Qt 2.1.0 interface groups features into five primary areas: **Overview**, **Space & Cleanup**, **Diagnostics & Repair**, **Performance & Startup**, and **Guided Maintenance**. The categories below describe capabilities rather than reproducing the navigation labels.
 

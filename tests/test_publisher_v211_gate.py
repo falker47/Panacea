@@ -47,10 +47,15 @@ def test_v211_requires_all_native_gates_and_refuses_existing_unreviewed_tag():
     assert "cmp \"release-assets/$file\" \"verify-assets/$file\"" in workflow
 
 
-def test_published_version_is_probed_only_on_disposable_windows_with_prior_binaries():
-    workflow = (WORKFLOW.parent / "verify-published-v211.yml").read_text(encoding="utf-8")
-    assert "types: [published]" in workflow
-    assert "github.event.release.tag_name == 'v2.1.1'" in workflow
+def test_v211_publisher_runs_postpublication_checks_in_same_workflow():
+    # Releases created using GITHUB_TOKEN do not trigger a separate on:release
+    # workflow. Verify the postpublication Windows job is a dependency here.
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "published-update-windows:" in workflow
+    assert "needs: publish-v2-1-1" in workflow
+    assert "verify: ${{ steps.gate.outputs.verify }}" in workflow
+    assert 'echo "verify=true" >> "$GITHUB_OUTPUT"' in workflow
+    assert "needs['publish-v2-1-1'].outputs.verify == 'true'" in workflow
     assert "PANACEA_ALLOW_HOSTED_PROBE: 'true'" in workflow
     assert "runs-on: windows-latest" in workflow
     for tag in ("v2.1.0", "v2.0.2"):

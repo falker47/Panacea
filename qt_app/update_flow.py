@@ -5,6 +5,7 @@ Never accept an executable path, release, checksum, or URL from QML.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 import sys
@@ -87,8 +88,27 @@ class QtUpdateFlow:
         helper = self.launch or start_self_update
         # The backend performs a second checksum/PE check and protected ACL and
         # path validation before a helper is started. Never accept paths from UI.
-        job = helper(self._staged, self.executable, self.release, self.client)
-        self.cleanup()
+        try:
+            job = helper(self._staged, self.executable, self.release, self.client)
+        except Exception:
+            # A helper that never started must not strand a verified download
+            # and make the next explicit attempt fail with "already staged".
+            try:
+                self.cleanup()
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Could not remove temporary staging after helper startup failed.")
+            raise
+
+        # Once the helper is running, a locked temporary download is only a
+        # cleanup problem. Never lose its job: Qt must continue polling for
+        # verified readiness or rollback before allowing another operation.
+        try:
+            self.cleanup()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Protected update helper started; temporary staging cleanup "
+                "failed, but monitoring must continue.")
         return job
 
     def cleanup(self):

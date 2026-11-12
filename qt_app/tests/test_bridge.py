@@ -112,7 +112,8 @@ class BridgeContracts(unittest.TestCase):
             self.bridge.prepare("power_on", "")
             self.bridge.confirm()
             deadline = time.monotonic() + 2
-            while "turbo_status" not in reader.results and time.monotonic() < deadline:
+            while (reader.results.get("turbo_status", {}).get("states") != {"power": True}
+                   and time.monotonic() < deadline):
                 self.app.processEvents()
                 time.sleep(.01)
             self.assertEqual(reader.results.get("turbo_status", {}).get("states"), {"power": True})

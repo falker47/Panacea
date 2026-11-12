@@ -1644,8 +1644,11 @@ Item {
                     }
                     Text {
                         visible: !view.turbo.states
-                        text:view.turbo.states ? view.t("Stato di lettura aggiornabile manualmente.", "State can be refreshed manually.")
-                            : view.t("Leggi lo stato prima di usare gli interruttori.", "Read state before using toggles.")
+                        text: view.turbo.refreshing === true
+                            ? view.t("Verifica dello stato in corso…", "Checking current state…")
+                            : view.turbo.available === false
+                              ? view.t("Stato non disponibile", "State unavailable") + " · " + view.t("Aggiorna stato", "Refresh state")
+                              : view.t("Leggi lo stato prima di usare gli interruttori.", "Read state before using toggles.")
                         width:parent.width; color:"#9eafc8"; font.pixelSize:11; wrapMode:Text.WordWrap
                     }
                 }

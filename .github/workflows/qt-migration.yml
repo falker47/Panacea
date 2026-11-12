@@ -28,6 +28,16 @@ jobs:
       QT_QUICK_BACKEND: software
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source revision
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:EXPECTED_SOURCE_SHA) { throw "Unexpected source revision: $actual" }
+          "Verified source: $actual; event: $env:GITHUB_EVENT_NAME" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -211,6 +221,16 @@ jobs:
       QT_QUICK_BACKEND: software
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source revision
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:EXPECTED_SOURCE_SHA) { throw "Unexpected source revision: $actual" }
+          "Verified source: $actual; event: $env:GITHUB_EVENT_NAME" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -325,6 +345,16 @@ jobs:
       QT_QUICK_BACKEND: software
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact source revision
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:EXPECTED_SOURCE_SHA) { throw "Unexpected source revision: $actual" }
+          "Verified source: $actual; event: $env:GITHUB_EVENT_NAME" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

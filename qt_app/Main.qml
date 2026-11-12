@@ -23,8 +23,8 @@ Window {
         var visits = visited.slice()
         visits[currentTab] = true
         visited = visits
-        if (!qaSmokeMode && currentTab === 2 && !readService.busy) readService.request("drives")
-        if (!qaSmokeMode && currentTab === 3 && !readService.busy) readService.request("turbo_status")
+        if (!qaSmokeMode && currentTab === 2) readService.request("drives")
+        if (!qaSmokeMode && currentTab === 3) readService.request("turbo_status")
     }
     onClosing: function(event) {
         if (maintenanceService.busy || updateService.installing) {
@@ -289,6 +289,7 @@ Window {
                         anchors.rightMargin: 24
                         Text {
                             text: maintenanceService.busy ? shell.label("Manutenzione in corso · non chiudere", "Maintenance running · do not close")
+                                : readService.busy ? shell.label("Verifica in corso · nessuna manutenzione", "Reading system state · no maintenance")
                                 : maintenanceService.output.length > 0 ? maintenanceService.output.split("\n").slice(-1)[0]
                                 : shell.label("Pronto · nessuna operazione in corso", "Ready · No operation running")
                             color: maintenanceService.busy ? "#e4b66d" : "#9eafc8"

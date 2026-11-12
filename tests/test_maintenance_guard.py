@@ -284,3 +284,31 @@ def test_completed_journal_proves_directory_is_not_an_interrupted_write(tmp_path
     names = [p.name for p in (tmp_path / 'maintenance-journal').iterdir()]
     assert names == ['completed.json']
     assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_repeated_verified_operations_replace_completed_marker_without_stale_blocks(tmp_path):
+    path = tmp_path / 'guard'
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    for _ in range(2):
+        with subject.operation() as permit:
+            assert subject.is_blocked()
+            permit.resolve()
+        assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+    assert [p.name for p in (tmp_path / 'maintenance-journal').iterdir()] == ['completed.json']
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_corrupt_completed_marker_fails_closed(tmp_path):
+    path = tmp_path / 'guard'
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    with subject.operation() as permit:
+        permit.resolve()
+    (tmp_path / 'maintenance-journal' / 'completed.json').write_bytes(b'corrupt')
+    reopened = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    assert reopened.is_blocked()
+    with pytest.raises(RuntimeError):
+        with reopened.operation():
+            raise AssertionError('must not run')
+
+

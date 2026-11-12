@@ -318,20 +318,27 @@ class MaintenanceService:
                 return invoke()
             guard = self._manager("guard")
             with guard.operation() as permit:
+                # A second instance may own the mutex while the user cancels.
+                # Never execute an action that was cancelled before the lock
+                # was granted, even if it has since become available.
+                if self._cancel.is_set():
+                    permit.resolve()
+                    return {"status": "cancelled", "success": False,
+                            "message": "Cancelled before Windows maintenance began"}
                 try:
                     result = invoke()
                 except BaseException:
                     if self._completion_unknown():
                         guard.mark_unknown()  # Do not discard the journal on failure.
                     raise
-                if self._completion_unknown():
+                if self._completion_unknown() or result.get("status") == "unknown":
                     saved = guard.mark_unknown()
                     result.update(status="unknown", success=False,
                                   message="Command completion unverified. Restart Windows before maintenance.")
                     if not saved:
                         result["message"] += " " + guard.last_error
                 else:
-                    permit.resolve()  # The context removes only this completed session record.
+                    permit.resolve()  # Only verified terminal outcomes complete the record.
                 return result
         finally:
             with self._lock:

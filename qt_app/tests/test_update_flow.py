@@ -2,6 +2,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from modules.updater import Release, UpdateVerificationError, UpdateCancelled
 from qt_app.update_flow import QtUpdateFlow, production_identity
@@ -101,6 +102,44 @@ class QtUpdateFlowTests(unittest.TestCase):
         self.assertEqual(list(Path(self.temp.name).glob("Panacea-Qt-update-*")), [])
         self.assertEqual(self.calls, [])
 
+
+    def test_started_helper_job_is_returned_even_if_staging_cleanup_is_locked(self):
+        flow = self.make(True, "Panacea.exe")
+        flow.check()
+        staged = flow.download()
+        actual_unlink = Path.unlink
+
+        def locked_candidate(path, *args, **kwargs):
+            if path == staged:
+                raise PermissionError("staged file is locked after helper launch")
+            return actual_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", locked_candidate):
+            job = flow.start_verified_install()
+        self.assertEqual(job, "verified-helper-job")
+        self.assertEqual(len(self.calls), 1)
+        # The old UI must not be able to spawn the helper twice.
+        with self.assertRaises(UpdateVerificationError):
+            flow.start_verified_install()
+        self.assertEqual(len(self.calls), 1)
+
+    def test_failed_helper_spawn_removes_staging_and_allows_fresh_retry(self):
+        flow = self.make(True, "Panacea.exe")
+        flow.check()
+        staged = flow.download()
+
+        def launch_denied(*args):
+            raise PermissionError("helper process was not started")
+
+        flow.launch = launch_denied
+        with self.assertRaisesRegex(PermissionError, "not started"):
+            flow.start_verified_install()
+        self.assertFalse(staged.exists())
+        self.assertEqual(list(Path(self.temp.name).glob("Panacea-Qt-update-*")), [])
+        flow.launch = self.launch
+        self.assertTrue(flow.download().is_file())
+        self.assertEqual(flow.start_verified_install(), "verified-helper-job")
+        self.assertEqual(len(self.calls), 1)
 
 if __name__ == "__main__":
     unittest.main()

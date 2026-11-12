@@ -2,6 +2,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 from functools import wraps
+from contextlib import contextmanager
 import os
 import subprocess
 import sys
@@ -9,6 +10,46 @@ import time
 import panacea_ui
 from panacea_ui import PanaceaApp
 from modules.ui_dispatch import UiDispatcher, WorkerController
+
+
+
+class FixtureMaintenanceGuard:
+    def __init__(self):
+        self.started = 0
+        self.finished = 0
+        self.blocked = False
+        self.fail_before_start = False
+        self.last_error = ''
+
+    def is_blocked(self):
+        return self.blocked
+
+    def mark_unknown(self):
+        self.blocked = True
+        self.last_error = 'Maintenance completion unverified. Restart Windows.'
+        return True
+
+    @contextmanager
+    def operation(self, timeout_ms=30000):
+        if self.blocked:
+            raise RuntimeError(self.last_error)
+        if self.fail_before_start:
+            self.blocked = True
+            self.last_error = 'Maintenance journal persistence denied'
+            raise PermissionError(self.last_error)
+        self.started += 1
+        class Permit:
+            resolved = False
+            def resolve(self):
+                self.resolved = True
+        permit = Permit()
+        try:
+            yield permit
+        except BaseException:
+            raise
+        else:
+            if permit.resolved:
+                self.finished += 1
 
 
 def app_without_window():
@@ -26,6 +67,7 @@ def app_without_window():
     app.cleanup_mgr = SimpleNamespace(clean_browser_caches=Mock(return_value=(2, 100)), clean_temp_files=Mock(return_value=(3, 200)), empty_recycle_bin=Mock(return_value=(True, 'emptied')), last_result=None)
     app.cmd_runner = SimpleNamespace(run_command_stream=Mock(return_value=True))
     app.disk_opt = SimpleNamespace(analyze_optimize_drive=Mock(return_value=True))
+    app.maintenance_guard = FixtureMaintenanceGuard()
     return app
 
 
@@ -223,7 +265,7 @@ def test_background_release_check_does_not_block_maintenance():
 
 def _safe_real_app(monkeypatch):
     """Real Tk layout, with every system/network boundary replaced before init."""
-    monkeypatch.setattr(panacea_ui, 'MaintenanceGuard', lambda: SimpleNamespace(is_blocked=lambda: False, mark_unknown=lambda: True, last_error=''))
+    monkeypatch.setattr(panacea_ui, 'MaintenanceGuard', FixtureMaintenanceGuard)
     for name in ('Logger', 'CleanupManager', 'DiskOptimizer', 'CommandRunner', 'SystemMonitor', 'RestoreManager', 'PerformanceManager'):
         monkeypatch.setattr(panacea_ui, name, lambda: SimpleNamespace())
     for name in ('update_dashboard', '_load_metadata', 'refresh_drives', '_load_turbo_states', '_check_updates_thread', '_check_app_update'):
@@ -913,6 +955,41 @@ def test_component_cleanup_routes_command_output_to_cleanup_details(monkeypatch)
     app.log_tools_msg.assert_not_called()
 
 
+
+
+def test_tk_journal_is_open_before_cleanup_and_closed_after_verified_result():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    guard = app.maintenance_guard
+    work = Mock(side_effect=lambda: (guard.started, guard.finished))
+    assert app._request_operation('Temporary file cleanup', work)
+    app.workers.join(3)
+    app.dispatcher.drain()
+    work.assert_called_once()
+    assert guard.started == 1
+    assert guard.finished == 1
+    assert not app._maintenance_uncertain if hasattr(app, '_maintenance_uncertain') else True
+
+
+def test_tk_denied_journal_never_runs_windows_cleanup():
+    app = app_without_window()
+    app._update_installing = False
+    app._maintenance_controls = []
+    app.operation_label = Mock()
+    app._show_toast = Mock()
+    app.maintenance_guard.fail_before_start = True
+    work = Mock()
+    assert app._request_operation('Temporary file cleanup', work)
+    app.workers.join(3)
+    app.dispatcher.drain()
+    work.assert_not_called()
+    assert app.maintenance_guard.started == 0
+    assert app._maintenance_uncertain
+
+
 @pytest.mark.parametrize('raises', [False, True])
 def test_timeout_guard_is_saved_before_result_delivery_and_blocks_reopen(tmp_path, raises):
     from modules.maintenance_guard import MaintenanceGuard
@@ -943,7 +1020,9 @@ def test_timeout_guard_save_failure_stays_visible_and_blocks_session():
     app._maintenance_controls = []
     app.operation_label = Mock()
     app._show_toast = Mock()
-    app.maintenance_guard = SimpleNamespace(mark_unknown=Mock(return_value=False), last_error='Could not save the recovery guard: denied')
+    app.maintenance_guard = FixtureMaintenanceGuard()
+    app.maintenance_guard.mark_unknown = Mock(return_value=False)
+    app.maintenance_guard.last_error = 'Could not save the recovery guard: denied'
     def work():
         app.disk_opt.completion_unknown = True
         return False

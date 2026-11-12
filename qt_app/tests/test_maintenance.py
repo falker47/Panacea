@@ -226,6 +226,43 @@ class MaintenanceContracts(unittest.TestCase):
         self.assertIn("Windows Disk Cleanup opened", result["message"])
 
 
+
+    def test_cancel_while_waiting_for_maintenance_lock_never_dispatches_windows_work(self):
+        waiting, release = threading.Event(), threading.Event()
+        original = self.guard.operation
+
+        @contextmanager
+        def pending_lock(timeout_ms=30000):
+            waiting.set()
+            release.wait(3)
+            with original(timeout_ms=timeout_ms) as permit:
+                yield permit
+
+        self.guard.operation = pending_lock
+        outcome = []
+        token = self.confirm("sfc")
+        worker = threading.Thread(target=lambda: outcome.append(self.service.execute(token)))
+        worker.start()
+        try:
+            self.assertTrue(waiting.wait(2))
+            self.service.cancel()
+        finally:
+            release.set()
+            worker.join(3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(outcome[0]["status"], "cancelled")
+        self.assertEqual(self.events, [])
+        self.assertEqual(self.guard.finished, 1)
+
+    def test_explicitly_unknown_result_keeps_journal_even_without_manager_timeout_flag(self):
+        self.service._dispatch = lambda *_args, **_kwargs: {
+            "status": "unknown", "success": False, "message": "Unverified outcome",
+        }
+        result = self.service.execute(self.confirm("sfc"))
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(self.guard.marked, 1)
+        self.assertEqual(self.guard.finished, 0)
+
     def test_journal_is_armed_before_any_windows_mutation_and_resolved_on_terminal_result(self):
         def command(*args):
             self.assertEqual(self.guard.started, 1)

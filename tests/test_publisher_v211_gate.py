@@ -43,3 +43,18 @@ def test_v211_requires_all_native_gates_and_refuses_existing_unreviewed_tag():
     assert "docs/releases/2.1.1.md" in workflow
     assert "gh release download" in workflow
     assert "cmp \"release-assets/$file\" \"verify-assets/$file\"" in workflow
+
+
+def test_published_version_is_probed_only_on_disposable_windows_with_prior_binaries():
+    workflow = (WORKFLOW.parent / "verify-published-v211.yml").read_text(encoding="utf-8")
+    assert "types: [published]" in workflow
+    assert "github.event.release.tag_name == 'v2.1.1'" in workflow
+    assert "PANACEA_ALLOW_HOSTED_PROBE: 'true'" in workflow
+    assert "runs-on: windows-latest" in workflow
+    for tag in ("v2.1.0", "v2.0.2"):
+        assert tag in workflow
+    assert "hosted_windows_release_probe.py" in workflow
+    assert "upgrade-from-v210.json" in workflow
+    assert "upgrade-from-v202.json" in workflow
+    assert "UpdateClient('falker47/Panacea',old).check()" in workflow
+    assert "if: always()" in workflow

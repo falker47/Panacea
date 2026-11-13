@@ -451,7 +451,7 @@ class PanaceaApp(ctk.CTk):
             text_color=COL_GOLD, cursor='hand2', anchor='w')
         self.footer_credit.grid(row=1, column=0, sticky='w', padx=(0, 5), pady=(4, 2))
         self.footer_credit.bind(
-            '<Button-1>', lambda event: webbrowser.open('https://github.com/falker47'))
+            '<Button-1>', lambda event: webbrowser.open('https://falker47.github.io/'))
         self.footer_version = LLabel(
             self.sidebar_footer, text=f'v{VERSION}', height=16,
             font=self._font(10), text_color=MUTED, anchor='e')

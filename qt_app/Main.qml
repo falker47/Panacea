@@ -240,7 +240,7 @@ Window {
                         font.pixelSize: 10
                         color: "#e4c579"
                         elide: Text.ElideRight
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://github.com/falker47") }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://falker47.github.io/") }
                     }
                     Text { text: "v" + updateService.currentVersion + (updateService.eligible ? "" : " QA"); color: "#9eafc8"; font.pixelSize: 10 }
                 }

@@ -23,11 +23,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - name: Verify source revision
-        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - &verify-source
+        name: Verify exact source revision
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:EXPECTED_SOURCE_SHA) { throw "Unexpected source revision: $actual" }
+          "Verified source: $actual; event: $env:GITHUB_EVENT_NAME" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -76,13 +83,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - name: Verify source revision
-        shell: pwsh
-        run: |
-          if ((git rev-parse HEAD) -cne $env:SOURCE_SHA) { throw 'Unexpected checkout SHA' }
+      - *verify-source
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -126,13 +130,47 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  transport-canary:
+    name: CPython 3.12 loopback TLS control
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - *verify-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require disposable runner
+        id: guard
+        run: python -c "from scripts.update_compat.hosted import hosted_guard; hosted_guard()"
+      - name: Check urllib with default trust and a child-only PEM
+        run: python -m scripts.update_compat.tls_canary
+      - name: Remove and verify temporary TLS files
+        if: always() && steps.guard.outcome == 'success'
+        run: python -m scripts.update_compat.tls_canary --cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loopback-tls-control
+          path: build/update-compat/loopback-tls.json
+          if-no-files-found: warn
+          retention-days: 7
+
   client-acceptance:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
     timeout-minutes: 30
     env:
       PANACEA_ALLOW_HOSTED_PROBE: 'true'
-    needs: build-candidate
+    needs: [build-candidate, transport-canary]
     strategy:
       fail-fast: false
       matrix:
@@ -140,12 +178,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Verify source revision
-        shell: pwsh
-        run: |
-          if ((git rev-parse HEAD) -cne $env:SOURCE_SHA) { throw 'Unexpected checkout SHA' }
+      - *verify-source
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -180,26 +215,23 @@ jobs:
     timeout-minutes: 30
     env:
       PANACEA_ALLOW_HOSTED_PROBE: 'true'
-    needs: build-candidate
+    needs: [build-candidate, transport-canary]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {from: v2.1.1, mode: transaction}
-          - {from: v2.1.0, mode: transaction}
-          - {from: v2.0.2, mode: transaction}
-          - {from: v2.1.1, mode: rollback}
-          - {from: v2.1.1, mode: manual}
-    name: ${{ matrix.mode }} from ${{ matrix.from }}
+          - {from: v2.1.1, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.1.0, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.0.2, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.1.1, mode: rollback, label: Supplemental frozen-host rollback}
+          - {from: v2.1.1, mode: manual, label: Setup over Setup}
+    name: ${{ matrix.label }} from ${{ matrix.from }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Verify source revision
-        shell: pwsh
-        run: |
-          if ((git rev-parse HEAD) -cne $env:SOURCE_SHA) { throw 'Unexpected checkout SHA' }
+      - *verify-source
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -236,10 +268,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Verify source revision
-        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - *verify-source
       - uses: actions/download-artifact@v4
         with:
           pattern: acceptance-*

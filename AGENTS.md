@@ -49,7 +49,7 @@ covers Win32, native packaging, protected directories and Inno Setup.
   `{B6C0FB10-27BC-4E6F-9078-40F9E8B49B2D}` and `panacea-language.ini`.
 - Preserve helper dispatch with `--panacea-update-helper WORKSPACE`, startup
   acknowledgment with `--panacea-update-ready TOKEN`, and `--smoke-test`.
-  The packaged Qt entry point also supports `--smoke-backend-imports`.
+  `--smoke-backend-imports` belongs to the shipped Qt entry point only.
 - The readiness marker is `Panacea.exe.update-ready.json`. The cross-process
   mutex is `Global\PanaceaUpdater.` followed by SHA-256 of the UTF-8 encoded,
   normalized absolute target path. Acknowledge only after QML has loaded and
@@ -65,8 +65,10 @@ The general `release.yml` workflow takes a reviewed immutable source SHA and
 matching version tag and prepares a draft. Publication is a separate human
 decision. Historical version-specific publishing workflows are scoped to their
 own releases. Compatibility test stamps are temporary and must never be
-tagged, committed or published. Inspect exact-SHA Actions results before
-reporting an upgrade as verified.
+tagged, committed or published. For PR evidence, follow `ci.yml`: check out
+`github.event.pull_request.head.sha || github.sha`, compare it with `git rev-parse HEAD`,
+and record the verified SHA in the job summary. For author and publisher links,
+use the master site referenced in `packaging/Panacea.iss`.
 
 See [update compatibility](docs/validation/update-compat.md) for the probe
 matrix and report fields and [future update acceptance](docs/validation/future-updates-contract.md)

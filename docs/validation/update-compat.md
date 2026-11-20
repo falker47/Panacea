@@ -8,10 +8,11 @@ checkout SHA and the `sha` in its JSON correspond to the revision under review.
 | --- | --- |
 | `linux-contract` | Compares pytest and Qt failure IDs with the untouched base. Exercises the asset, packaging, CLI, mutex and readiness guards with test-local mutations. Records live asset order when the read token is available. |
 | `build-candidate` | Builds the real one-file executable, installer and both checksum files using the normal release scripts. `candidate.json` binds the PE version and portable digest to the checkout SHA. |
+| `transport-canary` | A CPython 3.12 child must reject a self-signed loopback HTTPS origin with default trust. A fresh child must read the fixed response with its explicit PEM. Two CONNECT requests and one successful GET prove both children used the tunnel. |
 | `client-acceptance` × five | Extracts version and client code from each pinned original binary under Python 3.12. Runs discovery, checksum and PE validation on the PR asset with an explicit in-memory opener. |
 | `client-summary` | Collects all five rows. Missing reports, wrong SHAs or unexpected canonical outcomes fail the gate. The lower-case variant is informational. |
-| `transaction` from v2.0.2, v2.1.0 and v2.1.1 | Installs pinned Setup in Program Files and checks the installed EXE pin. Runs the published replacement routine in a frozen test host. Checks the live candidate window title, installed digest, candidate client's second check, sidecar bytes, original AppId, file set and uninstall. |
-| `rollback` from v2.1.1 | Tests a purpose-built executable that exits and another that sleeps through the shipped acknowledgment deadline. Requires failed status for the expected reason, exact restored bytes, a working old smoke launch, and a subsequent successful candidate transaction in the same installation. |
+| Supplemental frozen-host transaction from v2.0.2, v2.1.0 and v2.1.1 | Installs pinned Setup in Program Files and checks the installed EXE pin. Runs the published replacement routine in a frozen test host. Checks the live candidate window title, installed digest, candidate client's second check, sidecar bytes, original AppId, file set and uninstall. |
+| Supplemental frozen-host rollback from v2.1.1 | Tests a purpose-built executable that exits and another that sleeps through the shipped acknowledgment deadline. Requires failed status for the expected reason, exact restored bytes, a working old smoke launch, and a subsequent successful candidate transaction in the same installation. |
 | `manual` from v2.1.1 | Runs candidate Setup silently over Italian v2.1.1 using the default directory and persisted language. Checks the candidate bytes, one registration, sidecar and clean uninstall. |
 
 ## Test boundary
@@ -29,13 +30,24 @@ The fixture supplies release metadata, a repository asset URL and a simulated
 302 hop to a CDN URL with a query. It logs each request. The operating system's
 trust store, proxy configuration and runner traffic need no changes.
 
-**Coverage gap.** The original `Panacea-updater.exe --panacea-update-helper`
-process, original GUI's automatic discovery and consent dialog, and real
-network/TLS transport of a PR candidate are outside this probe. A passing run
-cannot certify those paths. The legacy main.py backend-import smoke flag is a
-documented expected failure. The published Qt entry point implements that flag.
-Physical UAC prompts, abrupt power loss, third-party endpoint protection and
-the public CDN also require separate evidence.
+The transport control uses an ephemeral certificate for the IP address
+`127.0.0.1`. Its tunnel passes TLS bytes to one loopback server. Only the two
+urllib children receive proxy variables, and only the second receives
+`SSL_CERT_FILE`. The key is deleted after loading the server context. A final
+Actions step verifies temporary-file removal. The artifact contains the JSON
+result and request counts. Windows certificate stores and proxy settings
+require no modification.
+
+**Outstanding release evidence.** The untouched v2.1.1 helper must reach
+`releases/latest` with child-scoped trust, advance beyond `preparing`, and
+retain the launch environment across the process tree. This published-binary
+canary, the unchanged-helper upgrade and rollback matrix, and the installed
+GUI's discovery and confirmation flow remain open. A green loopback or
+frozen-host job cannot certify them. Physical UAC, abrupt power loss,
+third-party endpoint protection and the public CDN also require separate evidence.
+
+The CLI contract checks three options on the legacy Tk entry point and four
+on the shipped Qt entry point, including its Qt-only `--smoke-backend-imports`.
 
 ## Running and interpreting the results
 

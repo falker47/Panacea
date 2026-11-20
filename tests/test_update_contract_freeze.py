@@ -10,7 +10,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ("Panacea.exe", "Panacea.exe.sha256", "PanaceaSetup.exe", "PanaceaSetup.exe.sha256")
-FLAGS = ("--panacea-update-helper", "--panacea-update-ready", "--smoke-test", "--smoke-backend-imports")
+COMMON_FLAGS = ("--smoke-test", "--panacea-update-helper", "--panacea-update-ready")
+ENTRY_POINT_FLAGS = {
+    "main.py": COMMON_FLAGS,
+    "qt_app/main.py": (*COMMON_FLAGS, "--smoke-backend-imports"),
+}
 
 
 def read(path):
@@ -153,12 +157,11 @@ def test_legacy_first_executable_and_mutation():
         names_and_order(swapped.replace("assets/placeholder ", "assets/PanaceaSetup.exe "))
 
 
-@pytest.mark.parametrize("path", ["main.py", "qt_app/main.py"])
-@pytest.mark.parametrize("flag", FLAGS)
+@pytest.mark.parametrize(("path", "flag"), [
+    (path, flag) for path, flags in ENTRY_POINT_FLAGS.items() for flag in flags
+])
 def test_cli_flags_and_mutation(path, flag):
     source = read(path)
-    if path == "main.py" and flag == "--smoke-backend-imports" and flag not in source:
-        pytest.xfail("Legacy Tk main.py has no backend-import smoke option. The packaged Qt entry point implements it.")
     cli(source, flag)
     with pytest.raises(AssertionError, match=flag):
         cli(source.replace(flag, "--removed-option"), flag)

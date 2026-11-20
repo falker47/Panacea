@@ -36,6 +36,12 @@ Five source-mode offscreen runs under `-X importtime` yielded cumulative medians
 
 ## Hosted evidence for the reviewed commit
 
-The CI packaged-performance artifact contains `bundle.json` with entry sizes and the twenty largest compressed entries, per-tab capture metadata, `package-sizes.json`, and `packaged.json`. The startup probe hashes the official v2.1.1 download before launching either binary. It alternates sample order and measures five fresh launches of each executable on the same runner. The gate uses the medians to a visible client window of at least 640 × 400 pixels. It reports the GUI process and bootloader working-set high-water marks separately. OS filesystem caches stay enabled.
+The CI packaged-performance artifact contains `bundle.json` with entry sizes and the twenty largest compressed entries, per-tab capture metadata, `package-sizes.json`, and `packaged.json`. The startup probe hashes the official v2.1.1 download before launching either binary.
 
-The protected installer artifact records seconds from before process creation to the first observed matching token with `ready=true`. The polling interval is 10 ms. The limit is 15 seconds and the subsequent cleanup gate still requires the marker and backup to disappear. These hosted results are pending until a same-repository PR runs the three Windows CI jobs.
+The probe schedules five rounds on the same runner, alternating which executable starts first. Each fresh process must exit with code zero, map a visible client window of at least 640 × 400 pixels and provide a positive GUI peak working set. The report records GUI and bootloader working sets separately. OS filesystem caches stay enabled.
+
+A failed candidate sample ends the gate immediately. A failed v2.1.1 attempt goes into `packaged.json` under `baseline_anomalies` with the full measurement row, sample number and attempt number. The probe makes up to two extra attempts in that baseline slot. The first valid attempt counts once. If all three attempts fail, the probe continues with the next scheduled launch.
+
+The candidate median must be at most **1.1×** the median of at least **three valid baseline samples**. With fewer than three, `comparison.result` is `inconclusive`. The step fails, identifies the unstable baseline and preserves the candidate measurements and every baseline anomaly. The executable and uncompressed archive caps remain 70 MB and 180 MB respectively.
+
+The protected installer artifact records seconds from before process creation to the first observed matching token with `ready=true`. The polling interval is 10 ms. The limit is 15 seconds and the subsequent cleanup gate still requires the marker and backup to disappear. The three Windows CI jobs record this evidence for the reviewed commit.

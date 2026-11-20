@@ -114,12 +114,61 @@ def smoke_sample(executable):
 
 
 BASELINE_SHA256 = "c74c860f3c6e132301b4020cf0a9abc296f183c2af2be508444713e9583cbd98"
+BASELINE_LABEL = "v2.1.1"
+BASELINE_RETRIES = 2
+MIN_BASELINE_SAMPLES = 3
 
 
 def compare(candidate, baseline):
     ratio = candidate / baseline
+    passed = candidate <= 1.1 * baseline
     return {"candidate_to_baseline_ratio": ratio, "improvement_percent": (1 - ratio) * 100,
-            "maximum_ratio": 1.1, "passed": candidate <= 1.1 * baseline}
+            "maximum_ratio": 1.1, "passed": passed, "result": "passed" if passed else "failed"}
+
+
+def record_sample(label, executable, number, report):
+    is_baseline = label == BASELINE_LABEL
+    attempts = 1 + BASELINE_RETRIES if is_baseline else 1
+    for attempt in range(1, attempts + 1):
+        row = {**smoke_sample(executable), "sample": number, "attempt": attempt}
+        valid = (row.get("exit_code") == 0 and bool(row.get("window"))
+                 and row.get("mapped_window_seconds") is not None
+                 and (row.get("gui_peak_working_set_bytes") or 0) > 0)
+        if is_baseline and not valid:
+            report["baseline_anomalies"].append(row)
+            continue
+        report["runs"][label]["samples"].append(row)
+        if not valid:
+            raise RuntimeError(f"{label} failed native smoke sample {number}: {row}")
+        return
+
+
+def measure_startup(paths, count, report):
+    runs = report["runs"]
+    for index in range(count):
+        for label in (reversed(paths) if index % 2 else paths):
+            record_sample(label, paths[label], index + 1, report)
+
+    for label, run in runs.items():
+        samples = run["samples"]
+        run["peak_working_set_bytes"] = max((row["gui_peak_working_set_bytes"] for row in samples), default=None)
+        if label != BASELINE_LABEL or len(samples) >= MIN_BASELINE_SAMPLES:
+            run["median_mapped_window_seconds"] = statistics.median(row["mapped_window_seconds"] for row in samples)
+
+    if BASELINE_LABEL not in runs:
+        return
+    baseline = runs[BASELINE_LABEL]
+    valid_count = len(baseline["samples"])
+    if valid_count < MIN_BASELINE_SAMPLES:
+        report["comparison"] = {"result": "inconclusive", "passed": False, "valid_baseline_samples": valid_count,
+                                "minimum_valid_baseline_samples": MIN_BASELINE_SAMPLES}
+        raise RuntimeError(f"Same-runner comparison inconclusive: {BASELINE_LABEL} baseline was unstable "
+                           f"({valid_count}/{count} valid samples, at least {MIN_BASELINE_SAMPLES} required). "
+                           f"All {count} candidate smoke samples passed.")
+    report["comparison"] = compare(runs["candidate"]["median_mapped_window_seconds"],
+                                   baseline["median_mapped_window_seconds"])
+    if not report["comparison"]["passed"]:
+        raise RuntimeError("Candidate startup exceeds 110% of the same-runner v2.1.1 median")
 
 
 def main():
@@ -133,6 +182,7 @@ def main():
         parser.error("--samples must be positive")
     paths = {"candidate": args.exe.resolve(strict=True)}
     report = {"environment": platform.platform(), "python_harness": platform.python_version(), "runs": {},
+              "baseline_anomalies": [],
               "method": "Fresh --smoke-test processes, interleaved with alternating first launch. "
                         "Time to a visible 640x400 client window, including extraction. "
                         "OS peak working sets sampled separately for GUI and one-file loader."}
@@ -143,29 +193,14 @@ def main():
                     or os.getenv("RUNNER_ENVIRONMENT") != "github-hosted"
                     or os.getenv("PANACEA_ALLOW_HOSTED_PROBE") != "true"):
                 raise RuntimeError("Release baseline requires the authorized GitHub-hosted runner")
-            paths["v2.1.1"] = args.baseline.resolve(strict=True)
+            paths[BASELINE_LABEL] = args.baseline.resolve(strict=True)
         for label, path in paths.items():
             with path.open("rb") as stream:
                 digest = hashlib.file_digest(stream, "sha256").hexdigest()
-            if label == "v2.1.1" and digest != BASELINE_SHA256:
+            if label == BASELINE_LABEL and digest != BASELINE_SHA256:
                 raise ValueError("Published v2.1.1 digest differs from the pin")
             report["runs"][label] = {"executable": str(path), "sha256": digest, "samples": []}
-        for index in range(args.samples):
-            for label in (reversed(paths) if index % 2 else paths):
-                row = smoke_sample(paths[label])
-                row["sample"] = index + 1
-                report["runs"][label]["samples"].append(row)
-                if row["exit_code"] or row["mapped_window_seconds"] is None or not row["gui_peak_working_set_bytes"]:
-                    raise RuntimeError(f"{label} failed native smoke sample {index + 1}: {row}")
-        for run in report["runs"].values():
-            run["median_mapped_window_seconds"] = statistics.median(
-                row["mapped_window_seconds"] for row in run["samples"])
-            run["peak_working_set_bytes"] = max(row["gui_peak_working_set_bytes"] for row in run["samples"])
-        if args.baseline:
-            report["comparison"] = compare(report["runs"]["candidate"]["median_mapped_window_seconds"],
-                                           report["runs"]["v2.1.1"]["median_mapped_window_seconds"])
-            if not report["comparison"]["passed"]:
-                raise RuntimeError("Candidate startup exceeds 110% of the same-runner v2.1.1 median")
+        measure_startup(paths, args.samples, report)
     except Exception as exc:
         report["error"] = str(exc)
         raise

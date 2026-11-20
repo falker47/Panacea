@@ -29,6 +29,7 @@ from modules.localization import read_installed_language  # noqa: E402
 def disposable_guard():
     if (os.name != "nt" or os.getenv("GITHUB_ACTIONS") != "true"
             or os.getenv("RUNNER_OS") != "Windows"
+            or os.getenv("RUNNER_ENVIRONMENT") != "github-hosted"
             or os.getenv("PANACEA_ALLOW_HOSTED_PROBE") != "true"):
         raise RuntimeError("Only an authorized GitHub-hosted disposable Windows runner is allowed.")
     temp = Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)
@@ -57,7 +58,17 @@ def sha256(path):
     return h.hexdigest()
 
 
-def actual_install_test(args):
+def marker_state(path):
+    # A regular Python open on Windows can block the atomic readiness rename
+    # or unlink. Observe with FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE.
+    import _winapi
+    import msvcrt
+    handle = _winapi.CreateFile(str(path), _winapi.GENERIC_READ, 7, 0, _winapi.OPEN_EXISTING, 0, 0)
+    with os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb") as stream:
+        return json.load(stream)
+
+
+def actual_install_test(args, report):
     temp, program_files = disposable_guard()
     portable = Path(args.portable).resolve(strict=True)
     expected = parse_checksum(Path(args.checksum).read_bytes())
@@ -73,12 +84,12 @@ def actual_install_test(args):
     start_link = (Path(os.environ["ProgramData"]) / "Microsoft" / "Windows" /
                   "Start Menu" / "Programs" / "Panacea.lnk")
     previous_link = start_link.exists()
-    report = {"setup_sha256": match.group(1).lower(), "portable_sha256": expected,
+    report.update({"setup_sha256": match.group(1).lower(), "portable_sha256": expected,
               "directory": str(dest), "checks": {},
               "unverified": ["Interactive UAC prompts (hosted runner has UAC off)",
                              "In-app online update from an unpublished future version",
                              "Windows reboot and forcibly interrupted update helper",
-                             "Turbo, Resurrection, repairs, real display DPI"]}
+                             "Turbo, Resurrection, repairs, real display DPI"]})
     installed = False
     try:
         run_checked([setup, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
@@ -132,9 +143,11 @@ def actual_install_test(args):
         report["checks"]["real_installed_image_rollback"] = "PASS"
 
         child = None
+        launched_at = None
         try:
             def launch(path, token):
-                nonlocal child
+                nonlocal child, launched_at
+                launched_at = time.perf_counter()
                 child = subprocess.Popen(
                     [str(path), "--panacea-update-ready", token],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -146,6 +159,25 @@ def actual_install_test(args):
             result = install_verified(portable, app, expected, launch, protected=True)
             if not result.success:
                 raise RuntimeError("In-place update of installer installation failed: " + str(result.error))
+            marker = readiness_path(app)
+            timing = report["acknowledgment"] = {"budget_seconds": 15, "ready_seconds": None}
+            while True:
+                try:
+                    state = marker_state(marker)
+                except FileNotFoundError as exc:
+                    raise RuntimeError("Readiness marker was removed before ready=true was observed.") from exc
+                elapsed = time.perf_counter() - launched_at
+                timing["observation_seconds"] = elapsed
+                if state.get("ready") is True and state.get("token") == result.readiness_token:
+                    timing["ready_seconds"] = elapsed
+                if elapsed > timing["budget_seconds"]:
+                    raise RuntimeError(f"Protected readiness exceeded 15 seconds ({elapsed:.3f}s).")
+                if timing["ready_seconds"] is not None:
+                    break
+                if child.poll() is not None:
+                    raise RuntimeError("New packaged image exited before readiness.")
+                time.sleep(0.01)
+
             deadline = time.monotonic() + 50
             while time.monotonic() < deadline:
                 if not readiness_path(app).exists() and not result.backup.exists():
@@ -217,7 +249,7 @@ def main():
     args = parser.parse_args()
     report = {"status": "FAIL"}
     try:
-        report = actual_install_test(args)
+        actual_install_test(args, report)
         report["status"] = "PASS"
     except Exception as exc:
         report["error"] = str(exc)

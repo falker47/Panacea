@@ -59,44 +59,122 @@ def usable_candidate_window(executable):
     return observed[0] if observed else None
 
 
+class ProcessMemoryCounters(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+    ]
+
+
+def peak_working_set(pid):
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    query = kernel.K32GetProcessMemoryInfo
+    query.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessMemoryCounters), wintypes.DWORD]
+    handle = kernel.OpenProcess(0x1000 | 0x0010, False, pid)
+    if not handle:
+        return 0  # Process may have exited between the window check and sampling.
+    try:
+        counters = ProcessMemoryCounters()
+        if query(handle, ctypes.byref(counters), ctypes.sizeof(counters)):
+            return counters.PeakWorkingSetSize
+        return 0
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def smoke_sample(executable):
+    start = time.perf_counter()
+    process = subprocess.Popen([str(executable), '--smoke-test'])
+    ready = None
+    window = None
+    peak_gui = peak_loader = 0
+    try:
+        while process.poll() is None and time.perf_counter() - start < 30:
+            if window is None:
+                window = usable_candidate_window(executable)
+                if window:
+                    ready = time.perf_counter() - start
+            if window:
+                peak_gui = max(peak_gui, peak_working_set(window["pid"]))
+            peak_loader = max(peak_loader, peak_working_set(process.pid))
+            time.sleep(0.02)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+    return {"mapped_window_seconds": ready, "window": window,
+            "gui_peak_working_set_bytes": peak_gui, "loader_peak_working_set_bytes": peak_loader,
+            "total_smoke_seconds": time.perf_counter() - start, "exit_code": process.returncode}
+
+
+BASELINE_SHA256 = "c74c860f3c6e132301b4020cf0a9abc296f183c2af2be508444713e9583cbd98"
+
+
+def compare(candidate, baseline):
+    ratio = candidate / baseline
+    return {"candidate_to_baseline_ratio": ratio, "improvement_percent": (1 - ratio) * 100,
+            "maximum_ratio": 1.1, "passed": candidate <= 1.1 * baseline}
+
+
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--samples', type=int, default=5)
+    parser.add_argument('--baseline', type=Path, help="Pinned v2.1.1 on the authorized disposable runner")
     args = parser.parse_args()
-    executable = args.exe.resolve(strict=True)
-    samples = []
-    for index in range(args.samples):
-        start = time.perf_counter()
-        # Qt windows respect inherited hidden-startup flags; never hide
-        # the launch we are measuring for actual Windows visibility.
-        process = subprocess.Popen([str(executable), '--smoke-test'])
-        ready = None
-        observed = None
-        try:
-            while process.poll() is None and time.perf_counter() - start < 30:
-                if ready is None:
-                    observed = usable_candidate_window(executable)
-                    if observed:
-                        ready = time.perf_counter() - start
-                time.sleep(0.02)
-            process.wait(timeout=1)
-            elapsed = time.perf_counter() - start
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait(timeout=5)
-        samples.append({'sample': index + 1, 'mapped_window_seconds': ready,
-                        'window': observed, 'total_smoke_seconds': elapsed, 'exit_code': process.returncode})
-        if process.returncode != 0 or ready is None:
-            raise RuntimeError(f'Candidate did not pass safe native startup: {samples[-1]}')
-    result = {'environment': platform.platform(), 'python_harness': platform.python_version(),
-        'executable': str(executable), 'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
-        'method': 'Five sequential fresh packaged --smoke-test launches. Native visible client window at least640x400, checked every20ms. Includes onefile extraction. No UAC/maintenance, no OS cache purge, no old EXE executed. Fixed1.5s observation affects total duration, not mapped-window time.',
-        'samples': samples, 'median_mapped_window_seconds': statistics.median(s['mapped_window_seconds'] for s in samples)}
-    args.output.write_text(json.dumps(result, indent=2), encoding='utf-8')
-    print(json.dumps(result, indent=2))
+    if args.samples < 1:
+        parser.error("--samples must be positive")
+    paths = {"candidate": args.exe.resolve(strict=True)}
+    report = {"environment": platform.platform(), "python_harness": platform.python_version(), "runs": {},
+              "method": "Fresh --smoke-test processes, interleaved with alternating first launch. "
+                        "Time to a visible 640x400 client window, including extraction. "
+                        "OS peak working sets sampled separately for GUI and one-file loader."}
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if args.baseline:
+            if (os.name != "nt" or os.getenv("GITHUB_ACTIONS") != "true"
+                    or os.getenv("RUNNER_ENVIRONMENT") != "github-hosted"
+                    or os.getenv("PANACEA_ALLOW_HOSTED_PROBE") != "true"):
+                raise RuntimeError("Release baseline requires the authorized GitHub-hosted runner")
+            paths["v2.1.1"] = args.baseline.resolve(strict=True)
+        for label, path in paths.items():
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if label == "v2.1.1" and digest != BASELINE_SHA256:
+                raise ValueError("Published v2.1.1 digest differs from the pin")
+            report["runs"][label] = {"executable": str(path), "sha256": digest, "samples": []}
+        for index in range(args.samples):
+            for label in (reversed(paths) if index % 2 else paths):
+                row = smoke_sample(paths[label])
+                row["sample"] = index + 1
+                report["runs"][label]["samples"].append(row)
+                if row["exit_code"] or row["mapped_window_seconds"] is None or not row["gui_peak_working_set_bytes"]:
+                    raise RuntimeError(f"{label} failed native smoke sample {index + 1}: {row}")
+        for run in report["runs"].values():
+            run["median_mapped_window_seconds"] = statistics.median(
+                row["mapped_window_seconds"] for row in run["samples"])
+            run["peak_working_set_bytes"] = max(row["gui_peak_working_set_bytes"] for row in run["samples"])
+        if args.baseline:
+            report["comparison"] = compare(report["runs"]["candidate"]["median_mapped_window_seconds"],
+                                           report["runs"]["v2.1.1"]["median_mapped_window_seconds"])
+            if not report["comparison"]["passed"]:
+                raise RuntimeError("Candidate startup exceeds 110% of the same-runner v2.1.1 median")
+    except Exception as exc:
+        report["error"] = str(exc)
+        raise
+    finally:
+        # Preserve the original single-executable report fields for existing readers.
+        report.update(report["runs"].get("candidate", {}))
+        payload = json.dumps(report, indent=2)
+        args.output.write_text(payload + "\n", encoding="utf-8")
+        print(payload)
 
 
 if __name__ == '__main__':

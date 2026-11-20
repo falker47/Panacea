@@ -146,7 +146,7 @@ def _kernel_api():
 
 
 @contextmanager
-def _windows_handle(path, delete=False):
+def _windows_handle(path, delete=False, read_for_delete=False):
     """Deny data-write/delete sharing and validate the actual opened object.
 
     Attribute-only opens bypass sharing rules, so share flags alone cannot
@@ -161,7 +161,7 @@ def _windows_handle(path, delete=False):
     native = '\\\\?\\' + _lexical_path(path)
     # Attribute-only opens do not participate in Windows sharing rules.
     # LIST_DIRECTORY makes the deny-delete lock effective (READ_DATA for preview files).
-    access = 0x80 | (0x10000 if delete else 1)
+    access = 0x80 | (0x10000 if delete else 1) | (1 if read_for_delete else 0)
     handle = kernel.CreateFileW(native, access, 1, None, 3, 0x02200000, None)
     if handle == wintypes.HANDLE(-1).value:
         raise ctypes.WinError(ctypes.get_last_error())

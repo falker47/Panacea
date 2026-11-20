@@ -1,30 +1,95 @@
 import QtQuick
-import QtQuick.Window
+import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
+import "qml"
+import "qml/components"
+import "qml/pages" as Pages
 
-Window {
+Basic.ApplicationWindow {
     id: shell
-    width: 1020
-    height: 680
+    width: 1160
+    height: 760
     minimumWidth: 760
     minimumHeight: 480
     visible: true
-    title: "Panacea " + updateService.currentVersion + (updateService.eligible ? "" : " · Qt QA")
-    color: "#0b1525"
+    title: "Panacea " + updateService.currentVersion + (updateService.eligible ? "" : Theme.tr("shell.qa"))
+    color: Theme.bg
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.fontBody
+    palette.window: Theme.bg
+    palette.windowText: Theme.text
+    palette.base: Theme.surface
+    palette.button: Theme.surfaceAlt
+    palette.buttonText: Theme.text
+    palette.text: Theme.text
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.onAccent
 
-    property string language: applicationLanguage
     property int currentTab: 0
+    readonly property string section: sectionIds[currentTab]
+    readonly property string language: i18n.language
+    property int visitedMask: 1
     property int loadedMask: 0
-    property var visited: [true, false, false, false, false]
-    function label(it, en) { return language === "it" ? it : en }
-    Component.onCompleted: maintenanceService.setLanguage(language)
-    onLanguageChanged: maintenanceService.setLanguage(language)
+    property string queuedAction: ""
+    readonly property bool compact: width < 1000 || appSettings.sidebarCollapsed
+    readonly property bool occupied: maintenanceService.busy || readService.busy || updateService.busy
+    readonly property bool inDialog: confirmSheet.visible || whatsNew.visible || paletteDialog.visible
+    readonly property bool pendingConsent: maintenanceService.awaitingConfirmation || updateService.pending
+    readonly property string activitySection: maintenanceService.busy ? maintenanceService.activeSection :
+        updateService.busy ? "updates" : ({"temp_preview":"cleanup", "drives":"performance",
+                                         "guard_status":"guided", "turbo_status":"performance"})[readService.lastAction] || "home"
+    readonly property string operationTitle: maintenanceService.lastAction && sectionActions[maintenanceService.activeSection] &&
+        sectionActions[maintenanceService.activeSection].indexOf(maintenanceService.lastAction) >= 0
+        ? Theme.tr("action." + maintenanceService.lastAction + ".title") : maintenanceService.lastTitle
+    readonly property string activityText: maintenanceService.busy ?
+        Theme.tr("activity." + (maintenanceService.resultStatus === "cancelling" ? "cancelling" : "running"),
+                 {action: operationTitle}) : updateService.busy ? Theme.tr(updateService.status, updateService.statusParams)
+        : Theme.tr("activity.read")
+
+    function navigate(id) {
+        const index = sectionIds.indexOf(id)
+        if (index >= 0 && !pendingConsent)
+            currentTab = index
+    }
+    function tryPrepare() {
+        if (!queuedAction || occupied || pendingConsent || !(loadedMask & (1 << currentTab)))
+            return
+        const page = pageLoaders.itemAt(currentTab).item
+        if (!page || !page.ready) return
+        const action = queuedAction
+        queuedAction = ""
+        if (!page.prepareAction(action))
+            feedback.present(Theme.tr("maintenance.unavailable"), "warning")
+    }
+    function synchronizeDialogs() {
+        if (pendingConsent) {
+            if (paletteDialog.visible) paletteDialog.close()
+            if (whatsNew.visible) whatsNew.close()
+            if (!confirmSheet.visible) confirmSheet.open()
+        } else {
+            if (confirmSheet.visible) confirmSheet.close()
+            if (appSettings.whatsNewVersion && !whatsNew.visible && !paletteDialog.visible)
+                whatsNew.open()
+        }
+    }
+    onPendingConsentChanged: Qt.callLater(synchronizeDialogs)
+    onOccupiedChanged: if (!occupied) Qt.callLater(tryPrepare)
     onCurrentTabChanged: {
-        var visits = visited.slice()
-        visits[currentTab] = true
-        visited = visits
-        if (!qaSmokeMode && currentTab === 2) readService.request("drives")
-        if (!qaSmokeMode && currentTab === 3) readService.request("turbo_status")
+        queuedAction = ""
+        visitedMask |= (1 << currentTab)
+        const destination = sectionIds[currentTab]
+        maintenanceService.setSection(destination)
+        if (!qaSmokeMode) {
+            if (destination === "home") {
+                readService.request("hardware")
+                readService.request("windows_updates")
+            } else if (destination === "repair" || destination === "performance") {
+                readService.request("drives")
+                if (destination === "performance") readService.request("turbo_status")
+            } else if (destination === "guided") {
+                readService.request("guard_status")
+            }
+        }
     }
     onClosing: function(event) {
         if (maintenanceService.busy || updateService.installing) {
@@ -32,460 +97,344 @@ Window {
             if (maintenanceService.busy) maintenanceService.cancel()
         }
     }
-    Connections {
-        target: readService
-        property bool wasBusy: false
-        function onChanged() {
-            if (!qaSmokeMode && readService.busy && !wasBusy && readService.lastAction === "temp_preview")
-                shell.currentTab = 1
-            wasBusy = readService.busy
-        }
-    }
-    Connections {
-        target: maintenanceService
-        property bool wasBusy: false
-        function onChanged() {
-            if (!qaSmokeMode && maintenanceService.busy && !wasBusy) {
-                var section = maintenanceService.activeSection
-                if (section === "cleaning") shell.currentTab = 1
-                else if (section === "tools" || section === "disk") shell.currentTab = 2
-                else if (section === "resurrect") shell.currentTab = 4
+    Component.onCompleted: Qt.callLater(synchronizeDialogs)
+
+    Shortcut { sequence: "Ctrl+1"; enabled: !shell.inDialog; onActivated: shell.navigate("home") }
+    Shortcut { sequence: "Ctrl+2"; enabled: !shell.inDialog; onActivated: shell.navigate("cleanup") }
+    Shortcut { sequence: "Ctrl+3"; enabled: !shell.inDialog; onActivated: shell.navigate("startup") }
+    Shortcut { sequence: "Ctrl+4"; enabled: !shell.inDialog; onActivated: shell.navigate("repair") }
+    Shortcut { sequence: "Ctrl+5"; enabled: !shell.inDialog; onActivated: shell.navigate("performance") }
+    Shortcut { sequence: "Ctrl+6"; enabled: !shell.inDialog; onActivated: shell.navigate("guided") }
+    Shortcut { sequence: "Ctrl+,"; enabled: !shell.inDialog; onActivated: shell.navigate("settings") }
+    Shortcut { sequence: "Ctrl+K"; enabled: !shell.inDialog; onActivated: paletteDialog.open() }
+
+    component Destination: Basic.Button {
+        id: dest
+        required property string modelData
+        objectName: "nav_" + modelData
+        Layout.fillWidth: true
+        Layout.preferredHeight: shell.height < 600 ? 34 : 42
+        text: Theme.tr("nav." + modelData)
+        readonly property bool selected: shell.section === modelData
+        readonly property color ink: selected ? Theme.accent : Theme.textMuted
+        Accessible.name: text
+        Accessible.role: Accessible.PageTab
+        Accessible.selected: selected
+        Basic.ToolTip.visible: shell.compact && hovered
+        Basic.ToolTip.text: text
+        hoverEnabled: true
+        leftPadding: shell.compact ? 0 : 12
+        rightPadding: leftPadding
+        contentItem: RowLayout {
+            spacing: shell.compact ? 0 : 12
+            Item { Layout.fillWidth: true; visible: shell.compact }
+            Image {
+                Layout.preferredWidth: 20
+                Layout.preferredHeight: 20
+                sourceSize.width: 24
+                sourceSize.height: 24
+                source: Theme.icon(dest.modelData, dest.ink)
             }
-            wasBusy = maintenanceService.busy
+            BodyText {
+                visible: !shell.compact
+                Layout.fillWidth: true
+                text: dest.text
+                font.weight: dest.selected ? Font.DemiBold : Font.Normal
+                font.pixelSize: Theme.fontBody
+                color: dest.selected ? Theme.text : Theme.textMuted
+                maximumLineCount: 1
+                elide: Text.ElideRight
+            }
+            BodyText {
+                visible: !shell.compact && dest.modelData === "updates" && updateService.available
+                text: updateService.availableVersion
+                color: Theme.accent
+                font.pixelSize: Theme.fontSmall
+                Accessible.ignored: true
+            }
+            Item { Layout.fillWidth: true; visible: shell.compact }
         }
+        background: Rectangle {
+            color: dest.selected || dest.hovered ? Theme.surfaceAlt : "transparent"
+            radius: Theme.radiusS
+            border.width: dest.visualFocus ? 2 : 0
+            border.color: Theme.focus
+            Rectangle {
+                visible: dest.selected
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 3
+                height: 18
+                radius: 1
+                color: Theme.accent
+            }
+            Rectangle {
+                visible: shell.compact && dest.modelData === "updates" && updateService.available
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 2
+                width: 15
+                height: width
+                radius: width/2
+                color: Theme.accent
+                Image { anchors.centerIn: parent; width: 11; height: 11; source: Theme.icon("download", Theme.onAccent) }
+            }
+        }
+        Accessible.description: modelData === "updates" && updateService.available ?
+            Theme.tr("activity.updateAvailable", {version: updateService.availableVersion}) : ""
+        onClicked: shell.navigate(modelData)
     }
-
-    readonly property var tabs: [
-        { name: "Dashboard", detail: shell.label("Panoramica", "Overview"), icon: "dashboard" },
-        { name: "Cleaning", detail: shell.label("Spazio e pulizia", "Space & Cleanup"), icon: "clean" },
-        { name: "Tools", detail: shell.label("Diagnostica e riparazione", "Diagnostics & Repair"), icon: "tools" },
-        { name: "Turbo", detail: shell.label("Prestazioni e avvio", "Performance & Startup"), icon: "turbo" },
-        { name: "Resurrect", detail: shell.label("Manutenzione guidata", "Guided Maintenance"), icon: "resurrect" }
-    ]
-
-    Shortcut { sequence: "Ctrl+1"; onActivated: shell.currentTab = 0 }
-    Shortcut { sequence: "Ctrl+2"; onActivated: shell.currentTab = 1 }
-    Shortcut { sequence: "Ctrl+3"; onActivated: shell.currentTab = 2 }
-    Shortcut { sequence: "Ctrl+4"; onActivated: shell.currentTab = 3 }
-    Shortcut { sequence: "Ctrl+5"; onActivated: shell.currentTab = 4 }
 
     RowLayout {
         anchors.fill: parent
         spacing: 0
         Rectangle {
-            Layout.preferredWidth: 302
+            id: sidebar
+            objectName: "sidebar"
+            Layout.preferredWidth: shell.compact ? 64 : 240
             Layout.fillHeight: true
-            color: "#0e192b"
+            color: Theme.surface
+            Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 11
-                anchors.rightMargin: 11
-                anchors.topMargin: shell.height < 620 ? 10 : 20
-                anchors.bottomMargin: 10
-                spacing: shell.height < 620 ? 4 : 12
-
+                anchors.margins: shell.compact ? 8 : 12
+                spacing: shell.height < 600 ? 3 : 6
                 RowLayout {
-                    id: sidebarBrandRow
                     Layout.fillWidth: true
-                    Layout.preferredHeight: shell.height < 620 ? 65 : 112
-                    Layout.bottomMargin: shell.height < 620 ? 0 : 11
-                    spacing: 9
+                    Layout.preferredHeight: shell.height < 600 ? 40 : 64
+                    Layout.leftMargin: shell.compact ? 0 : 8
+                    spacing: 8
                     Image {
                         objectName: "brandLogo"
-                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: shell.compact ? 36 : 38
+                        Layout.preferredHeight: shell.compact ? 36 : 38
+                        Layout.alignment: Qt.AlignCenter
                         source: Qt.resolvedUrl("../assets/panacea_icon.png")
-                        sourceSize.width: 148
-                        sourceSize.height: 148
+                        sourceSize.width: 76
+                        sourceSize.height: 76
                         fillMode: Image.PreserveAspectFit
-                        Layout.preferredWidth: shell.height < 620 ? 74 : 82
-                        Layout.preferredHeight: shell.height < 620 ? 74 : 82
-                        Accessible.role: Accessible.Graphic
                         Accessible.name: "Panacea"
+                        Accessible.role: Accessible.Graphic
                     }
-                    ColumnLayout {
+                    BodyText {
+                        visible: !shell.compact
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 0
-                        Text {
-                            objectName: "brandWordmark"
-                            text: "Panacea"
-                            font.family: "Segoe UI"
-                            font.pixelSize: shell.height < 620 ? 32 : 38
-                            font.bold: true
-                            color: "#f1f3f8"
-                        }
-                        Text {
-                            objectName: "brandTagline"
-                            text: "SYSTEM MAINTENANCE"
-                            font.family: "Segoe UI Semibold"
-                            font.pixelSize: shell.height < 620 ? 11 : 12
-                            font.bold: true
-                            color: "#e4c579"
-                        }
+                        text: "Panacea"
+                        color: Theme.text
+                        font.pixelSize: Theme.fontTitle
+                        font.weight: Font.DemiBold
+                    }
+                    IconButton {
+                        visible: !shell.compact
+                        glyph: "panel"
+                        text: Theme.tr("sidebar.collapse")
+                        variant: "ghost"
+                        onClicked: appSettings.sidebarCollapsed = true
                     }
                 }
-
-                Repeater {
-                    model: shell.tabs
-                    Rectangle {
-                        id: navEntry
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: shell.height < 620 ? 43 : 52
-                        Layout.topMargin: shell.height < 620 ? 2 : 6
-                        radius: 6
-                        color: shell.currentTab === index ? "#263a56" : "transparent"
-                        border.width: 1
-                        border.color: activeFocus ? "#76b6e2" : shell.currentTab === index ? "#e4c579" : "transparent"
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: modelData.detail
-                        function activate() { shell.currentTab = index }
-                        Keys.onSpacePressed: activate()
-                        Keys.onReturnPressed: activate()
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 8
-                            spacing: 12
-                            Image {
-                                source: "image://panacea-nav/" + modelData.icon + "/" + (shell.currentTab === index ? "active" : "idle")
-                                fillMode: Image.PreserveAspectFit
-                                sourceSize.width: 96
-                                sourceSize.height: 96
-                                Layout.preferredWidth: 35
-                                Layout.preferredHeight: 35
-                                opacity: shell.currentTab === index ? 1 : 0.73
-                            }
-                            Text {
-                                text: modelData.detail
-                                color: shell.currentTab === index ? "#f1f3f8" : "#9eafc8"
-                                font.family: "Segoe UI"
-                                font.pixelSize: 16
-                                font.weight: Font.DemiBold
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: navEntry.activate()
-                        }
-                    }
-                }
-
-                Item { Layout.fillHeight: true }
-
-                Rectangle {
+                AppButton {
+                    objectName: "openPalette"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: updateColumn.implicitHeight + 18
-                    color: "#1b2b44"
-                    border.color: "#2e415c"
-                    radius: 9
-                    Column {
-                        id: updateColumn
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        anchors.top: parent.top
-                        anchors.topMargin: 10
-                        spacing: 8
-                        Text {
-                            width: parent.width
-                            text: updateService.status
-                            color: "#9eafc8"
-                            font.family: "Segoe UI"
-                            font.pixelSize: 11
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                        }
-                        Rectangle {
-                            visible: updateService.available && updateService.eligible
-                            width: parent.width; height: visible ? 31 : 0
-                            radius: 6
-                            color: !updateService.busy ? "#765f33" : "#334158"
-                            activeFocusOnTab: visible && !updateService.busy
-                            Accessible.role: Accessible.Button
-                            Accessible.name: shell.label("Installa aggiornamento verificato", "Install verified update")
-                            function activate() { if (!updateService.busy) updateService.prepareInstall() }
-                            Keys.onReturnPressed: activate()
-                            Keys.onSpacePressed: activate()
-                            Text {
-                                anchors.centerIn: parent
-                                text: shell.label("Installa aggiornamento", "Install update")
-                                color: "#f1f3f8"; font.pixelSize: 12
-                            }
-                            MouseArea { anchors.fill: parent; enabled: !updateService.busy; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
-                        }
-                        Rectangle {
-                            visible: updateService.downloading
-                            width: parent.width; height: visible ? 31 : 0
-                            radius: 6; color: "#263a56"
-                            Text { anchors.centerIn: parent; text: shell.label("Annulla download", "Cancel download"); color: "#f1f3f8"; font.pixelSize: 12 }
-                            MouseArea { anchors.fill: parent; onClicked: updateService.cancelDownload() }
-                        }
-                    }
+                    Layout.preferredHeight: shell.height < 600 ? 32 : 38
+                    text: shell.compact ? "" : Theme.tr("palette.button")
+                    Accessible.name: Theme.tr("palette.search")
+                    display: shell.compact ? Basic.AbstractButton.IconOnly : Basic.AbstractButton.TextBesideIcon
+                    glyph: "search"
+                    onClicked: paletteDialog.open()
                 }
-
-                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#2e415c" }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Panacea 2026 — Maurizio Falconi (falker47)"
-                        font.family: "Segoe UI"
-                        font.pixelSize: 10
-                        color: "#e4c579"
-                        elide: Text.ElideRight
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("https://falker47.github.io/") }
-                    }
-                    Text { text: "v" + updateService.currentVersion + (updateService.eligible ? "" : " QA"); color: "#9eafc8"; font.pixelSize: 10 }
+                Item { Layout.preferredHeight: shell.height < 600 ? 0 : 10 }
+                Repeater { model: sectionIds.slice(0, 6); Destination {} }
+                Item { Layout.fillHeight: true; Layout.minimumHeight: 0 }
+                Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+                Repeater { model: sectionIds.slice(6); Destination {} }
+                IconButton {
+                    visible: shell.width >= 1000 && shell.compact
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Theme.tr("sidebar.expand")
+                    glyph: "panel"
+                    variant: "ghost"
+                    onClicked: appSettings.sidebarCollapsed = false
                 }
             }
         }
-
-        Rectangle {
+        Item {
+            id: workspace
+            objectName: "workspace"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#0b1525"
+            readonly property int inset: width < 780 ? 16 : 32
             ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
+                id: document
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.topMargin: workspace.inset
+                anchors.bottomMargin: 12
+                width: Math.min(1100, parent.width - 2 * workspace.inset)
+                spacing: 12
+                Pages.FeatureSlot {
+                    name: "RecoveryBanner"
+                    Layout.fillWidth: true
+                    onNavigateRequested: section => shell.navigate(section)
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyText {
+                        objectName: "pageTitle"
+                        Layout.fillWidth: true
+                        text: Theme.tr("nav." + shell.section)
+                        font.pixelSize: Theme.fontDisplay
+                        font.weight: Font.DemiBold
+                        Accessible.role: Accessible.Heading
+                    }
+                    BodyText {
+                        visible: shell.section === "home"
+                        text: "v" + updateService.currentVersion
+                        color: Theme.textMuted
+                        font.pixelSize: Theme.fontSmall
+                    }
+                }
                 Item {
+                    id: pages
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
                     Repeater {
-                        model: shell.tabs.length
+                        id: pageLoaders
+                        model: sectionIds
                         Loader {
-                            id: contentLoader
+                            id: pageLoader
+                            required property int index
+                            required property string modelData
                             anchors.fill: parent
-                            property int groupIndex: index
-                            active: shell.visited[index]
+                            active: !!(shell.visitedMask & (1 << index))
                             visible: shell.currentTab === index
+                            asynchronous: true
+                            Component.onCompleted: setSource("qml/pages/SectionPage.qml", {section: modelData})
                             onLoaded: {
-                                if (item) shell.loadedMask = shell.loadedMask | (1 << groupIndex)
+                                shell.loadedMask |= (1 << index)
+                                Qt.callLater(shell.tryPrepare)
                             }
-                            sourceComponent: Component {
-                                ParityPage {
-                                    width: parent.width
-                                    height: parent.height
-                                    groupIndex: contentLoader.groupIndex
-                                    language: shell.language
-                                }
+                            Connections {
+                                target: pageLoader.item
+                                function onReadyChanged() { Qt.callLater(shell.tryPrepare) }
+                                function onNavigateRequested(section) { shell.navigate(section) }
                             }
                         }
                     }
+                    Skeleton { anchors.fill: parent; visible: !(shell.loadedMask & (1 << shell.currentTab)) }
                 }
                 Rectangle {
+                    id: activity
+                    objectName: "activityBar"
+                    visible: shell.occupied
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 30
-                    color: "#0b1525"
+                    implicitHeight: activityRow.implicitHeight + 12
+                    radius: Theme.radiusM
+                    color: Theme.surfaceAlt
                     RowLayout {
+                        id: activityRow
                         anchors.fill: parent
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 24
-                        Text {
-                            text: maintenanceService.busy ? shell.label("Manutenzione in corso · non chiudere", "Maintenance running · do not close")
-                                : readService.busy ? shell.label("Verifica in corso · nessuna manutenzione", "Reading system state · no maintenance")
-                                : maintenanceService.output.length > 0 ? maintenanceService.output.split("\n").slice(-1)[0]
-                                : shell.label("Pronto · nessuna operazione in corso", "Ready · No operation running")
-                            color: maintenanceService.busy ? "#e4b66d" : "#9eafc8"
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 8
+                        spacing: 8
+                        Image { source: Theme.icon("activity", Theme.info); Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
+                        BodyText { Layout.fillWidth: true; text: shell.activityText }
+                        BodyText {
+                            visible: maintenanceService.busy && maintenanceService.progressTotal > 0 || updateService.downloading
+                            text: updateService.downloading ? i18n.number(updateService.progress, 0) + "%" :
+                                i18n.number(maintenanceService.progressDone, 0) + " / " + i18n.number(maintenanceService.progressTotal, 0)
                         }
-                        Rectangle {
-                            width: 115; height: 24; radius: 5
-                            color: "#1b2b44"
-                            border.color: activeFocus ? "#76b6e2" : "#2e415c"
-                            activeFocusOnTab: !updateService.busy
-                            Accessible.role: Accessible.Button
-                            Accessible.name: shell.label("Controlla aggiornamenti", "Check updates")
-                            function activate() { if (!updateService.busy) updateService.check() }
-                            Keys.onReturnPressed: activate()
-                            Keys.onSpacePressed: activate()
-                            Text {
-                                anchors.centerIn: parent
-                                text: shell.label("Aggiornamenti", "Check updates")
-                                color: "#f1f3f8"
-                                font.pixelSize: 10
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: !updateService.busy
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: parent.activate()
-                            }
-                        }
-                        Rectangle {
-                            width: 40; height: 24; radius: 5
-                            color: "#263a56"
-                            activeFocusOnTab: true
-                            Accessible.role: Accessible.Button
-                            Accessible.name: shell.label("Cambia lingua", "Switch language")
-                            function activate() { shell.language = shell.language === "it" ? "en" : "it" }
-                            Keys.onReturnPressed: activate()
-                            Keys.onSpacePressed: activate()
-                            Text {
-                                anchors.centerIn: parent
-                                text: shell.language.toUpperCase()
-                                color: "#e4c579"
-                                font.pixelSize: 11
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: parent.activate()
-                            }
-                        }
-                        Text {
-                            text: "QA"
-                                visible: !updateService.eligible
-                            color: "#e4c579"
-                            font.pixelSize: 10
-                            font.bold: true
+                        AppButton { objectName: "activityShow"; text: Theme.tr("activity.show"); variant: "ghost"; onClicked: shell.navigate(shell.activitySection) }
+                        AppButton {
+                            visible: maintenanceService.busy || updateService.downloading
+                            text: Theme.tr("activity.cancel")
+                            onClicked: maintenanceService.busy ? maintenanceService.cancel() : updateService.cancelDownload()
                         }
                     }
                 }
             }
         }
     }
-
-    FocusScope {
-        id: maintenanceDialog
-        anchors.fill: parent
-        visible: maintenanceService.awaitingConfirmation && !nativeConfirmationsEnabled
-        onVisibleChanged: if (visible) cancelMaintenance.forceActiveFocus()
-        Keys.onEscapePressed: maintenanceService.reject()
-        Rectangle { anchors.fill: parent; color: "#cc07101d" }
-        MouseArea { anchors.fill: parent }
-        z: 100
-        Rectangle {
-            id: confirmationPanel
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 48, 540)
-            height: Math.min(parent.height - 48, Math.max(300, confirmationCopy.implicitHeight + 150))
-            radius: 12
-            color: "#1b2b44"
-            border.color: "#e4c579"
-            Column {
-                anchors.fill: parent
-                anchors.margins: 22
-                spacing: 20
-                Text { id: confirmationHeading; width: parent.width; wrapMode: Text.WordWrap; text: shell.label("Conferma operazione Windows", "Confirm Windows operation"); color: "#e4c579"; font.bold: true; font.pixelSize: 19 }
-                Flickable {
-                    width: parent.width
-                    height: confirmationPanel.height - 44 - confirmationHeading.height - 40 - 38
-                    contentWidth: width
-                    contentHeight: confirmationCopy.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    Text {
-                        id: confirmationCopy
-                        width: parent.width
-                        text: maintenanceService.details
-                        textFormat: Text.PlainText
-                        color: "#f1f3f8"
-                        wrapMode: Text.WordWrap
-                        font.pixelSize: 13
-                    }
-                }
-                Row {
-                    id: confirmationActions
-                    height: 38
-                    spacing: 14
-                    Rectangle {
-                        id: cancelMaintenance
-                        width: 145; height: 38; color: "#46556b"; radius: 6
-                        activeFocusOnTab: true
-                        border.color: activeFocus ? "#76b6e2" : "transparent"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: shell.label("Annulla", "Cancel")
-                        KeyNavigation.tab: confirmMaintenance
-                        KeyNavigation.backtab: confirmMaintenance
-                        Keys.onReturnPressed: maintenanceService.reject()
-                        Keys.onSpacePressed: maintenanceService.reject()
-                        Text { anchors.centerIn: parent; text: shell.label("Annulla", "Cancel"); color: "white" }
-                        MouseArea { anchors.fill: parent; onClicked: maintenanceService.reject() }
-                    }
-                    Rectangle {
-                        id: confirmMaintenance
-                        width: 190; height: 38; color: "#8e5e3f"; radius: 6
-                        activeFocusOnTab: true
-                        border.color: activeFocus ? "#76b6e2" : "transparent"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: shell.label("Confermo l'operazione", "Confirm operation")
-                        KeyNavigation.tab: cancelMaintenance
-                        KeyNavigation.backtab: cancelMaintenance
-                        Keys.onReturnPressed: maintenanceService.confirm()
-                        Keys.onSpacePressed: maintenanceService.confirm()
-                        Text { anchors.centerIn: parent; text: shell.label("Confermo l'operazione", "Confirm operation"); color: "white" }
-                        MouseArea { anchors.fill: parent; onClicked: maintenanceService.confirm() }
-                    }
-                }
-            }
+    CommandPalette {
+        id: paletteDialog
+        onChosen: function(section, action) {
+            shell.navigate(section)
+            shell.queuedAction = action
+            Qt.callLater(shell.tryPrepare)
         }
     }
-
-    Rectangle {
-        anchors.fill: parent
-        visible: updateService.pending && !nativeConfirmationsEnabled
-        color: "#cc07101d"
-        z: 110
-        MouseArea { anchors.fill: parent }
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 48, 540)
-            height: 250
-            radius: 12
-            color: "#1b2b44"
-            border.color: "#e4c579"
-            Column {
-                anchors.fill: parent
-                anchors.margins: 22
-                spacing: 17
-                Text {
-                    text: shell.label("Installa aggiornamento verificato","Install verified update")
-                    color: "#e4c579"; font.bold: true; font.pixelSize: 19
-                }
-                Text {
+    ConfirmSheet {
+        id: confirmSheet
+        objectName: "confirmationSheet"
+        title: updateService.pending ? Theme.tr("confirm.install") : maintenanceService.details.split("\n")[0]
+        details: updateService.pending ? Theme.tr(updateService.status, updateService.statusParams) :
+            maintenanceService.details.split("\n").slice(1).join("\n")
+        destructive: maintenanceService.awaitingConfirmation && maintenanceService.destructive
+        onAccepted: {
+            if (maintenanceService.awaitingConfirmation) maintenanceService.confirm()
+            else if (updateService.pending) updateService.confirmInstall()
+        }
+        onRejected: {
+            if (maintenanceService.awaitingConfirmation) maintenanceService.reject()
+            else if (updateService.pending) updateService.reject()
+        }
+    }
+    Basic.Dialog {
+        id: whatsNew
+        objectName: "whatsNew"
+        parent: Basic.Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(540, parent.width - 32)
+        modal: true
+        focus: true
+        title: Theme.tr("update.whatsNew", {version: appSettings.whatsNewVersion})
+        background: Rectangle { color: Theme.surface; radius: Theme.radiusM; border.color: Theme.controlBorder }
+        contentItem: ColumnLayout {
+            spacing: 16
+            Basic.ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(220, newsText.implicitHeight + 8)
+                contentWidth: availableWidth
+                clip: true
+                BodyText {
+                    id: newsText
                     width: parent.width
-                    text: shell.label("Scaricare, verificare SHA-256 e installare Panacea ", "Download, verify SHA-256 and install Panacea ")
-                          + updateService.availableVersion
-                          + shell.label("? Il programma attuale rimarrà disponibile fino alla conferma del nuovo avvio.",
-                                        "? The current program remains available until new startup is confirmed.")
-                    color: "#f1f3f8"
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 13
+                    text: appSettings.whatsNewNotes || (appSettings.whatsNewVersion === "2.2.0" ?
+                        Theme.tr("update.highlights220") : Theme.tr("update.installed"))
+                    textFormat: Text.MarkdownText
                 }
-                Row {
-                    spacing: 14
-                    Rectangle {
-                        width: 145; height: 38; color: "#46556b"; radius: 6
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: shell.label("Annulla aggiornamento","Cancel update")
-                        function activate() { updateService.reject() }
-                        Text { anchors.centerIn: parent; text: shell.label("Annulla","Cancel"); color: "white" }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
-                        Keys.onReturnPressed: activate()
-                        Keys.onSpacePressed: activate()
-                    }
-                    Rectangle {
-                        width: 210; height: 38; color: "#8e5e3f"; radius: 6
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: shell.label("Conferma aggiornamento","Confirm update")
-                        function activate() { updateService.confirmInstall() }
-                        Text { anchors.centerIn: parent; text: shell.label("Conferma installazione","Confirm installation"); color: "white" }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.activate() }
-                        Keys.onReturnPressed: activate()
-                        Keys.onSpacePressed: activate()
-                    }
-                }
+            }
+            AppButton {
+                Layout.alignment: Qt.AlignRight
+                text: Theme.tr("update.gotIt")
+                variant: "primary"
+                onClicked: whatsNew.accept()
+            }
+        }
+        onAccepted: appSettings.dismissWhatsNew()
+        onRejected: appSettings.dismissWhatsNew()
+    }
+    Toast { id: feedback }
+    Connections {
+        target: appSettings
+        ignoreUnknownSignals: true
+        function onSaveFailed() { feedback.present(Theme.tr("settings.saveFailed"), "danger") }
+        function onWhatsNewChanged() { Qt.callLater(shell.synchronizeDialogs) }
+    }
+    Connections {
+        target: maintenanceService
+        property bool wasBusy: false
+        function onPreparationRejected(key) {
+            feedback.present(Theme.tr(key), "danger")
+        }
+        function onChanged() {
+            if (wasBusy !== maintenanceService.busy) {
+                wasBusy = maintenanceService.busy
+                const message = wasBusy ? shell.activityText : Theme.tr("activity.finished", {action: shell.operationTitle,
+                    result: Theme.tr("pages.result." + maintenanceService.resultStatus)})
+                if (wasBusy) workspace.Accessible.announce(message, Accessible.Polite)
+                else feedback.present(message, maintenanceService.resultStatus === "completed" ? "success" : "warning")
             }
         }
     }

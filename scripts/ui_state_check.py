@@ -15,7 +15,7 @@ import sys
 import threading
 from types import SimpleNamespace
 from unittest.mock import patch
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,10 +59,18 @@ class InertManager:
 
 
 class InertMaintenanceGuard:
+    """Only a synthetic lease; all Windows backends are replaced in capture()."""
+
     last_error = ''
 
     def is_blocked(self):
         return False
+
+    @contextmanager
+    def operation(self, timeout_ms=30000):
+        # The screenshot workflow must exercise the production Tk controller,
+        # while never creating a real mutex or journal on the hosted runner.
+        yield SimpleNamespace(resolve=lambda: None)
 
     def mark_unknown(self):
         raise AssertionError('Fixture must not persist maintenance guard records')

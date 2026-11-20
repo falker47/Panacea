@@ -15,6 +15,7 @@ from version import VERSION
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
+    parser.add_argument("--defer-checksum", action="store_true", help="Finalize checksum in the signing step")
     args = parser.parse_args()
     validate_build_toolchain(importlib.metadata.version('pyinstaller'))
     output = args.output.resolve()
@@ -28,7 +29,8 @@ def main():
     ], cwd=ROOT, check=True)
     exe = output / "Panacea.exe"
     metadata = verify_package(exe)
-    write_checksum(exe)
+    if not args.defer_checksum:
+        write_checksum(exe)
     (output / 'release-notes.md').write_text(notes.read_text(encoding='utf-8'), encoding='utf-8')
     print(json.dumps(metadata, indent=2))
 

@@ -43,7 +43,7 @@ jobs:
         run: python -m unittest discover -s qt_app/tests -p "test_*.py" -v
 
       - name: Compile sources
-        run: python -m compileall -q main.py panacea_ui.py version.py modules qt_app
+        run: python -m compileall -q main.py panacea_ui.py version.py modules qt_app scripts
 
       - name: Import smoke test
         run: python -c "import panacea_ui, qt_app.main, version; from packaging.version import Version; assert not Version(version.VERSION).is_prerelease; print(version.VERSION)"
@@ -65,7 +65,13 @@ jobs:
           if-no-files-found: warn
 
       - name: Build executable
-        run: python scripts/build.py
+        run: python scripts/build.py --defer-checksum
+
+      - name: Exercise portable signing finalization (dry run)
+        run: python scripts/release_tools.py --finalize dist/Panacea.exe --dry-run-signing
+
+      - name: Verify archive inventory and size budgets
+        run: python scripts/verify_bundle.py --exe dist/Panacea.exe --output build/perf/bundle.json
 
       - name: Verify frozen Qt backend imports
         shell: pwsh
@@ -85,6 +91,19 @@ jobs:
           $process = Start-Process -FilePath 'dist\Panacea.exe' -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Packaged GUI smoke timed out' }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke failed: $($process.ExitCode)" }
+
+      - name: Capture the packaged Qt window and reject QML warnings
+        shell: pwsh
+        env:
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: |
+          foreach ($tab in 0..4) {
+            $png = "build/perf/qt-captures/tab-$tab.png"
+            python -c "import subprocess,sys; subprocess.run(['dist/Panacea.exe','--smoke-test','--smoke-tab',sys.argv[1],'--capture',sys.argv[2]],check=True,timeout=40)" $tab $png
+            if ($LASTEXITCODE -ne 0) { throw "Packaged capture failed for tab $tab" }
+            $meta = Get-Content ([IO.Path]::ChangeExtension($png, 'json')) -Raw | ConvertFrom-Json
+            if (-not (Test-Path $png) -or $null -eq $meta.qml_warnings -or $meta.qml_warnings.Count -ne 0) { throw "Invalid capture for tab $tab" }
+          }
 
       - name: Capture read-only Windows UX evidence
         shell: pwsh
@@ -109,10 +128,13 @@ jobs:
 
       - name: Ensure Inno Setup compiler is available on the disposable runner
         shell: pwsh
+        env:
+          PANACEA_ALLOW_HOSTED_PROBE: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           $pf32 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
           $compiler = Join-Path $pf32 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path -LiteralPath $compiler)) {
+            if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:PANACEA_ALLOW_HOSTED_PROBE -ne 'true') { throw 'Inno installation requires an authorized hosted runner' }
             choco install innosetup -y --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup' }
           }
@@ -124,28 +146,45 @@ jobs:
         run: |
           python scripts/build_installer.py --iscc "$env:PANACEA_ISCC" --exe dist/Panacea.exe --checksum dist/Panacea.exe.sha256 --out dist
           if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          python scripts/release_tools.py --finalize dist/PanaceaSetup.exe --dry-run-signing
+          if ($LASTEXITCODE -ne 0) { throw 'Setup checksum finalization failed' }
           $actual = (Get-FileHash -LiteralPath dist/PanaceaSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           $manifest = (Get-Content -LiteralPath dist/PanaceaSetup.exe.sha256 -Raw).Trim()
           if ($manifest -cne "$actual  PanaceaSetup.exe") { throw 'Setup SHA-256 mismatch' }
 
+      - name: Download pinned v2.1.1 for the same-runner comparison
+        if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v2.1.1 --repo falker47/Panacea --pattern Panacea.exe --dir build/baseline
+
       - name: Measure packaged window startup and binary sizes
         shell: pwsh
+        env:
+          TRUSTED_COMPARISON: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+          PANACEA_ALLOW_HOSTED_PROBE: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
-          python scripts/packaged_probe.py --exe dist/Panacea.exe --output build/perf/packaged.json --samples 5
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged startup probe failed' }
+          $baseline = @()
+          if ($env:TRUSTED_COMPARISON -eq 'true') { $baseline = @('--baseline', 'build/baseline/Panacea.exe') }
           @{
             portable_bytes = (Get-Item dist/Panacea.exe).Length
             installer_bytes = (Get-Item dist/PanaceaSetup.exe).Length
           } | ConvertTo-Json | Set-Content build/perf/package-sizes.json -Encoding utf8
+          python scripts/packaged_probe.py --exe dist/Panacea.exe --output build/perf/packaged.json --samples 5 @baseline
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged startup probe failed' }
 
       - name: Preserve packaged performance evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Panacea-Windows-packaged-performance
           path: |
+            build/perf/bundle.json
             build/perf/packaged.json
             build/perf/package-sizes.json
-          if-no-files-found: error
+            build/perf/qt-captures/
+          if-no-files-found: warn
 
       - name: Save candidate executable and checksum
         uses: actions/upload-artifact@v4
@@ -210,6 +249,7 @@ jobs:
       - name: Guarded native fixture cleanup and packaged V1-to-V2 replacement
         shell: pwsh
         run: |
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Hosted runner required' }
           python scripts/hosted_windows_release_probe.py --candidate build/hosted-probe/new/Panacea.exe --checksum build/hosted-probe/new/Panacea.exe.sha256 --legacy build/hosted-probe/legacy/Panacea.exe --output build/hosted-probe/report.json
 
       - name: Retain scoped results, including failures

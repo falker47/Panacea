@@ -3,6 +3,7 @@
 import ast
 from configparser import ConfigParser
 from pathlib import Path
+import re
 import shlex
 
 import pytest
@@ -25,16 +26,51 @@ def calls(tree, name):
     return [node for node in ast.walk(tree) if isinstance(node, ast.Call) and ast.unparse(node.func) == name]
 
 
-def names_and_order(source):
+def _expand(words, loops):
+    """Expand shell loop variables (for VAR in a b c; do ... $VAR ...) in their declared order."""
+    rows = [words]
+    for var, items in loops:
+        refs = ("${" + var + "}", "$" + var)
+        if any(ref in word for word in words for ref in refs):
+            rows = [[word.replace(refs[0], item).replace(refs[1], item) for word in row]
+                    for row in rows for item in items]
+    return rows
+
+
+def upload_order(source):
+    """Asset names in the order the draft job creates/uploads them, including shell loops."""
     release = yaml.safe_load(source)
     assets = []
     for step in release["jobs"]["draft"]["steps"]:
-        for line in step.get("run", "").replace("\\\n", " ").splitlines():
+        loops = []
+        for raw in step.get("run", "").replace("\\\n", " ").splitlines():
+            line = raw.strip()
+            if not line or line == "do":
+                continue
+            if line.startswith("for ") and " in " in line:
+                head = shlex.split(line.split(";")[0])
+                loops.append((head[1], head[3:]))
+                continue
+            if line.startswith("done"):
+                if loops:
+                    loops.pop()
+                continue
             words = shlex.split(line)
             if words[:3] in (["gh", "release", "create"], ["gh", "release", "upload"]):
-                assets.extend(Path(w).name for w in words if w.endswith((".exe", ".sha256")))
+                for row in _expand(words, loops):
+                    assets.extend(Path(w).name for w in row if w.endswith((".exe", ".sha256")))
+    return assets
+
+
+def names_and_order(source):
+    assets = upload_order(source)
     assert sorted(assets) == sorted(ASSETS), "release asset names"
     assert assets[0] == "Panacea.exe", "legacy first executable"
+
+
+def _replace_token(source, token, replacement):
+    """Replace an asset name only where it is a whole file name (Panacea.exe is not Panacea.exe.sha256)."""
+    return re.sub(r"(?<![\w.])" + re.escape(token) + r"(?![\w.])", replacement, source)
 
 
 def repo(source):
@@ -144,17 +180,34 @@ def test_each_published_name_and_mutation(asset):
     source = read(".github/workflows/release.yml")
     names_and_order(source)
     with pytest.raises(AssertionError, match="release asset names"):
-        names_and_order(source.replace("assets/" + asset + " ", "assets/Changed.exe ")
-                        .replace("assets/" + asset + "\n", "assets/Changed.exe\n"))
+        names_and_order(_replace_token(source, asset, "Changed.exe"))
 
 
 def test_legacy_first_executable_and_mutation():
     source = read(".github/workflows/release.yml")
     names_and_order(source)
-    swapped = source.replace("assets/Panacea.exe ", "assets/placeholder ")
-    swapped = swapped.replace("assets/PanaceaSetup.exe ", "assets/Panacea.exe ")
+    swapped = _replace_token(source, "Panacea.exe", "placeholder.exe")
+    swapped = _replace_token(swapped, "PanaceaSetup.exe", "Panacea.exe")
+    swapped = _replace_token(swapped, "placeholder.exe", "PanaceaSetup.exe")
     with pytest.raises(AssertionError, match="legacy first executable"):
-        names_and_order(swapped.replace("assets/placeholder ", "assets/PanaceaSetup.exe "))
+        names_and_order(swapped)
+
+
+def test_upload_order_understands_shell_loops():
+    workflow = """
+jobs:
+  draft:
+    steps:
+      - run: |
+          gh release create "$TAG" --draft assets/Panacea.exe
+          for asset in Panacea.exe.sha256 PanaceaSetup.exe PanaceaSetup.exe.sha256; do
+            gh release upload "$TAG" "assets/$asset"
+          done
+"""
+    assert upload_order(workflow) == list(ASSETS)
+    single = workflow.replace("assets/Panacea.exe\n", "assets/Panacea.exe assets/Panacea.exe.sha256 assets/PanaceaSetup.exe assets/PanaceaSetup.exe.sha256\n")
+    single = single[:single.index("          for asset")]
+    assert upload_order(single) == list(ASSETS)
 
 
 @pytest.mark.parametrize(("path", "flag"), [

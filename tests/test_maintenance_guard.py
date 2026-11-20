@@ -190,3 +190,125 @@ def test_legacy_wall_clock_marker_cannot_automatically_clear(tmp_path):
     name = 'boot-' + hashlib.sha256(timestamp.encode('ascii')).hexdigest() + '.json'
     (path / name).write_text(json.dumps({'version': 1, 'boot_id': timestamp}))
     assert guard.MaintenanceGuard(path, lambda: '2026-10-14T01:02:03.1234567Z').is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_operation_journal_exists_before_work_and_disappears_only_after_terminal_result(tmp_path):
+    path = tmp_path / 'guard'
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    with subject.operation() as permit:
+        assert guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+        permit.resolve()
+    assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_unresolved_operation_blocks_reopen_until_verified_new_boot(tmp_path):
+    path = tmp_path / 'guard'
+    with guard.MaintenanceGuard(path, lambda: BOOT_A).operation():
+        pass  # Simulate worker cancellation without a verified terminal state.
+    same_boot = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    assert same_boot.is_blocked()
+    assert 'restart' in same_boot.last_error.lower()
+    assert not guard.MaintenanceGuard(path, lambda: BOOT_B).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_failed_journal_write_prevents_any_mutation_and_blocks_reopen(tmp_path, monkeypatch):
+    path = tmp_path / 'guard'
+    actions = []
+    def denied(*args):
+        raise PermissionError('Fixture persistence unavailable')
+    monkeypatch.setattr(guard, 'write_bytes', denied)
+    with pytest.raises(PermissionError):
+        with guard.MaintenanceGuard(path, lambda: BOOT_A).operation():
+            actions.append('mutation')
+    assert actions == []
+    assert guard.MaintenanceGuard(path, lambda: BOOT_B).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_second_process_cannot_mutate_while_first_holds_maintenance_mutex(tmp_path):
+    path = tmp_path / 'guard'
+    script = (
+        "import sys\n"
+        "from modules.maintenance_guard import MaintenanceGuard\n"
+        "g = MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101')\n"
+        "with g.operation(timeout_ms=100) as permit:\n"
+        "    permit.resolve()\n"
+    )
+    with guard.MaintenanceGuard(path, lambda: BOOT_A).operation() as permit:
+        result = subprocess.run([sys.executable, '-c', script, str(path)],
+                                capture_output=True, text=True, timeout=10,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        assert result.returncode != 0
+        assert 'busy' in result.stderr.lower() or 'timeout' in result.stderr.lower()
+        permit.resolve()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_force_terminated_process_leaves_recoverable_prelaunch_record(tmp_path):
+    path = tmp_path / 'guard'
+    script = (
+        "import os, sys\n"
+        "from modules.maintenance_guard import MaintenanceGuard\n"
+        "g = MaintenanceGuard(sys.argv[1], lambda: 'windows-boot-id:101')\n"
+        "with g.operation():\n"
+        "    os._exit(0)\n"
+    )
+    result = subprocess.run([sys.executable, '-c', script, str(path)],
+                            capture_output=True, text=True, timeout=10,
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    assert result.returncode == 0, result.stderr
+    assert guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+    assert not guard.MaintenanceGuard(path, lambda: BOOT_B).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_empty_journal_directory_after_failed_creation_blocks_reopen(tmp_path):
+    path = tmp_path / 'guard'
+    (tmp_path / 'maintenance-journal').mkdir()
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    assert subject.is_blocked()
+    assert 'journal' in subject.last_error.lower()
+    with pytest.raises(RuntimeError):
+        with subject.operation():
+            raise AssertionError('unreachable mutation')
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_completed_journal_proves_directory_is_not_an_interrupted_write(tmp_path):
+    path = tmp_path / 'guard'
+    with guard.MaintenanceGuard(path, lambda: BOOT_A).operation() as permit:
+        permit.resolve()
+    names = [p.name for p in (tmp_path / 'maintenance-journal').iterdir()]
+    assert names == ['completed.json']
+    assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_repeated_verified_operations_replace_completed_marker_without_stale_blocks(tmp_path):
+    path = tmp_path / 'guard'
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    for _ in range(2):
+        with subject.operation() as permit:
+            assert subject.is_blocked()
+            permit.resolve()
+        assert not guard.MaintenanceGuard(path, lambda: BOOT_A).is_blocked()
+    assert [p.name for p in (tmp_path / 'maintenance-journal').iterdir()] == ['completed.json']
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Native Windows journal required')
+def test_corrupt_completed_marker_fails_closed(tmp_path):
+    path = tmp_path / 'guard'
+    subject = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    with subject.operation() as permit:
+        permit.resolve()
+    (tmp_path / 'maintenance-journal' / 'completed.json').write_bytes(b'corrupt')
+    reopened = guard.MaintenanceGuard(path, lambda: BOOT_A)
+    assert reopened.is_blocked()
+    with pytest.raises(RuntimeError):
+        with reopened.operation():
+            raise AssertionError('must not run')
+
+

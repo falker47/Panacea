@@ -1,6 +1,7 @@
 """No Windows changes: all maintenance tests use isolated fake managers."""
 import threading
 import unittest
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from qt_app.maintenance import MaintenanceService
@@ -10,15 +11,39 @@ class FakeGuard:
     def __init__(self):
         self.blocked = False
         self.marked = 0
+        self.started = 0
+        self.finished = 0
+        self.fail_before_start = False
+        self.save_unknown = True
         self.last_error = "Reboot required"
 
     def is_blocked(self):
         return self.blocked
 
+    @contextmanager
+    def operation(self, timeout_ms=30000):
+        if self.blocked:
+            raise RuntimeError(self.last_error)
+        if self.fail_before_start:
+            raise PermissionError("Maintenance journal could not be saved")
+        self.started += 1
+        class Permit:
+            resolved = False
+            def resolve(self):
+                self.resolved = True
+        permit = Permit()
+        try:
+            yield permit
+        except BaseException:
+            raise
+        else:
+            if permit.resolved:
+                self.finished += 1
+
     def mark_unknown(self):
         self.marked += 1
         self.blocked = True
-        return True
+        return self.save_unknown
 
 
 class MaintenanceContracts(unittest.TestCase):
@@ -199,6 +224,87 @@ class MaintenanceContracts(unittest.TestCase):
         self.assertEqual([e for e in self.events if isinstance(e, str)],
                          ["temp", "bin", "cleanmgr"])
         self.assertIn("Windows Disk Cleanup opened", result["message"])
+
+
+
+    def test_cancel_while_waiting_for_maintenance_lock_never_dispatches_windows_work(self):
+        waiting, release = threading.Event(), threading.Event()
+        original = self.guard.operation
+
+        @contextmanager
+        def pending_lock(timeout_ms=30000):
+            waiting.set()
+            release.wait(3)
+            with original(timeout_ms=timeout_ms) as permit:
+                yield permit
+
+        self.guard.operation = pending_lock
+        outcome = []
+        token = self.confirm("sfc")
+        worker = threading.Thread(target=lambda: outcome.append(self.service.execute(token)))
+        worker.start()
+        try:
+            self.assertTrue(waiting.wait(2))
+            self.service.cancel()
+        finally:
+            release.set()
+            worker.join(3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(outcome[0]["status"], "cancelled")
+        self.assertEqual(self.events, [])
+        self.assertEqual(self.guard.finished, 1)
+
+    def test_explicitly_unknown_result_keeps_journal_even_without_manager_timeout_flag(self):
+        self.service._dispatch = lambda *_args, **_kwargs: {
+            "status": "unknown", "success": False, "message": "Unverified outcome",
+        }
+        result = self.service.execute(self.confirm("sfc"))
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(self.guard.marked, 1)
+        self.assertEqual(self.guard.finished, 0)
+
+    def test_journal_is_armed_before_any_windows_mutation_and_resolved_on_terminal_result(self):
+        def command(*args):
+            self.assertEqual(self.guard.started, 1)
+            self.assertEqual(self.guard.finished, 0)
+            self.events.append("after-journal")
+            return True
+        self.commands.run_command_stream = command
+        result = self.service.execute(self.confirm("sfc"))
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(self.events, ["after-journal"])
+        self.assertEqual(self.guard.finished, 1)
+
+    def test_journal_persistence_failure_refuses_command_before_side_effect(self):
+        self.guard.fail_before_start = True
+        with self.assertRaisesRegex(PermissionError, "journal"):
+            self.service.execute(self.confirm("sfc"))
+        self.assertEqual(self.events, [])
+        self.assertEqual(self.guard.started, 0)
+
+    def test_uncertain_command_never_resolves_journal_even_if_guard_write_fails(self):
+        self.guard.save_unknown = False
+        self.guard.last_error = "Could not save the recovery guard: denied"
+        def timeout(*_):
+            self.commands.completion_unknown = True
+            return False
+        self.commands.run_command_stream = timeout
+        result = self.service.execute(self.confirm("sfc"))
+        self.assertEqual(result["status"], "unknown")
+        self.assertFalse(result["success"])
+        self.assertIn("denied", result["message"])
+        self.assertEqual(self.guard.started, 1)
+        self.assertEqual(self.guard.finished, 0)
+        self.assertEqual(self.guard.marked, 1)
+
+    def test_exception_after_dispatch_keeps_journal_for_restart(self):
+        def crashes(*_):
+            raise OSError("Interrupted after invoking Windows")
+        self.commands.run_command_stream = crashes
+        with self.assertRaisesRegex(OSError, "Interrupted"):
+            self.service.execute(self.confirm("sfc"))
+        self.assertEqual(self.guard.started, 1)
+        self.assertEqual(self.guard.finished, 0)
 
     def test_reentrant_confirmation_does_not_overlap_running_work(self):
         enter, release = threading.Event(), threading.Event()

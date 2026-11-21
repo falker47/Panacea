@@ -143,6 +143,10 @@ Basic.ApplicationWindow {
                 font.pixelSize: Theme.fontBody
                 color: dest.selected ? Theme.text : Theme.textMuted
                 maximumLineCount: 1
+                // Long translations or fallback fonts shrink to the 12 px floor before eliding.
+                wrapMode: Text.NoWrap
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Theme.fontSmall
                 elide: Text.ElideRight
             }
             BodyText {

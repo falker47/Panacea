@@ -16,7 +16,7 @@ class QtProductionReleaseContracts(unittest.TestCase):
         self.assertIn(f'VERSION = "{VERSION}"', version)
         self.assertGreaterEqual(Version(VERSION), Version("2.1.0"))
         self.assertIn("['qt_app/main.py']", spec)
-        for path in ("qt_app/Main.qml", "qt_app/ParityPage.qml",
+        for path in ("qt_app/Main.qml", "qt_app/qml", "qt_app/i18n",
                      "assets/panacea_icon.ico", "assets/panacea_icon.png"):
             self.assertIn(path, spec)
         self.assertIn("modules.update_install", spec)

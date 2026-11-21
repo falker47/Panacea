@@ -45,14 +45,33 @@ class BridgeContracts(unittest.TestCase):
     def tearDown(self):
         self.bridge.stop()
 
-    def test_content_copy_reuses_the_stable_translation_catalog(self):
-        reader = ReadBridge()
-        try:
-            self.assertEqual(reader.localizedCopy("Applicazioni installate", "Installed apps", "it"), "App installate")
-            self.assertEqual(reader.localizedCopy("Applicazioni installate", "Installed apps", "en"), "Installed apps")
-            self.assertEqual(reader.localizedCopy("Stato Qt aggiuntivo", "Additional Qt status", "it"), "Stato Qt aggiuntivo")
-        finally:
-            reader.stop()
+    def test_target_rejection_is_visible_and_does_not_prepare_a_different_action(self):
+        rejected = []
+        self.bridge.preparationRejected.connect(rejected.append)
+        self.bridge.prepareTarget("temp_clean", "example")
+        self.assertEqual(rejected, ["maintenance.targetRejected"])
+        self.assertFalse(self.bridge.awaitingConfirmation)
+        self.assertEqual(self.fake.prepared, [])
+        self.assertEqual(self.fake.executed, [])
+
+    def test_target_is_bound_to_one_confirmation_and_respects_exclusion(self):
+        class Targeted(FakeMaintenance):
+            def prepare(self, action, drive, *, target):
+                self.prepared.append((action, drive, target))
+                return {"nonce": "target-nonce", "title": "Fixture", "details": target}
+
+        service = Targeted()
+        self.bridge._service = service
+        self.bridge.prepareTarget("fixture", "first")
+        self.bridge.prepareTarget("fixture", "second")
+        self.assertEqual(service.prepared, [("fixture", "", "first")])
+        self.assertIn("first", self.bridge.details)
+        self.bridge.confirm()
+        self.bridge.confirm()
+        self.bridge._workers.join(3)
+        self.assertEqual(service.executed, ["target-nonce"])
+        self.bridge.prepareTarget("fixture", "during-worker")
+        self.assertEqual(len(service.prepared), 1)
 
     def test_prepare_must_be_confirmed_and_is_one_use(self):
         self.bridge.prepare("temp_clean", "")
@@ -67,7 +86,7 @@ class BridgeContracts(unittest.TestCase):
     def test_disallowed_arguments_fail_closed(self):
         self.bridge.prepare("temp_clean", "C:")
         self.assertFalse(self.bridge.awaitingConfirmation)
-        self.assertIn("rifiutata", self.bridge.output)
+        self.assertIn("not approved", self.bridge.output)
         self.assertEqual(self.fake.executed, [])
 
     def test_confirm_dispatches_once_and_keeps_result(self):
@@ -141,8 +160,8 @@ class BridgeContracts(unittest.TestCase):
                 self.app.processEvents()
                 time.sleep(.01)
         self.assertEqual(getattr(self.bridge, "results", {}).get("resurrection", {}).get("status"), "completed")
-        self.assertIn("fixture resurrection", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
-        self.assertNotIn("fixture temp_clean", getattr(self.bridge, "sectionLogs", {}).get("resurrect", ""))
+        self.assertIn("fixture resurrection", getattr(self.bridge, "sectionLogs", {}).get("guided", ""))
+        self.assertNotIn("fixture temp_clean", getattr(self.bridge, "sectionLogs", {}).get("guided", ""))
 
     def test_phase_outcome_is_visible_before_the_sequence_finishes(self):
         import threading

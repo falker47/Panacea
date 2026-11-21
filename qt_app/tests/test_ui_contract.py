@@ -1,54 +1,42 @@
-"""Qt migration QA contracts: five V2 groups, safe confirmations and screenshots."""
+"""Production entry point, import closure and QML action boundary."""
 from pathlib import Path
+import os
+import subprocess
+import sys
 import unittest
 
-
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class UiContractTests(unittest.TestCase):
-    def test_qa_shell_exposes_full_v2_views_without_bypassing_confirmation(self):
-        qml = (ROOT / "Main.qml").read_text(encoding="utf-8")
-        page = (ROOT / "ParityPage.qml").read_text(encoding="utf-8")
-        self.assertIn("ParityPage {", qml)
-        self.assertIn('groupIndex: contentLoader.groupIndex', qml)
-        self.assertIn("readService.results", page)
-        self.assertIn("readService.driveLetters", page)
-        for metric in ('liveMetrics.cpu', 'liveMetrics.ram', 'liveMetrics.disk'):
-            self.assertIn(metric, page)
-        self.assertIn("activeFocusOnTab: true", qml)
-        self.assertIn("onClosing: function(event)", qml)
-        self.assertIn("maintenanceService.prepare(action, drive || \"\")", page)
-        self.assertIn("maintenanceService.confirm()", qml)
-        self.assertIn("updateService.status", qml)
-        self.assertIn("updateService.prepareInstall()", qml)
-        self.assertIn("updateService.confirmInstall()", qml)
-        self.assertIn("updateService.cancelDownload()", qml)
-        self.assertIn("readService.request", page)
-        self.assertIn("readService.busy", page)
-        self.assertNotIn("maintenanceBridge.execute", qml + page)
-        self.assertNotIn("pageData.cards", qml + page)
+    def test_runtime_imports_through_real_smoke_and_backend_probe(self):
+        script = """
+import importlib.abc
+import sys
+class ImportAudit(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname.split('.')[0] in ('PIL', 'qt_lab'):
+            raise AssertionError(f'Unexpected desktop runtime import: {fullname}')
+sys.meta_path.insert(0, ImportAudit())
+from qt_app.main import main
+assert main(['--smoke-backend-imports']) == 0
+assert main(['--smoke-test']) == 0
+assert not {'PIL', 'qt_lab'}.intersection(sys.modules)
+"""
+        result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, timeout=30,
+                                env=dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_packaging_entrypoint_stays_distinct_from_stable_main(self):
-        app = (ROOT / "main.py").read_text(encoding="utf-8")
-        self.assertIn("Panacea Qt UI migration QA", app)
-        # The frozen production identity supports the verified legacy helper,
-        # but a QA candidate cannot acknowledge or install a production update.
-        self.assertIn("run_update_helper(", app)
+    def test_shell_uses_confirmed_bridges_and_preserves_frozen_entrypoint(self):
+        app = (ROOT / "qt_app/main.py").read_text(encoding="utf-8")
+        shell = (ROOT / "qt_app/Main.qml").read_text(encoding="utf-8")
+        self.assertIn("run_update_helper(args.panacea_update_helper)", app)
         self.assertIn('Path(sys.executable).name != "Panacea.exe"', app)
         self.assertIn("ShellExecuteW(", app)
-        self.assertIn("not args.smoke_test", app)
-        self.assertIn('setContextProperty("updateService"', app)
-
-    def test_smoke_capture_uses_supported_qscreen_api(self):
-        app = (ROOT / "main.py").read_text(encoding="utf-8")
-        self.assertIn("screen.grabWindow(", app)
-        self.assertNotIn("engine.rootObjects()[0].grabWindow()", app)
-
-    def test_five_primary_destinations_survive(self):
-        qml = (ROOT / "Main.qml").read_text(encoding="utf-8")
-        for section in ("Dashboard", "Cleaning", "Tools", "Turbo", "Resurrect"):
-            self.assertIn('name: "' + section + '"', qml)
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertIn("onClosing: function(event)", shell)
+        self.assertIn("maintenanceService.confirm()", shell)
+        self.assertIn("updateService.confirmInstall()", shell)
+        sources = [shell, *(p.read_text(encoding="utf-8") for p in (ROOT/"qt_app/qml").rglob("*.qml"))]
+        for code in sources:
+            self.assertNotIn("Service.execute(", code)
+            self.assertNotIn("subprocess", code)

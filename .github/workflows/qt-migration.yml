@@ -44,15 +44,17 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
-            qt_lab/requirements.txt
+            requirements.txt
 
       - name: Install test and Qt runtime
-        run: python -m pip install -r requirements-dev.txt -r qt_lab/requirements.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Check read-only API contract and syntax
         run: |
           python -m unittest discover -s qt_app/tests -p "test_*.py" -v
           if ($LASTEXITCODE -ne 0) { throw "Qt contract tests failed" }
+          python -m pytest -q qt_app/tests/test_locale_parity.py qt_app/tests/test_settings.py qt_app/tests/test_catalog.py
+          if ($LASTEXITCODE -ne 0) { throw "Settings, catalog and localization gates failed" }
           python -m ruff check qt_app
           if ($LASTEXITCODE -ne 0) { throw "Qt Ruff checks failed" }
           python -m compileall -q qt_app
@@ -66,14 +68,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Qt migration source smoke failed" }
           if (-not (Test-Path -LiteralPath "build/qt-app/source.png") -or (Get-Item "build/qt-app/source.png").Length -lt 1024) { throw "Qt source screenshot was not captured" }
 
-      - name: Capture current V2 desktop reference (read-only, isolated Windows)
-        shell: pwsh
-        run: |
-          python scripts/visual_check.py --output build/qt-app/stable-v2-current-1366x768-100 --width 1366 --height 768 --scale 1 --settle-ms 1200
-          if ($LASTEXITCODE -ne 0) { throw "Stable V2 reference capture failed" }
-          if (-not (Test-Path "build/qt-app/stable-v2-current-1366x768-100/dashboard.png")) { throw "Current stable dashboard screenshot missing" }
-          if (-not (Test-Path "build/qt-app/stable-v2-current-1366x768-100/observations.json")) { throw "Current stable source metadata missing" }
-
       - name: Repeat native source lifecycle with unchanged 45 second deadline
         shell: pwsh
         run: |
@@ -84,60 +78,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Qt native lifecycle failed on attempt $attempt; inspect lifecycle trace" }
           }
 
-      - name: Capture V2 visual review matrix (safe Qt mode, no maintenance)
+      - name: Capture and verify every section, language, scale and viewport
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $env:QT_QPA_PLATFORM = "offscreen"  # render whole scene, not the hosted desktop crop
-          foreach ($size in @(@{ w=1366; h=768 }, @{ w=1920; h=1080 })) {
-            foreach ($scale in @("1", "1.25", "1.5")) {
-              $env:QT_SCALE_FACTOR = $scale
-              $percent = [int]([double]::Parse($scale, [System.Globalization.CultureInfo]::InvariantCulture) * 100)
-              $factor = [double]::Parse($scale, [System.Globalization.CultureInfo]::InvariantCulture)
-              $logicalW = [int][math]::Round($size.w / $factor)
-              $logicalH = [int][math]::Round($size.h / $factor)
-              foreach ($tab in @(0,1,2,3,4)) {
-                $file = "build/qt-app/matrix-$($size.w)x$($size.h)-$percent-tab$tab-it.png"
-                python qt_app/main.py --smoke-test --smoke-width $logicalW --smoke-height $logicalH --smoke-tab $tab --smoke-language it --capture $file
-                if ($LASTEXITCODE -ne 0) { throw "Qt matrix failed: $file" }
-              }
-            }
-          }
-          $env:QT_SCALE_FACTOR = "1"
-          foreach ($tab in @(0,1,2,3,4)) {
-            $file = "build/qt-app/english-1366x768-tab$tab.png"
-            python qt_app/main.py --smoke-test --smoke-width 1366 --smoke-height 768 --smoke-tab $tab --smoke-language en --capture $file
-            if ($LASTEXITCODE -ne 0) { throw "English Qt page failed: $file" }
-          }
-          # Compare both engines at the *actual* size of the Windows V2
-          # window; hosted desktops are sometimes limited to 1024x768.
-          $stableMeta = Get-Content "build/qt-app/stable-v2-current-1366x768-100/observations.json" -Raw | ConvertFrom-Json
-          $view = @($stableMeta.views | Where-Object { $_.section -eq "Dashboard" })[0]
-          if (-not $view) { throw "Stable dashboard size was not captured" }
-          $actualWidth = [int]$view.pixels[0]
-          $actualHeight = [int]$view.pixels[1]
-          if ($actualWidth -lt 760 -or $actualHeight -lt 480) { throw "Stable V2 window is too small for matching QA" }
-          $env:QT_SCALE_FACTOR = "1"
-          foreach ($tab in @(0,1,2,3,4)) {
-            python qt_app/main.py --smoke-test --smoke-width $actualWidth --smoke-height $actualHeight --smoke-tab $tab --smoke-language en --capture "build/qt-app/matched-v2-tab$tab-en.png"
-            if ($LASTEXITCODE -ne 0) { throw "Matched-size Qt screenshot failed for group $tab" }
-          }
-          python qt_app/current_v2_compare.py --captures build/qt-app --stable build/qt-app/stable-v2-current-1366x768-100 --out build/qt-app
-          if ($LASTEXITCODE -ne 0) { throw "Current stable/Qt same-size comparison failed" }
-          python qt_app/visual_review.py --captures build/qt-app --baseline docs/validation/screenshots --current-baseline build/qt-app/stable-v2-current-1366x768-100 --out build/qt-app
-          if ($LASTEXITCODE -ne 0) { throw "V2 visual comparison report failed" }
-          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
-
-      - name: Eight-view matched fixture comparison in both languages and scales
-        shell: pwsh
-        run: |
-          python qt_app/parity_matrix.py --output build/qt-parity --mode all
-          if ($LASTEXITCODE -ne 0) { throw "Eight-view fixture evidence failed" }
+        run: python qt_app/parity_matrix.py --output build/qt-matrix
 
       - name: Package independent candidate, not stable release
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets/panacea_icon.ico" --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets/panacea_icon.ico" --name PanaceaQtCandidate --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/qml;qt_app/qml" --add-data "qt_app/i18n/*.json;qt_app/i18n" --add-data "assets/icons/lucide/LICENSE;assets/icons/lucide" --hidden-import qt_app.bridges.reliability_bridge --hidden-import qt_app.bridges.features_bridge --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup qt_app/main.py
           if ($LASTEXITCODE -ne 0) { throw "Qt migration build failed" }
           if (-not (Test-Path "dist/PanaceaQtCandidate/PanaceaQtCandidate.exe")) { throw "Qt candidate EXE missing" }
           python qt_app/verify_icon.py dist/PanaceaQtCandidate/PanaceaQtCandidate.exe
@@ -192,16 +140,15 @@ jobs:
             build/qt-app/*.jpg
             build/qt-app/*.json
             build/qt-app/*.log
-            build/qt-app/stable-v2-current-1366x768-100/**
           if-no-files-found: warn
 
-      - name: Retain eight-view original, Qt, A/B and difference evidence
+      - name: Retain verified desktop matrix and geometry reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Panacea-Qt-Eight-View-Parity-Evidence
-          path: build/qt-parity/**
-          if-no-files-found: warn
+          name: Panacea-Qt-Desktop-Matrix
+          path: build/qt-matrix/**
+          if-no-files-found: error
 
       - name: Deliver Qt candidate only after all checks pass
         uses: actions/upload-artifact@v4
@@ -214,10 +161,12 @@ jobs:
 
   windows-qa-installer:
     name: Separate QA installer and uninstall (disposable Windows)
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: windows-ui-and-contracts
     runs-on: windows-latest
     timeout-minutes: 25
     env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
       QT_QUICK_BACKEND: software
     steps:
       - uses: actions/checkout@v4
@@ -234,8 +183,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Require a GitHub-hosted disposable Windows runner
+        shell: pwsh
+        run: |
+          if ($env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or $env:GITHUB_ACTIONS -cne 'true') { throw 'Expected a GitHub-hosted runner' }
+
       - name: Install PE resource reader for QA installer verification
-        run: python -m pip install pefile==2024.8.26
+        run: python -m pip install pefile==2024.8.26 packaging==26.0
       - uses: actions/download-artifact@v4
         with:
           name: Panacea-Qt-Migration-Candidate
@@ -254,6 +208,8 @@ jobs:
       - name: Build isolated Inno Setup QA installer (never stable)
         shell: pwsh
         run: |
+          python -c "from scripts.hosted_installer_probe import disposable_guard; disposable_guard()"
+          if ($LASTEXITCODE -ne 0) { throw "Disposable guard refused the build runner" }
           $programFiles32 = [Environment]::GetFolderPath("ProgramFilesX86")
           $iscc = Join-Path $programFiles32 "Inno Setup 6/ISCC.exe"
           if (-not (Test-Path -LiteralPath $iscc)) {
@@ -277,6 +233,8 @@ jobs:
       - name: Install, smoke and uninstall QA app side-by-side
         shell: pwsh
         run: |
+          python -c "from scripts.hosted_installer_probe import disposable_guard; disposable_guard()"
+          if ($LASTEXITCODE -ne 0) { throw "Disposable guard refused the runner" }
           $setup = (Resolve-Path "build/qt-installer/PanaceaQtQASetup.exe").Path
           $target = Join-Path $env:RUNNER_TEMP ("PanaceaQtQA-" + [guid]::NewGuid().ToString("N"))
           # GUI installers launched with & can detach before PowerShell reads LASTEXITCODE.
@@ -361,15 +319,15 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
-            qt_lab/requirements.txt
+            requirements.txt
 
       - name: Install Qt and packaging dependencies
-        run: python -m pip install -r requirements-dev.txt -r qt_lab/requirements.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Build disposable Qt one-file Panacea.exe for updater identity tests
         shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --icon "assets/panacea_icon.ico" --name Panacea --add-data "qt_app/Main.qml;qt_app" --add-data "qt_app/ParityPage.qml;qt_app" --add-data "assets/panacea_icon.png;assets" --add-data "assets/panacea_icon.ico;assets" --add-data "assets/icons/lucide/png;assets/icons/lucide/png" --hidden-import modules.restore --hidden-import modules.performance --hidden-import modules.maintenance_guard --hidden-import modules.disk --hidden-import modules.cleanup --hidden-import modules.updater --hidden-import modules.update_install qt_app/main.py
+          python -m PyInstaller --noconfirm --clean Panacea.spec
           if ($LASTEXITCODE -ne 0) { throw "Qt one-file production-identity prototype could not be built" }
           if (-not (Test-Path -LiteralPath "dist/Panacea.exe")) { throw "Qt one-file executable is missing" }
           python qt_app/verify_icon.py dist/Panacea.exe
@@ -388,8 +346,18 @@ jobs:
           $digest = (Get-FileHash "dist/Panacea.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Output "ONEFILE_QT_BYTES=$size"
           Write-Output "ONEFILE_QT_SHA256=$digest"
-          @{ bytes = [long]$size; sha256 = $digest; release_candidate = $false; installer_compatible = $false } |
+          @{ bytes = [long]$size; sha256 = $digest; uses_production_spec = $true; published = $false } |
             ConvertTo-Json | Set-Content "build/qt-onefile/identity.json" -Encoding utf8
+
+      - name: Measure real one-file startup acknowledgement against the legacy helper budget
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+        shell: pwsh
+        env:
+          PANACEA_ALLOW_HOSTED_PROBE: 'true'
+          PANACEA_TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python -m qt_app.tests.packaged_readiness dist/Panacea.exe > build/qt-onefile/readiness.json
+          if ($LASTEXITCODE -ne 0) { throw "The packaged readiness budget failed" }
 
       - name: Retain one-file experiment evidence only, never deliver a release exe
         if: always()
@@ -400,4 +368,5 @@ jobs:
             build/qt-onefile/panacea.png
             build/qt-onefile/panacea.lifecycle.log
             build/qt-onefile/identity.json
+            build/qt-onefile/readiness.json
           if-no-files-found: warn

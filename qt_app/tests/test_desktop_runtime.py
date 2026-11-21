@@ -4,6 +4,7 @@ import unittest
 from qt_app.feature_catalog import ACTIONS as FEATURE_ACTIONS
 from qt_app.maintenance import ACTIONS
 from qt_app.tests.qml_probe import probe
+from version import VERSION
 
 
 class DesktopRuntimeTests(unittest.TestCase):
@@ -44,6 +45,11 @@ class DesktopRuntimeTests(unittest.TestCase):
             data = probe("updates", lang)
             self.assertIn(heading, data["notes"])
             self.assertIn(available, data["status"])
+            self.assertEqual(data["installed_version"], VERSION)
+            self.assertEqual(data["qa_check"], "primary")
+            self.assertFalse(data["qa_install_visible"])
+            self.assertEqual(data["production_check"], "secondary")
+            self.assertEqual(data["production_install"], "primary")
             self.assertTrue(data["pending"])
             self.assertFalse(data["installing"])
             self.assertFalse(data["repeated"])

@@ -1,33 +1,45 @@
-"""Dynamic battery pictogram uses the exact V2 drawing, with allowlisting."""
+"""Battery charge and the physical power state must both be perceptible."""
 import unittest
+
 from PySide6.QtCore import QSize
+from PySide6.QtGui import QImage
+
 from qt_app.icon_provider import NavigationIconProvider
 
 
 class BatteryIconTests(unittest.TestCase):
-    def test_report_shortcut_uses_the_original_gold_battery(self):
-        provider = NavigationIconProvider()
-        actual = provider.requestImage("battery-report/detail", QSize(), QSize(96, 96))
-        self.assertFalse(actual.isNull())
-        from modules.ui_icons import make_battery_icon
-        expected = make_battery_icon(70, color="#e4c579", size=96)
-        color = actual.pixelColor(30, 45)
-        self.assertEqual((color.red(), color.green(), color.blue(), color.alpha()), expected.getpixel((30, 45)))
-    def test_battery_fill_and_power_state_change_render(self):
-        provider = NavigationIconProvider()
-        full = provider.requestImage("battery-100-plugged/detail", QSize(), QSize(96, 96))
-        empty = provider.requestImage("battery-0-unplugged/detail", QSize(), QSize(96, 96))
-        charging = provider.requestImage("battery-70-charging/detail", QSize(), QSize(96, 96))
-        self.assertFalse(full.isNull())
-        self.assertFalse(charging.isNull())
-        self.assertNotEqual(full.pixelColor(60, 47), empty.pixelColor(60, 47))
-        self.assertNotEqual(charging.pixelColor(47, 45), empty.pixelColor(47, 45))
+    def setUp(self):
+        self.provider = NavigationIconProvider()
+
+    def image(self, name):
+        return self.provider.requestImage(name, QSize(), QSize(96, 96))
+
+    def test_report_is_the_seventy_percent_gold_shortcut_and_not_a_live_reading(self):
+        actual = self.image("battery-report/detail")
+        self.assertEqual(actual, self.image("battery-70-unplugged/e4c579"))
+        self.assertEqual(actual.pixelColor(40, 46).name(), "#e4c579")
+        self.assertNotEqual(actual, self.image("battery/detail"))
+
+    def test_charge_progresses_monotonically_through_zero_half_and_full(self):
+        fill = []
+        for percent in (0, 15, 50, 75, 100):
+            image = self.image(f"battery-{percent}-unplugged/detail")
+            self.assertFalse(image.isNull())
+            fill.append(sum(image.pixelColor(x, 48).alpha() > 127 for x in range(18, 72)))
+        self.assertEqual(fill[0], 0)
+        self.assertEqual(fill[-1], 54)
+        self.assertEqual(len(set(fill)), len(fill))
+        self.assertEqual(fill, sorted(fill))
+
+    def test_power_state_changes_shape_even_in_a_monochrome_system_theme(self):
+        masks = {bytes(self.image(f"battery-50-{state}/ffffff").convertToFormat(QImage.Format_Alpha8).constBits())
+                 for state in ("charging", "plugged", "unplugged")}
+        self.assertEqual(len(masks), 3)
 
     def test_out_of_range_and_unknown_states_fail_closed(self):
-        provider = NavigationIconProvider()
         for invalid in ("battery-101-charging/detail", "battery--5-plugged/detail",
                         "battery-30-other/detail", "battery-30-charging/active"):
-            self.assertTrue(provider.requestImage(invalid, QSize(), QSize()).isNull())
+            self.assertTrue(self.image(invalid).isNull(), invalid)
 
 
 if __name__ == "__main__":

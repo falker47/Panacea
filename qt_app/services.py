@@ -171,11 +171,13 @@ class ReadService:
             }
         if action == "guard_status":
             guard = self._manager("guard")
-            blocked = guard.is_blocked()
-            return {
-                "blocked": blocked is True,
-                "message": str(guard.last_error if blocked else "Nessun blocco manutenzione rilevato"),
-            }
+            if hasattr(guard, "status"):
+                state = guard.status()
+            else:
+                from modules.maintenance_guard import _state
+                blocked = guard.is_blocked() is True
+                state = _state("unverifiable_storage" if blocked else "clear", message=str(guard.last_error))
+            return {**state, "message": state["message"] if state["blocked"] else "Nessun blocco manutenzione rilevato"}
         raise AssertionError("Allowlist dispatch contract is incomplete")
 
     def close(self):

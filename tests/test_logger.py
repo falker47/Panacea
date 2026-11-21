@@ -11,10 +11,10 @@ def test_unwritable_log_directory_does_not_prevent_startup(tmp_path, monkeypatch
     log.handlers.clear()
     Logger._instance = None
     try:
-        with patch("logging.FileHandler", side_effect=PermissionError("read-only directory")):
+        with patch("modules.logger.known_folder", side_effect=PermissionError("read-only directory")):
             logger = Logger()
             logger.log("Application started.")
-        assert log.handlers
+        assert log.handlers and not any(isinstance(handler, logging.FileHandler) for handler in log.handlers)
     finally:
         for handler in log.handlers:
             handler.close()

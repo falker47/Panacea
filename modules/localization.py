@@ -602,21 +602,26 @@ def read_installed_language(executable):
         return None
 
 
-def resolve_language(*, executable=None, system_language=None, override=None):
-    """Installed choice wins. Explicit override supports development and QA."""
-    if executable is None and getattr(sys, "frozen", False):
-        executable = sys.executable
-    installed = read_installed_language(executable)
-    if installed:
-        return installed
-    if override is None:
-        override = os.getenv("PANACEA_LANGUAGE")
-    if override:
-        return _normalize(override)
+def resolve_language(*, executable=None, system_language=None, override=None, user_choice=None):
+    """Apply a saved preference first. An explicit System choice follows the OS."""
+    if user_choice in ("it", "en"):
+        return user_choice
+    if user_choice != "system":
+        if executable is None and getattr(sys, "frozen", False):
+            executable = sys.executable
+        installed = read_installed_language(executable)
+        if installed:
+            return installed
+        if override is None:
+            override = os.getenv("PANACEA_LANGUAGE")
+        if override:
+            return _normalize(override)
     if system_language is None:
         try:
             import ctypes
-            system_language = "it" if ctypes.windll.kernel32.GetUserDefaultUILanguage() == 0x0410 else None
+            language_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            if language_id:
+                system_language = "it" if language_id & 0x3ff == 0x10 else "en"
         except (AttributeError, OSError):
             pass
     if system_language is None:

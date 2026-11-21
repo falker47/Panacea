@@ -5,15 +5,23 @@ The production frozen Panacea.exe reuses the existing protected updater unchange
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import re
+
 from PySide6.QtCore import QObject, Property, QTimer, Signal, Slot
 
 from modules.ui_dispatch import UiDispatcher, WorkerController
+from modules.updater import (
+    UpdateCancelled, UpdateManifestError, UpdateNetworkError, UpdateRateLimitError, UpdateVerificationError,
+)
+from qt_app.i18n.release_notes import sanitize_notes
 from qt_app.update_flow import QtUpdateFlow
 from version import VERSION
 
 
 class UpdateBridge(QObject):
     changed = Signal()
+    releaseNotesAvailable = Signal(str, str)
 
     def __init__(self, reader, maintenance, *, flow=None, on_ready=None, parent=None):
         super().__init__(parent)
@@ -36,10 +44,11 @@ class UpdateBridge(QObject):
         self._job = None
         self._poll_again = False
         self._poll_failures = 0
-        self._status = ("Controlla gli aggiornamenti ufficiali di Panacea." if self._flow.install_eligible
-                        else "Check for official stable updates. QA builds cannot install them.")
+        self._set_status("idle" if self._flow.install_eligible else "readOnly")
         self._version = ""
         self._percent = 0
+        self._notes = ""
+        self._last_checked = ""
 
     @Property(bool, notify=changed)
     def eligible(self):
@@ -69,6 +78,18 @@ class UpdateBridge(QObject):
     def status(self):
         return self._status
 
+    @Property("QVariantMap", notify=changed)
+    def statusParams(self):
+        return self._params.copy()
+
+    @Property(str, notify=changed)
+    def notes(self):
+        return self._notes
+
+    @Property(str, notify=changed)
+    def lastChecked(self):
+        return self._last_checked
+
     @Property(str, notify=changed)
     def availableVersion(self):
         return self._version
@@ -81,8 +102,34 @@ class UpdateBridge(QObject):
     def progress(self):
         return self._percent
 
+    def _set_status(self, code, **params):
+        self._status = "update.status." + code
+        self._params = params
+
+    def _error_status(self, error, default):
+        # Preserve the helper's specific recovery outcome, including the path
+        # to a backup the user may need. It is only ever displayed as text.
+        message = str(error)
+        backup = re.search(r"(?:recover the old executable from|the backup was preserved at) ([^<>\r\n]+)\.$",
+                           message, re.IGNORECASE)
+        if backup:
+            self._set_status("recoveryBackup", path=backup[1])
+        elif "the backup was retained." in message:
+            self._set_status("backupRetained")
+        elif "the original application remains open." in message:
+            self._set_status("restored")
+        else:
+            for kind, code in ((UpdateCancelled, "cancelled"), (UpdateRateLimitError, "rateLimited"),
+                               (UpdateNetworkError, "network"), (UpdateManifestError, "invalidManifest"),
+                               (UpdateVerificationError, "verificationFailed")):
+                if isinstance(error, kind):
+                    self._set_status(code)
+                    return
+            self._set_status(default)
+
     def _exclusive(self):
-        return self._closed or self._busy or self._pending or self._reader.busy or self._maintenance.busy
+        return (self._closed or self._busy or self._pending or self._reader.busy or self._maintenance.busy
+                or getattr(self._maintenance, "awaitingConfirmation", False))
 
     @Slot()
     def check(self):
@@ -91,22 +138,25 @@ class UpdateBridge(QObject):
         self._busy = True
         self._available = False
         self._version = ""
-        self._status = "Checking the official falker47/Panacea stable release..."
+        self._notes = ""
+        self._set_status("checking")
         self.changed.emit()
 
         def succeed(release):
+            self._last_checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
             self._available = release is not None
             self._version = release.version if release else ""
-            if not release:
-                self._status = f"Panacea {VERSION} is up to date."
-            elif self.eligible:
-                self._status = f"Verified release metadata for Panacea {release.version}. Review before installing."
+            if release:
+                self._notes = sanitize_notes(release.notes)
+                self._set_status("available" if self.eligible else "availableReadOnly", version=release.version)
+                if self.eligible:
+                    self.releaseNotesAvailable.emit(release.version, self._notes)
             else:
-                self._status = (f"Panacea {release.version} is available. "
-                                "This QA executable cannot replace the stable application.")
+                self._set_status("current", version=VERSION)
 
         def fail(error):
-            self._status = f"Update check failed: {error}"
+            self._last_checked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            self._error_status(error, "checkFailed")
 
         def done():
             self._busy = False
@@ -114,7 +164,7 @@ class UpdateBridge(QObject):
 
         if not self._workers.start("check-release", self._flow.check, group="update-check",
                                    on_success=succeed, on_error=fail, on_done=done):
-            self._status = "An update check is already running."
+            self._set_status("alreadyChecking")
             done()
 
     @Slot()
@@ -122,25 +172,27 @@ class UpdateBridge(QObject):
         if self._exclusive() or not self._available or not self.eligible:
             return
         self._pending = True
-        self._status = (f"Confirm verified download and protected installation of Panacea "
-                        f"{self._version}. Windows may restart the application.")
+        self._set_status("confirm", version=self._version)
         self.changed.emit()
 
     @Slot()
     def reject(self):
+        if self._pending:
+            self._set_status("available", version=self._version)
         self._pending = False
         self.changed.emit()
 
     @Slot()
     def confirmInstall(self):
         if (self._closed or not self._pending or self._busy or not self.eligible
-                or not self._available or self._maintenance.busy or self._reader.busy):
+                or not self._available or self._maintenance.busy or self._reader.busy
+                or getattr(self._maintenance, "awaitingConfirmation", False)):
             return
         self._pending = False
         self._busy = True
         self._downloading = True
         self._percent = 0
-        self._status = "Downloading the official release; validating SHA-256 and executable."
+        self._set_status("downloading")
         self.changed.emit()
 
         def progress(received, total):
@@ -148,7 +200,7 @@ class UpdateBridge(QObject):
             self._dispatcher.post(self._set_progress, percentage, key="updater-progress")
 
         def succeed(_staged):
-            self._status = "Download verified. Preparing protected helper and rollback."
+            self._set_status("verified")
             self.changed.emit()
             self._start_helper()
 
@@ -174,7 +226,7 @@ class UpdateBridge(QObject):
     def cancelDownload(self):
         if self._downloading and not self._installing:
             self._flow.cancel_download()
-            self._status = "Download cancellation requested. No executable has been replaced."
+            self._set_status("cancelRequested")
             self.changed.emit()
 
     def _start_helper(self):
@@ -182,12 +234,12 @@ class UpdateBridge(QObject):
             self._failed(RuntimeError("Application is closing."))
             return
         self._installing = True
-        self._status = "Starting the verified installer. The old executable remains available."
+        self._set_status("starting")
         self.changed.emit()
 
         def prepared(job):
             self._job = job
-            self._status = "Installer started. Waiting for verified startup or rollback."
+            self._set_status("started")
             self.changed.emit()
             QTimer.singleShot(400, self._poll)
 
@@ -205,7 +257,9 @@ class UpdateBridge(QObject):
         def got(result):
             self._poll_failures = 0
             state = result.get("status", "failed")
-            self._status = "Updater: " + str(result.get("message") or state)
+            code = {"preparing": "preparing", "installing": "installing", "waiting_ready": "waitingReady",
+                    "ready": "ready"}.get(state, "monitoring")
+            self._set_status(code)
             if state == "ready":
                 self._installing = False
                 self._busy = False
@@ -215,7 +269,7 @@ class UpdateBridge(QObject):
                 if self._on_ready is not None:
                     self._on_ready()
             elif state == "failed":
-                self._failed(RuntimeError(self._status))
+                self._failed(RuntimeError(str(result.get("message") or state)))
             else:
                 self._poll_again = True
                 self.changed.emit()
@@ -237,10 +291,7 @@ class UpdateBridge(QObject):
         if self._closed or self._job is None or not self._installing:
             return
         self._poll_failures = min(self._poll_failures + 1, 5)
-        self._status = (
-            f"Updater status temporarily unavailable: {error}. "
-            "The running helper is still being monitored; no new update may start."
-        )
+        self._set_status("statusUnavailable")
         self.changed.emit()
         QTimer.singleShot(min(5000, 650 * 2 ** (self._poll_failures - 1)), self._poll)
 
@@ -250,7 +301,7 @@ class UpdateBridge(QObject):
         self._installing = False
         self._job = None
         self._pending = False
-        self._status = f"Update unsuccessful: {error}. Verify updater status and recovery before retrying."
+        self._error_status(error, "failed")
         self.changed.emit()
 
     def stop(self):

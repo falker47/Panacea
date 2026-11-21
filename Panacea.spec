@@ -16,13 +16,15 @@ version_file.write_text(version_resource(VERSION), encoding="utf-8")
 
 datas = [
     ("qt_app/Main.qml", "qt_app"),
-    ("qt_app/ParityPage.qml", "qt_app"),
+    ("qt_app/qml", "qt_app/qml"),
+    ("qt_app/i18n/*.json", "qt_app/i18n"),
     ("assets/panacea_icon.ico", "assets"),
     ("assets/panacea_icon.png", "assets"),
     ("assets/icons/lucide/png", "assets/icons/lucide/png"),
     ("assets/icons/lucide/LICENSE", "assets/icons/lucide"),
 ]
 hiddenimports = [
+    "qt_app.bridges.reliability_bridge", "qt_app.bridges.features_bridge",
     "modules.commands", "modules.cleanup", "modules.disk",
     "modules.restore", "modules.performance", "modules.maintenance_guard",
     "modules.updater", "modules.update_install", "modules.quick_cleanup",

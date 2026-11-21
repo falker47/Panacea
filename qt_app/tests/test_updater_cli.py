@@ -14,7 +14,7 @@ class ProtectedUpdateCliContracts(unittest.TestCase):
             self.assertIn(flag, qt)
         self.assertIn("run_update_helper(args.panacea_update_helper)", qt)
         self.assertIn("acknowledge_ready(sys.executable, args.panacea_update_ready)", qt)
-        self.assertIn("QTimer.singleShot(250, acknowledge_update)", qt)
+        self.assertIn("QTimer.singleShot(0, acknowledge_update)", qt)
 
     def test_qa_executable_cannot_claim_production_readiness(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")

@@ -8,14 +8,33 @@ from modules import crash_guard, diagnostics, history
 from modules.maintenance_guard import MaintenanceGuard, _state
 
 
+class _ResultRelay(QObject):
+    """Carry worker results back to the GUI thread.
+
+    Kept outside the service hierarchy: PySide6 6.10 crashes on QML property
+    reads when a subclass adds notifying properties to a base that also
+    declares a private signal/slot pair.
+    """
+
+    finished = Signal(object, object)
+
+    def __init__(self, owner):
+        super().__init__(owner)
+        self._owner = owner
+        self.finished.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
+
+    @Slot(object, object)
+    def _deliver(self, receive, result):
+        self._owner._deliver(receive, result)
+
+
 class _AsyncService(QObject):
     changed = Signal()
-    _finished = Signal(object, object)
 
     def __init__(self):
         super().__init__()
         self._busy = False
-        self._finished.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
+        self._relay = _ResultRelay(self)
 
     @Property(bool, notify=changed)
     def busy(self):
@@ -26,6 +45,7 @@ class _AsyncService(QObject):
             return False
         self._busy = True
         self.changed.emit()
+        relay = self._relay
 
         def run():
             try:
@@ -36,12 +56,11 @@ class _AsyncService(QObject):
                 result = {"error": "state_changed"}
             except Exception:
                 result = {"error": "storage_unavailable"}
-            self._finished.emit(receive, result)
+            relay.finished.emit(receive, result)
 
         threading.Thread(target=run, name="panacea-reliability", daemon=False).start()
         return True
 
-    @Slot(object, object)
     def _deliver(self, receive, result):
         self._busy = False
         receive(result)

@@ -145,6 +145,18 @@ Item {
                 currentIndex: root.filters.indexOf(root.filter)
                 enabled: !historyService.busy
                 onActivated: index => root.load(0, root.filters[index])
+                // Basic.ComboBox defaults to an inner TextField; the shell's accessibility audit
+                // rejects that unnamed control, so draw the value as ignored text (as ChoiceBox does).
+                contentItem: Text {
+                    leftPadding: 12
+                    rightPadding: filterBox.indicator ? filterBox.indicator.width + 12 : 12
+                    text: filterBox.displayText
+                    font: filterBox.font
+                    color: root.theme.text
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    Accessible.ignored: true
+                }
             }
             ActionButton {
                 text: root.t("Aggiorna", "Refresh")

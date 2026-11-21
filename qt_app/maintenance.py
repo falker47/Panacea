@@ -12,6 +12,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import threading
+import time
 
 from modules.commands import system_executable, validate_drive
 from modules.operations import OperationStep, run_sequence
@@ -298,7 +299,14 @@ class MaintenanceService:
             self._pending = None
             self._active = True
             self._cancel.clear()
+        started = None
+        result = error = None
+        dispatched = False
         try:
+            try:
+                started = time.time()
+            except Exception:
+                pass
             if self._platform != "nt":
                 raise RuntimeError("Windows-only maintenance is unavailable on this platform")
             if action not in OPEN_ACTIONS and not self._is_admin():
@@ -315,17 +323,22 @@ class MaintenanceService:
             if action in OPEN_ACTIONS:
                 # Opening a Windows UI is not a Panacea-managed mutation. That
                 # utility's lifetime is outside the maintenance worker lease.
-                return invoke()
+                result = invoke()
+                return result
             guard = self._manager("guard")
             with guard.operation() as permit:
+                if hasattr(permit, "describe"):
+                    permit.describe(action)
                 # A second instance may own the mutex while the user cancels.
                 # Never execute an action that was cancelled before the lock
                 # was granted, even if it has since become available.
                 if self._cancel.is_set():
                     permit.resolve()
-                    return {"status": "cancelled", "success": False,
-                            "message": "Cancelled before Windows maintenance began"}
+                    result = {"status": "cancelled", "success": False,
+                              "message": "Cancelled before Windows maintenance began"}
+                    return result
                 try:
+                    dispatched = True
                     result = invoke()
                 except BaseException:
                     if self._completion_unknown():
@@ -340,6 +353,20 @@ class MaintenanceService:
                 else:
                     permit.resolve()  # Only verified terminal outcomes complete the record.
                 return result
+        except BaseException as exc:
+            error = exc
+            raise
         finally:
+            try:
+                from modules import history
+                history.append(history.operation_record(action, started, result, error,
+                                                        unverified=dispatched and error is not None))
+            except BaseException:
+                # Even a broken logging sink must preserve the original result or exception.
+                try:
+                    from modules.logger import Logger
+                    Logger().log("Operation history write failed.", "WARNING")
+                except BaseException:
+                    pass
             with self._lock:
                 self._active = False

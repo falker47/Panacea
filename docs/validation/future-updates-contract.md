@@ -50,3 +50,7 @@ not previously installed programs.
 **Limit:** No finite tests can guarantee all future binaries, network failures,
 security software or pre-existing installations. A live future release is
 needed for an end-to-end upgrade test. A synthetic fixture cannot prove it.
+
+For the prepublication candidate build, supported published-client matrix, native
+transaction evidence and outstanding GUI/transport coverage, see the
+[update compatibility harness](update-compat.md).

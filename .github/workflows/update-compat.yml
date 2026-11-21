@@ -1,0 +1,281 @@
+name: Update compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  linux-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - &verify-source
+        name: Verify exact source revision
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:EXPECTED_SOURCE_SHA) { throw "Unexpected source revision: $actual" }
+          "Verified source: $actual; event: $env:GITHUB_EVENT_NAME" >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install Linux test dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-dev.txt
+      - name: Compare fixture failures with the untouched base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then BASE=$(git rev-parse HEAD^); fi
+          git worktree add --detach "$RUNNER_TEMP/compat-base" "$BASE"
+          .venv/bin/python -m scripts.update_compat.baseline "$RUNNER_TEMP/compat-base"
+      - name: Check frozen contract, fixture behavior and syntax
+        if: ${{ !cancelled() }}
+        run: |
+          .venv/bin/python -m ruff check .
+          .venv/bin/python -m pytest -q tests/test_update_contract_freeze.py tests/test_update_compat_*.py
+          .venv/bin/python -m compileall -q main.py panacea_ui.py version.py modules qt_app scripts
+      - name: Record live asset order
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/update-compat
+          if [[ -n "$GH_TOKEN" ]]; then
+            gh api repos/falker47/Panacea/releases/latest --jq '{tag: .tag_name, assets: [.assets[].name]}' > build/update-compat/live-order.json
+            cat build/update-compat/live-order.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: update-contract-linux
+          path: build/update-compat
+          if-no-files-found: warn
+          retention-days: 7
+
+  build-candidate:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - *verify-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require disposable runner
+        run: python -c "from scripts.update_compat.hosted import hosted_guard; hosted_guard()"
+      - name: Locate Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          if (!(Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE) { throw 'Inno Setup installation failed' }
+          }
+          if (!(Test-Path -LiteralPath $iscc)) { throw 'Inno Setup 6 compiler is missing' }
+          "PANACEA_ISCC=$iscc" >> $env:GITHUB_ENV
+      - name: Stamp and build normal release artifacts
+        shell: pwsh
+        run: |
+          python -m scripts.update_compat.stamp_candidate
+          if ($LASTEXITCODE) { throw 'Version stamp failed' }
+          python scripts/build.py
+          if ($LASTEXITCODE) { throw 'Portable build failed' }
+          python scripts/build_installer.py
+          if ($LASTEXITCODE) { throw 'Installer build failed' }
+          $version = python scripts/release_tools.py
+          if ($LASTEXITCODE -or (Get-Item dist/Panacea.exe).VersionInfo.ProductVersion -cne $version) { throw 'Product version mismatch' }
+          $hash = (Get-FileHash dist/Panacea.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          @{sha=$env:SOURCE_SHA; version=$version; exe_sha256=$hash} | ConvertTo-Json | Set-Content dist/candidate.json -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: update-candidate-${{ env.SOURCE_SHA }}
+          path: |
+            dist/Panacea.exe
+            dist/Panacea.exe.sha256
+            dist/PanaceaSetup.exe
+            dist/PanaceaSetup.exe.sha256
+            dist/candidate.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  transport-canary:
+    name: CPython 3.12 loopback TLS control
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - *verify-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require disposable runner
+        id: guard
+        run: python -c "from scripts.update_compat.hosted import hosted_guard; hosted_guard()"
+      - name: Check urllib with default trust and a child-only PEM
+        run: python -m scripts.update_compat.tls_canary
+      - name: Remove and verify temporary TLS files
+        if: always() && steps.guard.outcome == 'success'
+        run: python -m scripts.update_compat.tls_canary --cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loopback-tls-control
+          path: build/update-compat/loopback-tls.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  client-acceptance:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    needs: [build-candidate, transport-canary]
+    strategy:
+      fail-fast: false
+      matrix:
+        from: [v2.0.0, v2.0.1, v2.0.2, v2.1.0, v2.1.1]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - *verify-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require disposable runner
+        run: python -c "from scripts.update_compat.hosted import hosted_guard; hosted_guard()"
+      - uses: actions/download-artifact@v4
+        with:
+          name: update-candidate-${{ env.SOURCE_SHA }}
+          path: build/candidate
+      - name: Retrieve official Panacea.exe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM: ${{ matrix.from }}
+        run: gh release download "$env:FROM" --repo falker47/Panacea --pattern Panacea.exe --dir build/published
+      - name: Exercise the hash-pinned published client
+        env:
+          FROM: ${{ matrix.from }}
+        run: python -m scripts.update_compat.acceptance "$env:FROM"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-${{ matrix.from }}
+          path: build/update-compat
+          if-no-files-found: warn
+          retention-days: 7
+
+  native-install:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PANACEA_ALLOW_HOSTED_PROBE: 'true'
+    needs: [build-candidate, transport-canary]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {from: v2.1.1, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.1.0, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.0.2, mode: transaction, label: Supplemental frozen-host transaction}
+          - {from: v2.1.1, mode: rollback, label: Supplemental frozen-host rollback}
+          - {from: v2.1.1, mode: manual, label: Setup over Setup}
+    name: ${{ matrix.label }} from ${{ matrix.from }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - *verify-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require disposable runner
+        run: python -c "from scripts.update_compat.hosted import hosted_guard; hosted_guard()"
+      - uses: actions/download-artifact@v4
+        with:
+          name: update-candidate-${{ env.SOURCE_SHA }}
+          path: build/candidate
+      - name: Retrieve official PanaceaSetup.exe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM: ${{ matrix.from }}
+        run: gh release download "$env:FROM" --repo falker47/Panacea --pattern PanaceaSetup.exe --dir build/published
+      - name: Verify installed path on the disposable runner
+        env:
+          FROM: ${{ matrix.from }}
+          MODE: ${{ matrix.mode }}
+        run: python -m scripts.update_compat.installed "$env:FROM" "$env:MODE"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-${{ matrix.from }}-${{ matrix.mode }}
+          path: build/update-compat
+          if-no-files-found: warn
+          retention-days: 7
+
+  client-summary:
+    if: ${{ always() && needs.client-acceptance.result != 'skipped' }}
+    needs: client-acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - *verify-source
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: acceptance-*
+          path: reports
+          merge-multiple: true
+      - name: Summarize the five published clients
+        run: |
+          python3 -m scripts.update_compat.client_summary

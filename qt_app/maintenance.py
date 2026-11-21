@@ -44,13 +44,17 @@ TURBO = {
 CLEANUPS = frozenset({"temp_clean", "browser_clean", "recycle_empty", "quick_cleanup"})
 DRIVE_ACTIONS = frozenset({"drive_optimize", "chkdsk"})
 OPEN_ACTIONS = frozenset({*SETTINGS, "appwiz", "open_cleanmgr", "open_defrag"})
+TARGET_MANAGERS = {"startup_enable": "startup", "startup_disable": "startup", "deep_cleanup": "deep"}
 ACTIONS = frozenset({
     *COMMANDS, *SETTINGS, *TURBO, *CLEANUPS, *DRIVE_ACTIONS, "appwiz",
     "open_cleanmgr", "open_defrag", "restore_point", "resurrection",
-    "battery_report",
+    "battery_report", *TARGET_MANAGERS,
 })
-DANGEROUS = frozenset({*CLEANUPS, "resurrection", "winsock_reset", "component_cleanup"})
+DANGEROUS = frozenset({*CLEANUPS, "resurrection", "winsock_reset", "component_cleanup", "deep_cleanup"})
 WARNINGS = {
+    "startup_enable": "Allow the selected startup item to run at sign-in. You can disable it again.",
+    "startup_disable": "Prevent the selected startup item from running at sign-in. You can enable it again.",
+    "deep_cleanup": "Permanently remove eligible data in the selected categories. Locked files are skipped. Crash dumps help diagnose crashes. Deletion is irreversible.",
     "temp_clean": "Permanently delete eligible temporary files. Locked/protected files are skipped. This cannot be undone.",
     "browser_clean": "Permanently delete eligible browser caches. Close browsers first; this cannot be undone.",
     "recycle_empty": "Permanently empty the entire Recycle Bin. This cannot be undone.",
@@ -62,6 +66,12 @@ WARNINGS = {
 
 
 def _default_factory(name):
+    if name == "deep":
+        from modules.deep_cleanup import session_cleanup
+        return session_cleanup()
+    if name == "startup":
+        from modules.startup_apps import StartupApps
+        return StartupApps()
     if name == "guard":
         from modules.maintenance_guard import MaintenanceGuard
         return MaintenanceGuard()
@@ -110,7 +120,7 @@ class MaintenanceService:
             self._instances[name] = factory() if factory else _default_factory(name)
         return self._instances[name]
 
-    def prepare(self, action, drive=""):
+    def prepare(self, action, drive="", *, target=None):
         """No mutation: return a one-use nonce and an informed confirmation."""
         if not isinstance(action, str) or action not in ACTIONS:
             raise ValueError("Action is not in the approved maintenance allowlist")
@@ -118,18 +128,27 @@ class MaintenanceService:
             drive = validate_drive(drive)
         elif drive:
             raise ValueError("Drive argument is accepted only by disk operations")
+        manager = TARGET_MANAGERS.get(action)
+        if target is not None and not manager:
+            raise ValueError("This action does not accept a target")
         with self._lock:
             if self._closed or self._active:
                 raise RuntimeError("Maintenance is already running or closing")
+            snapshot = self._manager(manager).target(action, target) if manager else None
             nonce = secrets.token_urlsafe(24)
-            self._pending = (nonce, action, drive)
+            self._pending = (nonce, action, drive, target, snapshot)
         warning = WARNINGS.get(action, "This changes Windows settings. Save work; the operation may take time or require a restart.")
         if action in OPEN_ACTIONS:
             warning = "Open a native Windows utility. Changes there require separate Windows interaction."
         if action in TURBO:
             warning = "Change Windows power, visual or service state. Original values are saved and restoration may fail if Windows policies intervene."
-        return {"nonce": nonce, "title": action.replace("_", " ").title(),
-                "details": warning + (f"\nSelected drive: {drive}" if drive else "")}
+        prepared = {"nonce": nonce, "title": action.replace("_", " ").title(),
+                    "details": warning + (f"\nSelected drive: {drive}" if drive else "")}
+        if snapshot is not None:
+            from qt_app.feature_catalog import action_label, selection_label
+            prepared.update(title=action_label(action, "en"), selection=snapshot.label)
+            prepared["details"] += "\n" + selection_label(action, snapshot.label, "en")
+        return prepared
 
     def reject(self):
         with self._lock:
@@ -225,7 +244,12 @@ class MaintenanceService:
                 "steps": [{"name": row.name, "success": row.success, "message": row.message}
                           for row in result.steps], "total": len(steps)}
 
-    def _dispatch(self, action, drive, log, progress):
+    def _dispatch(self, action, drive, log, progress, *, target=None):
+        if action == "deep_cleanup":
+            runner = self._manager("commands") if "delivery_optimization" in target.categories else None
+            return self._manager("deep").apply(target, runner, log, self._cancel.is_set)
+        if action in ("startup_enable", "startup_disable"):
+            return self._manager("startup").apply(action, target)
         if action in COMMANDS:
             return _strict_pair(self._command(action, log))
         if action == "chkdsk":
@@ -295,7 +319,7 @@ class MaintenanceService:
                 raise ValueError("Missing or expired explicit confirmation")
             if self._closed or self._active:
                 raise RuntimeError("Maintenance is already running or closing")
-            _, action, drive = self._pending
+            _, action, drive, target, snapshot = self._pending
             self._pending = None
             self._active = True
             self._cancel.clear()
@@ -313,7 +337,21 @@ class MaintenanceService:
                 raise PermissionError("Administrator privileges are required")
 
             def invoke():
-                value = self._dispatch(action, drive, log or (lambda msg: None), progress)
+                options = {}
+                if snapshot is not None:
+                    manager = self._manager(TARGET_MANAGERS[action])
+                    try:
+                        current = (manager.target(action, target, fresh=True) if action == "deep_cleanup"
+                                   else manager.target(action, target))
+                    except (ValueError, OSError):
+                        current = None
+                    if current != snapshot:
+                        if action == "deep_cleanup":
+                            return snapshot.changed_result(current)
+                        return {"status": "stale", "success": False,
+                                "message": "The selection changed or disappeared. Refresh and confirm again."}
+                    options["target"] = current
+                value = self._dispatch(action, drive, log or (lambda msg: None), progress, **options)
                 if isinstance(value, dict) and "status" in value:
                     return value
                 success, message = _strict_pair(value)

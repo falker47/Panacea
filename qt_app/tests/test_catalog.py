@@ -2,8 +2,12 @@
 import re
 
 from qt_app.catalog import ENTRIES, SECTIONS, SECTION_ACTIONS, palette_entries
+from qt_app.feature_catalog import ACTIONS as FEATURE_ACTIONS
 from qt_app.i18n import messages
-from qt_app.maintenance import ACTIONS
+from qt_app.maintenance import ACTIONS as ALL_ACTIONS
+
+# Optional 2.2 feature actions are confirmed by their own pages, not by catalog cards.
+ACTIONS = ALL_ACTIONS - FEATURE_ACTIONS.keys()
 
 
 def test_each_approved_action_has_a_direct_section_destination():
@@ -12,6 +16,8 @@ def test_each_approved_action_has_a_direct_section_destination():
     )
     direct_actions = {action for actions in SECTION_ACTIONS.values() for action in actions}
     assert direct_actions == ACTIONS == set(ENTRIES)
+    assert FEATURE_ACTIONS.keys() <= ALL_ACTIONS
+    assert not FEATURE_ACTIONS.keys() & set(ENTRIES)
     assert all(re.fullmatch(r"[a-z_]+", action) for action in direct_actions)
     assert {"quick_cleanup", "restore_point", "windows_update"} <= set(SECTION_ACTIONS["home"])
     assert {"quick_cleanup", "browser_clean", "open_cleanmgr"} <= set(SECTION_ACTIONS["cleanup"])

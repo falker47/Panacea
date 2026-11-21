@@ -9,6 +9,7 @@ import re
 import stat
 import subprocess
 import threading
+import uuid
 
 from modules.commands import system_executable
 from modules.logger import Logger
@@ -79,6 +80,56 @@ class UnsafePath(OSError):
         self.reason = reason
 
 
+def known_folder(name):
+    """Resolve a shell Known Folder without creating it or consulting environment strings."""
+    folders = {
+        'local': 'F1B32785-6FBA-4FCF-9D55-7B8E7F157091',
+        'program_data': '62AB5D82-FDC1-4DC3-A9DD-070D1D495D97',
+        'profile': '5E6C858F-0E22-4760-9AFE-EA3317B67173',
+        'startup': 'B97D20BB-F46A-4C97-BA10-5E3608430854',
+        'common_startup': 'A4115719-D62E-491D-AA7C-E74B8BE3B067',
+    }
+    if os.name != 'nt':
+        raise OSError('Windows Known Folders are unavailable')
+    folder_id = ctypes.create_string_buffer(uuid.UUID(folders[name]).bytes_le)
+    address = ctypes.c_void_p()
+    if ctypes.windll.shell32.SHGetKnownFolderPath(folder_id, 0x4000, None, ctypes.byref(address)) < 0 or not address:
+        raise OSError(f'Known Folder unavailable: {name}')
+    try:
+        return Path(_lexical_path(ctypes.wstring_at(address)))
+    finally:
+        ctypes.windll.ole32.CoTaskMemFree(address)
+
+
+def _stamp(info):
+    return (info.volume, info.index_high, info.index_low, info.creation.dwHighDateTime,
+            info.creation.dwLowDateTime, info.write.dwHighDateTime, info.write.dwLowDateTime,
+            (info.size_high << 32) | info.size_low)
+
+
+def guarded_stamp(path, *, directory=False):
+    """Caller holds the parent guard. Bind a preview to the actual object."""
+    with _windows_handle(path) as (_, _, info):
+        if bool(info.attributes & 0x10) != directory or (not directory and info.links != 1):
+            raise UnsafePath('Unexpected file type or link count')
+        return _stamp(info)
+
+
+def remove_guarded_empty_folder(path, expected):
+    """Remove only the same, now-empty staging folder, by its non-recursive handle."""
+    with _guard_path(path.parent), _windows_handle(path, delete=True) as (kernel, handle, info):
+        if not info.attributes & 0x10 or _stamp(info)[:5] != expected[:5]:
+            raise UnsafePath('Staging folder changed since preview')
+        _dispose(kernel, handle, path)
+
+
+def _dispose(kernel, handle, path):
+    _validate_handle(kernel, handle, path)
+    disposition = wintypes.BOOL(True)
+    if not kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 class _FileInfo(ctypes.Structure):
     _fields_ = [('attributes', wintypes.DWORD), ('creation', wintypes.FILETIME),
                 ('access', wintypes.FILETIME), ('write', wintypes.FILETIME),
@@ -88,6 +139,8 @@ class _FileInfo(ctypes.Structure):
 
 
 class _RecycleBinInfo(ctypes.Structure):
+    if ctypes.sizeof(ctypes.c_void_p) == 4:
+        _pack_ = 1  # shellapi.h packs these structures only on 32-bit Windows.
     _fields_ = [('cbSize', wintypes.DWORD), ('i64Size', ctypes.c_longlong),
                 ('i64NumItems', ctypes.c_longlong)]
 
@@ -268,17 +321,17 @@ class CleanupManager:
                 self.last_result.add_issue('skipped', profiles, exc)
         return [path for path in targets if os.path.lexists(path)]
 
-    def _delete_file(self, path, preview):
+    @staticmethod
+    def _delete_file(path, preview, *, expected=None):
         with _windows_handle(path, delete=not preview) as (kernel, handle, info):
             if info.attributes & 0x10 or info.links != 1:
                 raise UnsafePath(f'Directory or multiply linked file refused: {path}',
                                  reason='not_regular' if info.attributes & 0x10 else 'hard_link')
             size = (info.size_high << 32) | info.size_low
+            if expected is not None and _stamp(info) != expected:
+                raise UnsafePath('File changed since preview')
             if not preview:
-                _validate_handle(kernel, handle, path)
-                disposition = wintypes.BOOL(True)
-                if not kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                _dispose(kernel, handle, path)
         return size
 
     def _walk_directory(self, directory, preview, progress_callback):

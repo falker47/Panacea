@@ -1,6 +1,7 @@
 """End-to-end input, section routing, accessibility and localized fixture states."""
 import unittest
 
+from qt_app.feature_catalog import ACTIONS as FEATURE_ACTIONS
 from qt_app.maintenance import ACTIONS
 from qt_app.tests.qml_probe import probe
 
@@ -8,7 +9,8 @@ from qt_app.tests.qml_probe import probe
 class DesktopRuntimeTests(unittest.TestCase):
     def test_every_catalog_operation_can_be_prepared_in_two_clicks(self):
         for language in ("it", "en"):
-            self.assertEqual(set(probe("actions", language)["actions"]), ACTIONS)
+            # Optional 2.2 feature actions need a target chosen on their own page.
+            self.assertEqual(set(probe("actions", language)["actions"]), ACTIONS - FEATURE_ACTIONS.keys())
 
     def test_bilingual_palette_matches_exact_action_and_requires_consent(self):
         for language in ("en", "it"):

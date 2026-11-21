@@ -1,43 +1,44 @@
-"""The Qt guided-maintenance surface preserves V2 per-phase details.
-
-Tests are presentation-only: no Windows maintenance is invoked.
-"""
-from pathlib import Path
+"""All ten guided operations retain their help, real outcomes and pending diagnostics."""
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
-QML = ROOT / "qt_app" / "ParityPage.qml"
-V2 = ROOT / "panacea_ui.py"
+from qt_app.tests.test_v2_graph import descendants, find, page_test, value
 
 
-class ResurrectionVisualParityTests(unittest.TestCase):
-    def test_all_legacy_phases_have_explanations_and_stable_order(self):
-        qml = QML.read_text(encoding="utf-8")
-        stable = V2.read_text(encoding="utf-8")
-        source = stable.split("RESURRECTION_HELP = {", 1)[1].split("\n    }", 1)[0]
-        original_keys = [
-            "Restore point", "Browser caches", "Temporary files", "Recycle Bin",
-            "DNS cache", "Network reset", "Drive optimization", "Disk health scan",
-            "Windows image health", "System file scan",
-        ]
-        self.assertEqual(len(original_keys), 10)
-        for key in original_keys:
-            self.assertIn("'" + key + "':", source)
-        self.assertIn("objectName: \"resurrection_step_\" + index", qml)
-        self.assertIn("Accessible.description: guidedStep.helpCopy", qml)
-        self.assertIn("progressSteps[modelData].message", qml)
-        self.assertIn('progressSteps[modelData].success === true ? "#78c8a8" : "#ee939a"', qml)
-        self.assertIn("view.stepCaption(modelData)", qml)
-        guided_model = qml.split("id: stepGrid", 1)[1].split("id: guidedStep", 1)[0]
-        self.assertEqual(guided_model.count("help:"), 9)
-        self.assertIn('title: view.language === "it" ? "Cache e temporanei"', guided_model)
-        self.assertIn('help: view.language === "it" ?', guided_model)
-        self.assertIn('operations: [1, 2]', qml)
-        self.assertEqual(qml.count('operations: ['), 9)
-        self.assertIn('readonly property int backendIndex: modelData', qml)
-        self.assertIn('9 passaggi · 10 operazioni', qml)
-        self.assertIn("guidedStep.expanded = !guidedStep.expanded", qml)
-        self.assertIn("Keys.onSpacePressed: activate()", qml)
+class GuidedMaintenanceTests(unittest.TestCase):
+    @page_test("guided")
+    def test_phase_order_and_descriptions_match_the_backend_sequence(self, f):
+        keys = ["restore_point", "browser_clean", "temp_clean", "recycle_empty", "dns_flush",
+                "winsock_reset", "drive_optimize", "chkdsk", "dism_check", "sfc"]
+        steps = value(find(f.page, "steps_resurrection"), "steps")
+        self.assertEqual([row["title"] for row in steps], [f.strings.t(f"action.{key}.title") for key in keys])
+        self.assertEqual([row["description"] for row in steps], [f.strings.t(f"pages.step.{key}") for key in keys])
+        self.assertEqual([row["state"] for row in steps], ["pending"] * 10)
+        self.assertFalse(f.maintenance.awaitingConfirmation)
+        find(f.page, "action_resurrection").click()
+        self.assertTrue(f.maintenance.awaitingConfirmation)
+        self.assertEqual(f.maintenance.preparedAction, "resurrection")
+        self.assertFalse(f.backend.executed)
+
+    @page_test("guided", "it", "running")
+    def test_running_cancelled_failed_and_unverified_states_use_reported_results(self, f):
+        sequence = find(f.page, "steps_resurrection")
+
+        def states():
+            return [row["state"] for row in value(sequence, "steps")]
+
+        self.assertEqual(states(), ["success", "success", "running"] + ["pending"] * 7)
+        f.maintenance._busy = False
+        for status in ("cancelled", "failed", "partial", "unknown"):
+            f.maintenance._result_status = status
+            f.maintenance._steps = [{"success": False, "message": "fixture 42"}]
+            f.maintenance._progress_done = 7  # A count alone can never verify individual outcomes.
+            f.maintenance._remember_result()
+            f.maintenance.changed.emit()
+            remaining = "unknown" if status == "unknown" else "skipped"
+            self.assertEqual(states(), ["failed"] + [remaining] * 9)
+        details = [value(node, "details") for node in descendants(f.page)
+                   if node.isVisible() and node.metaObject().indexOfProperty("details") >= 0]
+        self.assertTrue(any("fixture 42" in raw for raw in details))
 
 
 if __name__ == "__main__":

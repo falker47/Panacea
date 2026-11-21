@@ -2,6 +2,7 @@
 import unittest
 
 from qt_app.catalog import ENTRIES, GROUPS, cards
+from qt_app.feature_catalog import ACTIONS as FEATURE_ACTIONS
 from qt_app.maintenance import ACTIONS
 
 
@@ -9,7 +10,7 @@ class CatalogTests(unittest.TestCase):
     def test_all_supported_operations_have_a_visible_card(self):
         keys = {key for group in GROUPS for key in group}
         self.assertEqual(keys, set(ENTRIES))
-        self.assertEqual(keys - {"cpu", "ram", "disk"}, ACTIONS)
+        self.assertEqual((keys - {"cpu", "ram", "disk"}) | FEATURE_ACTIONS.keys(), ACTIONS)
 
     def test_pages_localize_without_changing_action_identifiers(self):
         italian, english = cards("it"), cards("en")

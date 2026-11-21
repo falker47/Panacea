@@ -136,6 +136,11 @@ def run_process_stream(args, progress_callback=None, filter_func=None, timeout=3
 
 class CommandRunner:
     _COMMANDS = {
+        ('powershell.exe', '-noprofile', '-noninteractive', '-command', 'delete-deliveryoptimizationcache', '-force'): (
+            'powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+            "$ErrorActionPreference='Stop'; "
+            r"Import-Module ($PSHOME + '\Modules\DeliveryOptimization\DeliveryOptimization.psd1'); "
+            r"DeliveryOptimization\Delete-DeliveryOptimizationCache -Force"),
         ('sfc', '/scannow'): ('sfc.exe', '/scannow'),
         ('ipconfig', '/flushdns'): ('ipconfig.exe', '/flushdns'),
         ('netsh', 'winsock', 'reset'): ('netsh.exe', 'winsock', 'reset'),

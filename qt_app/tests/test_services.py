@@ -84,7 +84,8 @@ class ReadServiceTests(unittest.TestCase):
     def test_only_an_explicit_allowlist_is_exposed(self):
         self.assertEqual(READ_ACTIONS,
                          frozenset({"hardware", "temp_preview", "drives",
-                                    "turbo_status", "guard_status", "windows_updates"}))
+                                    "turbo_status", "guard_status", "windows_updates", "health_check",
+                                    "startup_apps", "deep_cleanup_preview", "storage_analysis"}))
         for action in ("clean_temp", "resurrect", "run_cmd", "set_turbo", "install_update", ""):
             with self.subTest(action=action), self.assertRaises(ValueError):
                 self.service.collect(action)

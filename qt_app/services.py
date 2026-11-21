@@ -10,20 +10,36 @@ import threading
 
 
 READ_ACTIONS = frozenset({
-    "hardware", "temp_preview", "drives", "turbo_status", "guard_status", "windows_updates"
+    "hardware", "temp_preview", "drives", "turbo_status", "guard_status", "windows_updates",
+    "startup_apps", "deep_cleanup_preview", "storage_analysis", "health_check",
 })
 
 
+class _ReadLog:
+    """Preview results carry their own diagnostics. Do not create the maintenance log."""
+    def log(self, *args):
+        pass
+
+
 def _default_factory(name):
+    if name == "startup":
+        from modules.startup_apps import StartupApps
+        return StartupApps()
+    if name == "deep":
+        from modules.deep_cleanup import session_cleanup
+        return session_cleanup()
+    if name == "storage":
+        from modules.storage_analysis import StorageAnalysis
+        return StorageAnalysis()
     if name == "monitor":
         from modules.system_monitor import SystemMonitor
         return SystemMonitor()
     if name == "cleanup":
         from modules.cleanup import CleanupManager
-        return CleanupManager()
+        return CleanupManager(logger=_ReadLog())
     if name == "disk":
         from modules.disk import DiskOptimizer
-        return DiskOptimizer()
+        return DiskOptimizer(logger=_ReadLog())
     if name == "performance":
         from modules.performance import PerformanceManager
         return PerformanceManager()
@@ -84,6 +100,15 @@ class ReadService:
             return self._collect_locked(action)
 
     def _collect_locked(self, action):
+        if action == "startup_apps":
+            return self._manager("startup").inventory()
+        if action == "deep_cleanup_preview":
+            return self._manager("deep").preview()
+        if action == "storage_analysis":
+            return self._manager("storage").scan()
+        if action == "health_check":
+            from modules.health_check import collect
+            return collect(self._collect_locked, lambda: self._manager("deep").preview(remember=False))
         if action == "hardware":
             metadata = self._manager("monitor").sample_metadata()
             return {

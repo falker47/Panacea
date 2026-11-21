@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from qt_app.catalog import ENTRIES
+from qt_app.feature_catalog import ACTIONS as FEATURE_ACTIONS, action_label, selection_label
 from qt_app.maintenance import OPEN_ACTIONS, TURBO, WARNINGS
 
 
@@ -24,6 +25,12 @@ _TURBO_IT = (
     "sono salvate, ma le policy di Windows potrebbero impedirne il ripristino."
 )
 _WARNINGS_IT = {
+    "startup_enable": "Consenti l'avvio dell'elemento selezionato all'accesso. Puoi disabilitarlo di nuovo.",
+    "startup_disable": "Impedisci l'avvio dell'elemento selezionato all'accesso. Puoi riabilitarlo.",
+    "deep_cleanup": (
+        "Elimina definitivamente i dati idonei delle categorie selezionate. I file bloccati vengono ignorati. "
+        "I dump aiutano a diagnosticare gli arresti anomali. L'eliminazione è irreversibile."
+    ),
     "temp_clean": (
         "Elimina definitivamente i file temporanei idonei. I file bloccati o protetti "
         "vengono ignorati. L'operazione è irreversibile."
@@ -62,6 +69,11 @@ def confirmation_text(action: str, prepared: dict, language: str) -> tuple[str, 
     """Return presentation text only; preserve any unrecognized backend warning."""
     title, raw = prepared["title"], prepared["details"]
     if language != "it":
+        return title, raw
+    if action in FEATURE_ACTIONS and "selection" in prepared:
+        selection = prepared["selection"]
+        if raw == WARNINGS[action] + "\n" + selection_label(action, selection, "en"):
+            return action_label(action, "it"), _WARNINGS_IT[action] + "\n" + selection_label(action, selection, "it")
         return title, raw
     if action in OPEN_ACTIONS:
         expected, translated = _OPEN_EN, _OPEN_IT

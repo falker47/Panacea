@@ -1,5 +1,6 @@
 """No destructive action gets an English-only confirmation in Italian UI."""
 import unittest
+from types import SimpleNamespace
 
 from qt_app.confirmation_copy import confirmation_text
 from qt_app.maintenance import DANGEROUS, MaintenanceService, WARNINGS
@@ -7,12 +8,15 @@ from qt_app.maintenance import DANGEROUS, MaintenanceService, WARNINGS
 
 class ConfirmationCopyContracts(unittest.TestCase):
     def setUp(self):
-        self.gateway = MaintenanceService(platform="not-windows")
+        deep = SimpleNamespace(target=lambda action, value: SimpleNamespace(label=value))
+        self.gateway = MaintenanceService(platform="not-windows", factories={"deep": lambda: deep})
 
     def tearDown(self):
         self.gateway.close()
 
     def prepared(self, action, drive=""):
+        if action == "deep_cleanup":
+            return self.gateway.prepare(action, target="crash_dumps")
         return self.gateway.prepare(action, drive)
 
     def test_every_dangerous_action_has_an_explicit_italian_warning(self):
@@ -26,7 +30,7 @@ class ConfirmationCopyContracts(unittest.TestCase):
                 self.assertNotIn("This changes Windows settings", details)
                 self.assertNotEqual(details, warning["details"])
                 if action in ("temp_clean", "browser_clean", "recycle_empty",
-                              "quick_cleanup", "resurrection"):
+                              "quick_cleanup", "resurrection", "deep_cleanup"):
                     self.assertIn("irreversib", details)
 
     def test_drive_confirmation_names_the_verified_drive(self):

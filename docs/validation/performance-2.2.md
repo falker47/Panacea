@@ -1,6 +1,6 @@
 # Panacea 2.2 Windows package and startup
 
-The T2 Windows one-file build is **51,060,081 bytes**, down **121,367,839 bytes (70.4%)** from the published v2.1.1 executable. The release spec retains Pillow, Basic Controls, Effects, Qt SVG and the software OpenGL fallback. The embedded PE product version is 2.1.1.
+The T2 Windows one-file build was **51,060,081 bytes**, down **121,367,839 bytes (70.4%)** from the published v2.1.1 executable. That build retained Pillow, Basic Controls, Effects, Qt SVG and the software OpenGL fallback. Its embedded PE product version was 2.1.1.
 
 | Build | EXE bytes | Archive entries | Stored bytes | Uncompressed bytes |
 | --- | ---: | ---: | ---: | ---: |
@@ -29,7 +29,7 @@ Five source-mode offscreen runs under `-X importtime` yielded cumulative medians
 
 ## Follow-up by measured cost
 
-1. Once T3 removes the last runtime Pillow import, T6 can apply the tested exclusion and repeat the packaged captures. It saved **7,319,779 executable bytes** and **14,066,359 uncompressed bytes**. The existing icon provider still needs Pillow on T2.
+1. T3 switched the production icon provider to Qt. T6 excludes `PIL` from the one-file build. The archive check now inspects both the embedded Python module index and native archive paths for Pillow. The legacy Tk interface and image tooling still use the development dependency. The **7,319,779 executable bytes** and **14,066,359 uncompressed bytes** saved above were measured in the T2 experiment. For the T6 executable size and repeated captures, use the packaged-performance artifact for its exact commit.
 2. Keep the software OpenGL fallback for this build. It contributes **7,660,531 stored bytes** and **20,639,544 uncompressed bytes**. Removing it needs a separate GPU-less hosted smoke and capture of the exact build that omits it.
 3. Measure lazy creation of the initial QML view when T3 integrates the shell. QML load took **276.4 ms** of the **477.0 ms** median to event-loop entry. Moving the shared MetricsBridge out of the lab entry module is a smaller experiment with a **20.4 ms** source import baseline. Remeasure both against the integrated shell before changing readiness scheduling.
 4. Keep the Windows DLL search path scoped to System32, Windows and the selected interpreter during Analysis. An initial build collected an unrelated ICU distribution from the host PATH. Its `icuuc.dll` lacked 20 unversioned imports requested by Qt6Core and the candidate stopped at the first Qt import. The corrected package loaded Qt and passed every offscreen capture.

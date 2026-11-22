@@ -54,3 +54,6 @@ needed for an end-to-end upgrade test. A synthetic fixture cannot prove it.
 For the prepublication candidate build, supported published-client matrix, native
 transaction evidence and outstanding GUI/transport coverage, see the
 [update compatibility harness](update-compat.md).
+
+For the 2.2.0 capitalization decision and staged rollout, use the
+[2.2.0 release checklist](release-2.2.0.md).

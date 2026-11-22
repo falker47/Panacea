@@ -90,13 +90,15 @@ def missing_required(names):
     return [name for name in REQUIRED if normalized(name) not in present]
 
 
-def archive_report(toc, exe_bytes):
+def archive_report(toc, exe_bytes, pyz_modules=()):
     entries = [{"name": name, "compressed_bytes": stored, "extracted_bytes": expanded}
                for name, (_, stored, expanded, _, _) in toc.items()]
     expanded = sum(e["extracted_bytes"] for e in entries)
     errors = []
     missing = missing_required(toc)
-    forbidden = sorted(name for name in toc if denied(name))
+    forbidden = [name for name in toc if denied(name) or normalized(name).startswith(("pil/", "pillow.libs/"))]
+    forbidden.extend(f"PYZ.pyz:{module}" for module in pyz_modules if module.partition(".")[0] == "PIL")
+    forbidden.sort()
     if missing or forbidden:
         errors.append("Archive policy violation (see missing and forbidden)")
     if exe_bytes > MAX_EXE_BYTES:
@@ -120,8 +122,10 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
-        report = archive_report(CArchiveReader(args.exe).toc, args.exe.stat().st_size)
-    except (OSError, ValueError, RuntimeError) as exc:
+        archive = CArchiveReader(args.exe)
+        pyz = archive.open_embedded_archive("PYZ.pyz")
+        report = archive_report(archive.toc, args.exe.stat().st_size, pyz.toc)
+    except (OSError, ValueError, RuntimeError, KeyError) as exc:
         report = {"errors": [str(exc)]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

@@ -281,22 +281,13 @@ Basic.ApplicationWindow {
                     Layout.fillWidth: true
                     onNavigateRequested: section => shell.navigate(section)
                 }
-                RowLayout {
+                BodyText {
+                    objectName: "pageTitle"
                     Layout.fillWidth: true
-                    BodyText {
-                        objectName: "pageTitle"
-                        Layout.fillWidth: true
-                        text: Theme.tr("nav." + shell.section)
-                        font.pixelSize: Theme.fontDisplay
-                        font.weight: Font.DemiBold
-                        Accessible.role: Accessible.Heading
-                    }
-                    BodyText {
-                        visible: shell.section === "home"
-                        text: "v" + updateService.currentVersion
-                        color: Theme.textMuted
-                        font.pixelSize: Theme.fontSmall
-                    }
+                    text: Theme.tr("nav." + shell.section)
+                    font.pixelSize: Theme.fontDisplay
+                    font.weight: Font.DemiBold
+                    Accessible.role: Accessible.Heading
                 }
                 Item {
                     id: pages

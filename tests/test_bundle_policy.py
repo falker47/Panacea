@@ -27,7 +27,7 @@ def test_denied_qt_families(name):
 def test_required_entries_locales_and_unrelated_python_extensions_survive():
     for name in (*REQUIRED, "PySide6/translations/qtbase_it.qm", "PySide6/translations/qtbase_en_GB.qm",
                  "PySide6/Qt6QuickControls2Impl.dll", "PySide6/qml/QtQuick/Controls/Basic/impl/qmldir",
-                 "_sqlite3.pyd", "PIL/PdfImagePlugin.py"):
+                 "_sqlite3.pyd", "docs/pdf-reference.txt"):
         assert not denied(name)
     assert not missing_required(n.upper().replace("/", "\\") for n in REQUIRED)
 
@@ -48,6 +48,18 @@ def test_inventory_and_budget_boundaries():
     failed = archive_report(toc, MAX_EXE_BYTES + 1)
     assert failed["forbidden"] == [forbidden] and failed["missing"] == [REQUIRED[0]]
     assert len(failed["errors"]) == 3
+
+
+@pytest.mark.parametrize(("entries", "modules", "expected"), [
+    ([], ["PIL", "PIL.Image", "PILLOW_example"], ["PYZ.pyz:PIL", "PYZ.pyz:PIL.Image"]),
+    ([r"PIL\_imaging.pyd", "pillow.libs/example.dll"], [], [r"PIL\_imaging.pyd", "pillow.libs/example.dll"]),
+    (["assets/pill.png"], ["PILLOW_example"], []),
+])
+def test_frozen_pillow_modules_and_native_files(entries, modules, expected):
+    toc = {name: (0, 1, 1, 0, "b") for name in (*REQUIRED, *entries)}
+    report = archive_report(toc, MAX_EXE_BYTES, modules)
+    assert report["forbidden"] == expected
+    assert bool(report["errors"]) == bool(expected)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows process memory counters")

@@ -48,7 +48,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["numpy", "customtkinter", "tkinter", *(f"PySide6.{m}" for m in UNUSED_BINDINGS)],
+    excludes=["PIL", "numpy", "customtkinter", "tkinter", *(f"PySide6.{m}" for m in UNUSED_BINDINGS)],
     noarchive=False,
     optimize=0,
 )

@@ -36,6 +36,7 @@ def exercise(case, language):
     from qt_app.qa_fixtures import VisualMaintenance, VisualUpdates, apply_scenario
     from qt_app.settings import AppSettings
     from qt_app.update_bridge import UpdateBridge
+    from qt_app.update_flow import production_identity
     from qt_app.visual_review import inspect_window, items
 
     QQuickStyle.setStyle("Basic")
@@ -235,8 +236,13 @@ def exercise(case, language):
             go("updates")
             result["notes"] = find("releaseNotes").property("text")
             result["status"] = find("updateStatus").property("text")
-            updater._flow.install_eligible = True
+            result["installed_version"] = find("installedVersion").property("text")
+            result["qa_check"] = find("checkForUpdates").property("variant")
+            result["qa_install_visible"] = find("installUpdate") is not None
+            updater._flow.install_eligible = production_identity(frozen=True, executable="Panacea.exe")
             updater.changed.emit()
+            result["production_check"] = find("checkForUpdates").property("variant")
+            result["production_install"] = find("installUpdate").property("variant")
             click(find("installUpdate"))
             wait(lambda: find("cancelConfirmation") is not None, "update consent")
             result["pending"] = updater.pending
@@ -280,6 +286,10 @@ def exercise(case, language):
                     assert not re.search(r"(?m)^(?:pages|controls|nav|activity|action|update|palette)\.[A-Za-z]", texts), texts
                     if section == "home" and scenario == "default":
                         assert ("30,8" if language == "it" else "30.8") in texts, texts
+                        assert "v" + updater.currentVersion not in report["text"], texts
+                    if section == "history" and scenario == "default":
+                        wait(lambda: find("historyFilter") is not None, "T4 operation history")
+                        assert translator.t("pages.historyEmpty") not in inspect_window(window, section)["text"]
                     result["count"] = result.get("count", 0) + 1
         else:
             raise ValueError(case)

@@ -58,6 +58,11 @@ jobs:
       - run: python -m compileall -q main.py panacea_ui.py version.py modules qt_app scripts
       - run: python -c "import qt_app.main, modules.updater, modules.update_install"
       - run: python scripts/build.py --defer-checksum
+      - name: Verify archive inventory and size budgets before signing
+        shell: pwsh
+        run: |
+          python scripts/verify_bundle.py --exe dist/Panacea.exe --output build/perf/bundle.json
+          if ($LASTEXITCODE -ne 0) { throw 'Bundle inventory or size budget check failed' }
       - name: Optionally sign and checksum the portable before building Setup
         env:
           PANACEA_ALLOW_HOSTED_PROBE: 'true'

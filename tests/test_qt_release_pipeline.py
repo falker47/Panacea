@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 
 from packaging.version import Version
+import yaml
 from version import VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +94,24 @@ class QtProductionReleaseContracts(unittest.TestCase):
         self.assertIn("workflow_dispatch:", release)
         self.assertIn("--draft", release)
         self.assertIn("python -m unittest discover -s qt_app/tests", release)
+
+    def test_release_build_verifies_bundle_inventory_before_signing(self):
+        release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+        steps = release["jobs"]["build"]["steps"]
+        runs = [step.get("run", "") for step in steps]
+
+        def index(command):
+            matches = [i for i, run in enumerate(runs) if command in run]
+            self.assertEqual(len(matches), 1, command)
+            return matches[0]
+
+        build = index("python scripts/build.py --defer-checksum")
+        verify = index("python scripts/verify_bundle.py --exe dist/Panacea.exe --output build/perf/bundle.json")
+        sign = index("python scripts/release_tools.py --finalize dist/Panacea.exe")
+        self.assertEqual(verify, build + 1, "inventory check must run right after the build")
+        self.assertLess(verify, sign, "inventory check must run before signing")
+        self.assertEqual(steps[verify].get("shell"), "pwsh")
+        self.assertIn("if ($LASTEXITCODE -ne 0) { throw", runs[verify])
 
 
 if __name__ == "__main__":

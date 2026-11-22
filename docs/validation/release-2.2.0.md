@@ -11,7 +11,9 @@ when to publish the prerelease and when to promote it to Latest.
   [update compatibility](update-compat.md) results. Inspect the five pinned
   client rows and the upgrade and rollback reports. Check the 15-second
   readiness budget. Compatibility builds can use a temporary version stamp;
-  identify the final release binaries by their own digests.
+  identify the final release binaries by their own digests. Verify that the
+  release workflow's build job passed the bundle inventory check
+  (`scripts/verify_bundle.py`) before signing.
 - [ ] Record the repository-capitalization decision. On the T1 candidate,
   installed-client code from v2.0.0 and v2.0.1 rejected canonical URLs and
   accepted the simulated lower-case variant. A repository rename requires a

@@ -122,7 +122,7 @@ def apply_scenario(metrics, reader, maintenance, updater, scenario, section, lan
 
 
 def run_smoke(app, window, args, section, language, warnings, app_id, trace):
-    """Wait for real async page creation before observing geometry or pixels."""
+    """Wait for async pages, optional features and a settled layout before observing geometry or pixels."""
     if args.smoke_width:
         window.setWidth(args.smoke_width)
     if args.smoke_height:
@@ -164,6 +164,25 @@ def run_smoke(app, window, args, section, language, warnings, app_id, trace):
         before = time.perf_counter()
         window.setProperty("currentTab", index)
         callback = time.perf_counter()
+        # Capture state: the scenario is applied once, then two consecutive rendered
+        # frames must agree on the key geometry before it is measured and saved.
+        pending = {"expanded": args.smoke_scenario == "expanded", "scroll": bool(args.smoke_scroll),
+                   "previous": None}
+
+        def retry(reason):
+            if time.perf_counter() - before > 12:
+                raise TimeoutError(reason)
+            QTimer.singleShot(16, settle)
+
+        def frame():
+            # grabWindow() runs the window's polish pass before rendering. Qt Quick Layouts
+            # position their children only in that pass, and a window that is not exposed
+            # (hidden, minimized, a locked session) never renders a frame on its own. Measure
+            # after the grab so the geometry and the screenshot describe the same frame.
+            image = window.grabWindow()
+            if image.isNull() and (screen := window.screen()) is not None:
+                image = screen.grabWindow(int(window.winId()))
+            return image, inspect_window(window, selected)
 
         def settle():
             try:
@@ -173,23 +192,42 @@ def run_smoke(app, window, args, section, language, warnings, app_id, trace):
                 page = next((item for item in items(window.contentItem())
                              if item.isVisible() and item.objectName() == "page_" + selected), None)
                 if not ready or page is None or not page.property("ready"):
-                    if time.perf_counter() - before > 12:
-                        raise TimeoutError(f"Page {selected} did not load")
-                    QTimer.singleShot(16, settle)
+                    retry(f"Page {selected} did not load")
                     return
-                if phase == "capture":
-                    children = list(items(page))
-                    if args.smoke_scenario == "expanded":
-                        for item in children:
-                            if item.metaObject().indexOfProperty("expanded") >= 0:
-                                item.setProperty("expanded", True)
-                    if args.smoke_scroll:
-                        viewport = next(item for item in children if item.objectName() == "pageViewport")
-                        if viewport.metaObject().indexOfProperty("contentY") == -1:
-                            viewport = viewport.property("contentItem")
-                        viewport.setProperty("contentY", max(0, viewport.property("contentHeight") - viewport.height())
-                                             * args.smoke_scroll)
-                QTimer.singleShot(40, observe)
+                if phase != "capture":
+                    QTimer.singleShot(40, observe)
+                    return
+                children = list(items(page))
+                if pending["expanded"]:
+                    pending["expanded"] = False
+                    for item in children:
+                        if item.metaObject().indexOfProperty("expanded") >= 0:
+                            item.setProperty("expanded", True)
+                # Optional features compile asynchronously after the page itself is ready.
+                loading = sorted(item.objectName() for item in items(window.contentItem())
+                                 if item.objectName().startswith("feature_") and item.property("loading"))
+                if loading:
+                    pending["previous"] = None
+                    retry(f"Features did not load on {selected}: {', '.join(loading)}")
+                    return
+                if pending["scroll"]:
+                    # The scroll range is only known once the page has been laid out.
+                    pending["scroll"] = False
+                    window.grabWindow()
+                    viewport = next(item for item in children if item.objectName() == "pageViewport")
+                    if viewport.metaObject().indexOfProperty("contentY") == -1:
+                        viewport = viewport.property("contentItem")
+                    viewport.setProperty("contentY", max(0, viewport.property("contentHeight") - viewport.height())
+                                         * args.smoke_scroll)
+                    retry(f"Page {selected} did not scroll")
+                    return
+                image, report = frame()
+                geometry = (report["keyItems"], report["sidebarWidth"])
+                if geometry != pending["previous"]:
+                    pending["previous"] = geometry
+                    retry(f"Geometry of {selected} did not settle")
+                    return
+                record(image, report)
             except Exception as exc:
                 fail(exc)
 
@@ -197,35 +235,33 @@ def run_smoke(app, window, args, section, language, warnings, app_id, trace):
             try:
                 measured = time.perf_counter()
                 trace("fixture page configured")
-                if phase != "capture":
-                    if window.grabWindow().isNull():
-                        raise ValueError("Qt returned an empty profile frame")
-                    profile.append({"tab": index, "section": selected, "phase": phase,
-                                    "callback_ms": (callback-before)*1000, "geometry_ms": (measured-callback)*1000,
-                                    "frame_capture_ms": (time.perf_counter()-measured)*1000})
-                else:
-                    report = inspect_window(window, selected)
-                    if args.capture:
-                        path = args.capture.with_name(selected + ".png") if args.smoke_all_sections else args.capture
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        image = window.grabWindow()
-                        if image.isNull() and (screen := window.screen()) is not None:
-                            image = screen.grabWindow(int(window.winId()))
-                        if image.isNull() or not image.save(str(path)):
-                            raise ValueError("Cannot save Qt screenshot")
-                        info = {"tab": index, "section": selected, "language": language, "scenario": args.smoke_scenario,
-                                "logical_size": [window.width(), window.height()], "image_size": [image.width(), image.height()],
-                                "qt_scale_factor": os.getenv("QT_SCALE_FACTOR", "1"), "safe_mode": True, "visual_fixture": True,
-                                "scroll_fraction": args.smoke_scroll, "focus_view": args.smoke_focus, "qml_warnings": warnings,
-                                "platform": app.platformName(), "windows_application_id": app_id, "source_sha256": digest,
-                                "geometry": report}
-                        path.with_suffix(".json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
-                        trace("capture saved")
-                    if report["errors"]:
-                        raise ValueError(f"{selected}: " + " | ".join(report["errors"]))
+                if window.grabWindow().isNull():
+                    raise ValueError("Qt returned an empty profile frame")
+                profile.append({"tab": index, "section": selected, "phase": phase,
+                                "callback_ms": (callback-before)*1000, "geometry_ms": (measured-callback)*1000,
+                                "frame_capture_ms": (time.perf_counter()-measured)*1000})
                 QTimer.singleShot(0, advance)
             except Exception as exc:
                 fail(exc)
+
+        def record(image, report):
+            trace("fixture page configured")
+            if args.capture:
+                path = args.capture.with_name(selected + ".png") if args.smoke_all_sections else args.capture
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if image.isNull() or not image.save(str(path)):
+                    raise ValueError("Cannot save Qt screenshot")
+                info = {"tab": index, "section": selected, "language": language, "scenario": args.smoke_scenario,
+                        "logical_size": [window.width(), window.height()], "image_size": [image.width(), image.height()],
+                        "qt_scale_factor": os.getenv("QT_SCALE_FACTOR", "1"), "safe_mode": True, "visual_fixture": True,
+                        "scroll_fraction": args.smoke_scroll, "focus_view": args.smoke_focus, "qml_warnings": warnings,
+                        "platform": app.platformName(), "windows_application_id": app_id, "source_sha256": digest,
+                        "geometry": report}
+                path.with_suffix(".json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+                trace("capture saved")
+            if report["errors"]:
+                raise ValueError(f"{selected}: " + " | ".join(report["errors"]))
+            QTimer.singleShot(0, advance)
         QTimer.singleShot(0, settle)
 
     QTimer.singleShot(0, advance)
